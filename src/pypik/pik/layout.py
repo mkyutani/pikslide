@@ -77,7 +77,7 @@ DEFAULTS = {
 }
 
 ELLIPSE_LIKE = {"circle", "ellipse", "oval"}
-LINE_LIKE = {"line", "arrow", "spline", "arc"}
+LINE_LIKE = {"line", "arrow", "spline", "arc", "move"}
 _NOT_RENDERED = {"move", "point"}
 
 

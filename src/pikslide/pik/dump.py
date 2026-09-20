@@ -1,6 +1,6 @@
 """Human-readable text dump of a pik AST -- for debugging and inspection.
 
-Every node in :mod:`pypik.pik.ast` is a dataclass, so this walks fields
+Every node in :mod:`pikslide.pik.ast` is a dataclass, so this walks fields
 generically rather than special-casing each node type. Nesting in the
 output directly reflects nesting in the tree, so a ``[...]`` block's
 ``BlockBase.statements`` shows up as a further-indented sub-list.
@@ -14,7 +14,7 @@ _INDENT = "  "
 
 
 def dump(node: object) -> str:
-    """Render ``node`` (typically a :class:`pypik.pik.ast.Document`) as an
+    """Render ``node`` (typically a :class:`pikslide.pik.ast.Document`) as an
     indented text tree."""
     lines: list[str] = []
     _dump_node(node, 0, lines)

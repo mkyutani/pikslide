@@ -1,4 +1,4 @@
-"""Abstract syntax tree produced by :func:`pypik.pik.parser.parse`.
+"""Abstract syntax tree produced by :func:`pikslide.pik.parser.parse`.
 
 The tree mirrors the shape of pikchr's own internal ``PObj``/``PList``
 structure: a :class:`Document` holds a list of :class:`Statement` nodes,

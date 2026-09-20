@@ -1,4 +1,4 @@
-"""Resolve a parsed pik AST (:mod:`pypik.pik.ast`) into concrete 2-D geometry.
+"""Resolve a parsed pik AST (:mod:`pikslide.pik.ast`) into concrete 2-D geometry.
 
 This is a pragmatic *subset* of pikchr's own layout engine (the
 ``pik_elem_new`` / ``pik_after_adding_attributes`` / per-class
@@ -1009,7 +1009,7 @@ def _flatten(shapes: list[Shape]) -> list[Shape]:
 
 
 def resolve_layout(doc: ast.Document, metrics: FontMetrics | None = None) -> LayoutResult:
-    """Resolve a parsed pik :class:`~pypik.pik.ast.Document` into concrete,
+    """Resolve a parsed pik :class:`~pikslide.pik.ast.Document` into concrete,
     ready-to-render geometry. See the module docstring for what this
     pragmatic layout engine does and does not faithfully reproduce.
 

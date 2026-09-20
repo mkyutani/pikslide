@@ -1,4 +1,4 @@
-# pypik
+# pikslide
 
 A Python project that converts [pikchr](https://pikchr.org/) (`.pik`)
 diagram source into a tree structure, then into PowerPoint objects, SVG,
@@ -7,18 +7,18 @@ and other formats.
 The pipeline has three stages:
 
 1. **Parse** — `.pik` source is tokenized and parsed into an AST
-   (`pypik.pik.ast.Document`), mirroring pikchr's own grammar.
+   (`pikslide.pik.ast.Document`), mirroring pikchr's own grammar.
 2. **Layout** — the AST is resolved into concrete 2-D geometry (box
    positions, arrow paths, text placement) by a pragmatic subset of
    pikchr's own layout engine.
 3. **Render** — the resolved geometry is written out in a target format.
    PowerPoint (`.pptx`) is implemented today; SVG is planned.
 
-pypik doesn't define its own diagram language — `.pik` source is
+pikslide doesn't define its own diagram language — `.pik` source is
 pikchr's language. See pikchr's own
 [grammar documentation](https://pikchr.org/home/doc/trunk/doc/grammar.md)
 for the language spec itself, or [docs/grammar.md](docs/grammar.md) for
-the grammar pypik's own parser implements, written as BNF.
+the grammar pikslide's own parser implements, written as BNF.
 
 ## Requirements
 
@@ -31,28 +31,28 @@ Dump the parsed tree for a `.pik` file (useful for inspecting how a
 script was understood, or for debugging):
 
 ```sh
-uv run pypik diagram.pik
+uv run pikslide diagram.pik
 ```
 
 Render a `.pik` file straight to PowerPoint:
 
 ```sh
-uv run pypik diagram.pik diagram.pptx
+uv run pikslide diagram.pik diagram.pptx
 ```
 
 `.pik` or `.pikchr` fenced code blocks inside a Markdown file are also
 accepted directly — every block in the file is processed in order:
 
 ```sh
-uv run pypik doc.md doc.pptx
+uv run pikslide doc.md doc.pptx
 ```
 
-With no arguments, `pypik` just prints a hello-world message.
+With no arguments, `pikslide` just prints a hello-world message.
 
 On Windows (or WSL with a Windows PowerPoint install), render a `.pptx`
 to a PNG via `scripts/pptx_to_png.ps1` (PowerPoint COM automation; see
 that script's header for usage from WSL vs. Windows PowerShell directly).
-Since pypik sizes its slide exactly to the diagram, this gives an image
+Since pikslide sizes its slide exactly to the diagram, this gives an image
 of just the diagram, no separate cropping needed.
 
 ### Example
@@ -68,7 +68,7 @@ box same "Pikchr" "Formatter" "(pikchr.c)" fit
 ```
 
 ```sh
-uv run pypik examples/pipeline.pik examples/pipeline.pptx
+uv run pikslide examples/pipeline.pik examples/pipeline.pptx
 ```
 
 ## Scope
@@ -86,7 +86,7 @@ ported faithfully, but a few things are simplified:
   approximation rather than each shape's true outline,
 - `behind` is parsed but doesn't yet affect rendering order.
 
-See the module docstrings in `src/pypik/pik/layout.py` for details.
+See the module docstrings in `src/pikslide/pik/layout.py` for details.
 
 ## Development
 

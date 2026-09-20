@@ -1,9 +1,9 @@
-# pypik `.pik` grammar (BNF)
+# pikslide `.pik` grammar (BNF)
 
-This is the grammar pypik's own parser (`src/pypik/pik/parser.py`)
+This is the grammar pikslide's own parser (`src/pikslide/pik/parser.py`)
 implements, restated as BNF/EBNF. It's derived from pikchr's own
 LALR(1) grammar (`pikchr.y`, built with the Lemon parser generator), but
-pypik uses a hand-written recursive-descent parser instead of a
+pikslide uses a hand-written recursive-descent parser instead of a
 generated LALR table. A few local ambiguities that Lemon resolves via
 `%left`/`%right` precedence declarations and 1-token lookahead are
 instead resolved here by rule ordering or small bounded backtracking;
@@ -20,7 +20,7 @@ and [`pikchr.y`](https://pikchr.org/home/doc/tip/pikchr.y).
 - `{ x }` — zero or more repetitions of `x`.
 - `"literal"` — a literal token or keyword.
 - `UPPERCASE` names are terminals produced by the lexer
-  (`src/pypik/pik/tokens.py`); e.g. `NUMBER`, `STRING`, `PLACENAME`
+  (`src/pikslide/pik/tokens.py`); e.g. `NUMBER`, `STRING`, `PLACENAME`
   (an identifier starting with an uppercase letter), `ID` (starting
   lowercase), `EDGEPT` (a compass abbreviation like `ne`, `sw`).
 - Other terminals are pikchr keywords, written as their lowercase
@@ -29,7 +29,7 @@ and [`pikchr.y`](https://pikchr.org/home/doc/tip/pikchr.y).
 ## Macros
 
 `#define NAME { ... }` and its invocations (`NAME` or `NAME(arg, ...)`)
-are expanded by a separate pass (`pypik.pik.macros`) *before* parsing,
+are expanded by a separate pass (`pikslide.pik.macros`) *before* parsing,
 so they never appear in the grammar below — by the time the parser
 runs, every macro invocation has already been replaced by its expanded
 body.
@@ -195,9 +195,9 @@ back to bounded backtracking for it instead.
 - `#define` macro parameter substitution (`$1`..`$9`) doesn't reach
   inside `STRING` tokens — an already-tokenized string is opaque to
   macro expansion. This matches upstream pikchr's own behavior exactly;
-  it isn't a pypik gap.
+  it isn't a pikslide gap.
 - This document covers *parsing* only. The *layout* stage (turning the
   parsed tree into concrete coordinates) is a separate, deliberately
   narrower approximation of pikchr's own layout engine — see the module
-  docstring in `src/pypik/pik/layout.py` for what it does and doesn't
+  docstring in `src/pikslide/pik/layout.py` for what it does and doesn't
   reproduce.

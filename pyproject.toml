@@ -1,5 +1,5 @@
 [project]
-name = "pypik"
+name = "pikslide"
 version = "0.1.0"
 description = "Convert pik format files into PowerPoint objects, SVG, and other formats via an intermediate tree structure"
 readme = "README.md"
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-pypik = "pypik:main"
+pikslide = "pikslide:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]

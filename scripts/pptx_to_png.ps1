@@ -4,7 +4,7 @@
     automation. Windows-only; requires PowerPoint to be installed.
 
 .DESCRIPTION
-    pypik sizes its generated slide exactly to the diagram's bounding box
+    pikslide sizes its generated slide exactly to the diagram's bounding box
     (plus a small margin), so exporting the whole slide already gives an
     image of just the diagram -- no separate cropping step is needed.
 

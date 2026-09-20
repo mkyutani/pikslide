@@ -1,8 +1,8 @@
-This project (pypik) is licensed under the Zero-Clause BSD license; see
+This project (pikslide) is licensed under the Zero-Clause BSD license; see
 LICENSE.
 
 The .pik tokenizer, grammar, macro expansion, layout formulas, default
-variable table, and color name table in src/pypik/pik/ are substantially
+variable table, and color name table in src/pikslide/pik/ are substantially
 ported (in several places, directly transcribed) from pikchr:
 
     pikchr - https://pikchr.org/

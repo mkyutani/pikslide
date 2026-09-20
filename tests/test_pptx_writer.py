@@ -1,4 +1,4 @@
-"""Tests for pypik.pptx_writer: rendering a resolved layout to PowerPoint."""
+"""Tests for pikslide.pptx_writer: rendering a resolved layout to PowerPoint."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL_TYPE
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
-from pypik.pik import parse
-from pypik.pptx_writer import resolve_for_pptx, write_pptx
+from pikslide.pik import parse
+from pikslide.pptx_writer import resolve_for_pptx, write_pptx
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "examples"
 EXAMPLE_FILES = sorted(FIXTURES_DIR.glob("*.pik"))

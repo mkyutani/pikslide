@@ -7,20 +7,20 @@
 #
 # The blocklist lives OUTSIDE this repo (default: ~/.claude/sensitive-terms.txt)
 # so the list of sensitive terms itself is never something this repo can leak.
-# Override its location with PYPIK_SENSITIVE_TERMS_FILE.
+# Override its location with PIKSLIDE_SENSITIVE_TERMS_FILE.
 #
 # Pattern hits (not blocklist hits) can be exempted via the repo-tracked
 # .githooks/allowlist.txt -- for known-legitimate, already-public content
 # (e.g. an upstream project's own copyright/attribution email) that would
 # otherwise trip the generic patterns on every commit that touches it.
-# Override its location with PYPIK_ALLOWLIST_FILE.
+# Override its location with PIKSLIDE_ALLOWLIST_FILE.
 #
 # Enabled via: git config core.hooksPath .githooks
 
 set -euo pipefail
 
-TERMS_FILE="${PYPIK_SENSITIVE_TERMS_FILE:-$HOME/.claude/sensitive-terms.txt}"
-ALLOWLIST_FILE="${PYPIK_ALLOWLIST_FILE:-.githooks/allowlist.txt}"
+TERMS_FILE="${PIKSLIDE_SENSITIVE_TERMS_FILE:-$HOME/.claude/sensitive-terms.txt}"
+ALLOWLIST_FILE="${PIKSLIDE_ALLOWLIST_FILE:-.githooks/allowlist.txt}"
 fail=0
 
 # Only the *added* lines of the staged diff, as actual file content: the

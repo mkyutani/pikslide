@@ -1,4 +1,4 @@
-"""Tests for pypik.pik.layout: resolving a parsed AST into concrete geometry.
+"""Tests for pikslide.pik.layout: resolving a parsed AST into concrete geometry.
 
 This engine is a deliberately pragmatic subset of pikchr's own layout
 engine -- see the module docstring in layout.py for what is and isn't
@@ -15,8 +15,8 @@ import pathlib
 
 import pytest
 
-from pypik.pik import parse
-from pypik.pik.layout import LayoutError, resolve_layout
+from pikslide.pik import parse
+from pikslide.pik.layout import LayoutError, resolve_layout
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "examples"
 EXAMPLE_FILES = sorted(FIXTURES_DIR.glob("*.pik"))

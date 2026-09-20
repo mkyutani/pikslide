@@ -3,8 +3,8 @@
 Ported from ``pik_tokenize()`` / ``pik_parse_macro_args()`` / ``pik_add_macro()``
 in pikchr's ``pikchr.y``. Upstream pikchr expands macros token-by-token while
 feeding an LALR parser; here expansion runs as a separate pass that consumes
-the flat token list from :class:`pypik.pik.tokens.Lexer` and produces a new,
-fully-expanded flat token list for :mod:`pypik.pik.parser` to consume.
+the flat token list from :class:`pikslide.pik.tokens.Lexer` and produces a new,
+fully-expanded flat token list for :mod:`pikslide.pik.parser` to consume.
 
 Substantially ported from pikchr, Copyright (C) 2020-09-01 by
 D. Richard Hipp <drh@sqlite.org>, released under the Zero-Clause BSD

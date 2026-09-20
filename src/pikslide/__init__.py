@@ -8,7 +8,7 @@ from .pptx_writer import resolve_for_pptx, write_pptx
 def main() -> None:
     args = sys.argv[1:]
     if not args:
-        print("Hello from pypik!")
+        print("Hello from pikslide!")
         return
 
     path = args[0]

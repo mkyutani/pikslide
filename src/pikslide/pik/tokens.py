@@ -1,7 +1,7 @@
 """Tokenizer for the pikchr (.pik) diagram language.
 
 This is a line-by-line port of the hand-written tokenizer in pikchr's
-own ``pikchr.y`` (function ``pik_token_length``), so that pypik accepts
+own ``pikchr.y`` (function ``pik_token_length``), so that pikslide accepts
 exactly the same lexical grammar as upstream pikchr.
 Reference: https://pikchr.org/home/doc/tip/pikchr.y
 
@@ -306,7 +306,7 @@ def nth_value(token_text: str) -> int:
 class Lexer:
     """Splits raw pikchr source text into a flat list of Tokens.
 
-    This does not perform macro expansion; see :mod:`pypik.pik.macros`.
+    This does not perform macro expansion; see :mod:`pikslide.pik.macros`.
     """
 
     def __init__(self, text: str):

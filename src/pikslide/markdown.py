@@ -1,7 +1,7 @@
 """Extract pikchr source embedded in Markdown fenced code blocks.
 
 Recognizes fences tagged ```pik``` or ```pikchr``` (either backtick or
-tilde fences, per CommonMark), so pypik can be pointed directly at a
+tilde fences, per CommonMark), so pikslide can be pointed directly at a
 ``.md`` document that contains one or more pikchr diagrams.
 """
 

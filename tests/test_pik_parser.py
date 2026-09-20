@@ -1,4 +1,4 @@
-"""Tests for the pikchr (.pik) parser: pypik.pik.parse().
+"""Tests for the pikchr (.pik) parser: pikslide.pik.parse().
 
 Fixtures under tests/fixtures/examples/ are pikchr's own official example
 scripts (https://pikchr.org/home/doc/tip/doc/examples.md), used here as a
@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from pypik.pik import ast, parse
-from pypik.pik.macros import expand_macros
-from pypik.pik.parser import Parser
-from pypik.pik.tokens import PikSyntaxError, TokType
+from pikslide.pik import ast, parse
+from pikslide.pik.macros import expand_macros
+from pikslide.pik.parser import Parser
+from pikslide.pik.tokens import PikSyntaxError, TokType
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "examples"
 EXAMPLE_FILES = sorted(FIXTURES_DIR.glob("*.pik"))

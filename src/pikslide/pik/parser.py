@@ -1,5 +1,5 @@
 """Recursive-descent parser for pikchr source, built on the token stream
-produced by :mod:`pypik.pik.macros` (which already lexes and expands
+produced by :mod:`pikslide.pik.macros` (which already lexes and expands
 ``#define`` macros).
 
 This is a hand-written parser rather than a generated LALR one, so a few
@@ -742,7 +742,7 @@ class Parser:
 
 
 def parse(text: str) -> ast.Document:
-    """Parse pikchr source text into a :class:`pypik.pik.ast.Document` tree."""
+    """Parse pikchr source text into a :class:`pikslide.pik.ast.Document` tree."""
     tokens, macros = expand_macros(text)
     doc = Parser(tokens).parse_document()
     doc.macros = macros

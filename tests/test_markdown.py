@@ -1,9 +1,9 @@
-"""Tests for pypik.markdown: extracting pik/pikchr fenced code blocks."""
+"""Tests for pikslide.markdown: extracting pik/pikchr fenced code blocks."""
 
 from __future__ import annotations
 
-from pypik.markdown import extract_pik_blocks
-from pypik.pik import parse
+from pikslide.markdown import extract_pik_blocks
+from pikslide.pik import parse
 
 
 def test_extracts_pik_and_pikchr_fences():

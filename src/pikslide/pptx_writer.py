@@ -1,6 +1,6 @@
-"""Render a resolved pik layout (:mod:`pypik.pik.layout`) to a PowerPoint file.
+"""Render a resolved pik layout (:mod:`pikslide.pik.layout`) to a PowerPoint file.
 
-Coordinates in a :class:`~pypik.pik.layout.LayoutResult` are inches with
+Coordinates in a :class:`~pikslide.pik.layout.LayoutResult` are inches with
 y pointing up (pikchr's convention); PowerPoint slides use EMU with y
 pointing down from the top-left, so this module flips y and adds a margin
 around the diagram's bounding box.
@@ -71,7 +71,7 @@ def _find_measure_font() -> str | None:
 
 
 class PilFontMetrics:
-    """A pypik.pik.layout.FontMetrics backed by real glyph widths (via
+    """A pikslide.pik.layout.FontMetrics backed by real glyph widths (via
     Pillow), so a "fit" object's size tracks its actual text content --
     unlike a fixed per-character-width guess, this gets more (not less)
     accurate as text gets longer or more varied.
@@ -338,7 +338,7 @@ def write_pptx(
     font_name: str = FONT_NAME,
     base_size_pt: float = _BASE_FONT_PT,
 ) -> None:
-    """Render `result` (from :func:`pypik.pik.layout.resolve_layout`, or
+    """Render `result` (from :func:`pikslide.pik.layout.resolve_layout`, or
     `resolve_for_pptx`) to a single-slide PowerPoint file at `path`, sized
     to fit the diagram. `font_name`/`base_size_pt` should match whatever
     was passed to `resolve_for_pptx()` for that result, if it was used, so

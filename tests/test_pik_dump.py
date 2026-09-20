@@ -1,8 +1,8 @@
-"""Tests for pypik.pik.dump: the indented text dump of a parsed AST."""
+"""Tests for pikslide.pik.dump: the indented text dump of a parsed AST."""
 
 from __future__ import annotations
 
-from pypik.pik import dump, parse
+from pikslide.pik import dump, parse
 
 
 def test_dump_shows_nesting_for_blocks():

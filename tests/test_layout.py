@@ -251,6 +251,21 @@ def test_text_size_is_overridable_like_fill_and_color():
     assert result.text_sizes["medium"] == pytest.approx(11 / 72)
 
 
+def test_default_typeface_is_empty_meaning_the_theme_font():
+    result = layout('box "hi"\n')
+    assert result.typeface == ""
+
+
+def test_typeface_is_overridable_like_fill_and_color():
+    result = layout('typeface = "BIZ UDPGothic"\nbox "hi"\n')
+    assert result.typeface == "BIZ UDPGothic"
+
+
+def test_typeface_must_be_a_string_not_a_number():
+    with pytest.raises(LayoutError):
+        layout("typeface = 5\nbox\n")
+
+
 # ---------------------------------------------------------------------------
 # Preset shapes: `shape` (docs/spec.md SS3.4)
 # ---------------------------------------------------------------------------

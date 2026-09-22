@@ -27,9 +27,27 @@ already-built behaviour.
 - **Three fixed text sizes** (`small`/`medium`/`large`, prelude-defined,
   9/10.5/12pt): assignable like `fill`/`color`/`thickness` (`lvalue` grammar
   extended), read back from `LayoutResult.text_sizes` by `pptx_writer.py`
-  instead of a hard-coded `_BASE_FONT_PT`. Not yet live-updated if a program
-  overrides `medium` after a `fit` object already measured (rare; see the
-  docstring on `PilFontMetrics`).
+  instead of a hard-coded `_BASE_FONT_PT`. Two distinct staleness gaps here,
+  both checked directly rather than assumed:
+  - *Rendered* size (`run.font.size`) comes from `LayoutResult.text_sizes`,
+    read from `ctx.vars` once, *after* the whole document has run -- not the
+    value in effect at each object's own position, so a later override
+    applies to the *entire* diagram, including text already drawn earlier
+    in the source (checked: `box "a" small\nsmall=20pt\nbox "b" small`
+    renders **both** at 20pt). `typeface` (below) shares this, for the same
+    reason (same resolution mechanism).
+  - *`fit`-object measurement* (`PilFontMetrics`, used during layout itself
+    to size a `fit` box to its text) is worse: it never tracks a program
+    override at all, ever, at any position -- it measures with the
+    prelude's fixed 9/10.5/12pt regardless (checked: `medium = 30pt` before
+    a `fit` box changes nothing about its measured size), because
+    `resolve_for_pptx()` builds `PilFontMetrics` from `default_text_sizes()`
+    once, before the document runs.
+
+  Rare in practice (a template's settings file, once that exists, sets
+  these once up front, not mid-document) but real; fixing either needs
+  per-statement resolution during layout, not a value read once before or
+  after it -- not done here.
 - **An undefined variable is now an error** (`eval_expr`'s `ast.Var` case),
   matching real pikchr (checked: `box width undefinedvar` → "no such
   variable" in real pikchr too) — the old code silently defaulted to `0.0`.
@@ -134,11 +152,38 @@ already-built behaviour.
   `--template --settings --block --include-path --align --strict --check
   --format` are still not wired up (the last four depend on template
   settings/theme reading, which are separate not-yet-started items).
+- **Fonts follow the theme, not a hard-coded family** (`pptx_writer.py`
+  `_apply_run_font`, docs/spec.md SS3.3): every run's Latin and East Asian
+  font slots (`<a:latin>`/`<a:ea>`) get a *symbolic* theme reference by
+  default -- the minor font (`+mn-lt`/`+mn-ea`), or the major (heading)
+  font (`+mj-lt`/`+mj-ea`) where the `major` text flag is used -- never a
+  literal name, exactly like a `theme` colour. This needs no theme file
+  read at all, for either output path: a fresh standalone deck already has
+  the built-in Office theme these symbols resolve against (same as any new
+  PowerPoint file), and `--into` writes straight into the target deck, so
+  the reference resolves against *its* own theme once the file is reopened
+  -- checked by patching a saved deck's theme XML to distinct major/minor
+  families and rendering it through real PowerPoint (COM): each slot
+  picked its own family, Latin and CJK text both correct. `typeface`
+  (prelude, empty by default) overrides with one literal family for both
+  slots regardless of `major`, per SS3.3 ("a specific family"). Removed
+  `font_name`/`FONT_NAME` from the whole rendering call chain (`write_pptx`,
+  `insert_into_pptx`, `_add_all_shapes` and everything under them) since it
+  had no remaining purpose there -- `PilFontMetrics`/`resolve_for_pptx` keep
+  choosing a real font *file* for `fit` measurement independently (see the
+  `text_sizes` note above; unaffected by this). python-pptx's `Font.name`
+  only ever touches `<a:latin>` -- `<a:ea>` has no public API, so it's set
+  directly on the run's `rPr` (checked: round-trips through a save/reopen).
+  Reading a template's *actual* theme content (real font names, for
+  `--template`'s new-deck case and for more accurate `fit` measurement) is
+  still not done -- see the theme reader row below; it was not needed for
+  this, since staying symbolic sidesteps it entirely.
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
   new coverage for colours, text sizes, the macro-shadow guard, Markdown
-  names, preset shapes, images, `include`, and inserting into a deck
+  names, preset shapes, images, `include`, inserting into a deck, and fonts
   (`tests/test_layout.py`, `tests/test_pik_parser.py`,
-  `tests/test_pptx_writer.py`, `tests/test_markdown.py`).
+  `tests/test_pptx_writer.py`, `tests/test_markdown.py`,
+  `tests/test_cli.py`).
 
 ## Not yet started
 
@@ -146,9 +191,8 @@ already-built behaviour.
 |---|---|---|
 | `pik/tokens.py` `Token`, `PikSyntaxError` | carry a line number, and (since `include`) the right file named in the *message text* | a proper structured `file`/column field, rather than folding the path into the message string by hand at each `include`-related error site |
 | `pik/layout.py`, `pptx_writer.py` | SVG `image`s are a clear "not supported yet" error | SVG picture (`svgBlip` + PNG fallback via an external rasteriser, hand-written XML) |
-| *(new)* theme reader | none; theme colours always render against python-pptx's built-in Office theme | read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base |
+| *(new)* theme reader | not needed for colours or fonts any more -- both stay symbolic and resolve against whatever theme the target deck actually has (see the Fonts bullet above) | only still needed for (a) `--template`'s new standalone deck, to copy an arbitrary file's theme into it, and (b) real font *names* (not just symbols) for more accurate `fit` measurement; read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base for (a) |
 | *(new)* template settings | none | find the settings file beside a template or deck and read it after the prelude; `layout`, `typeface`, accent colours, text sizes, content area |
-| `pptx_writer.py` `FONT_NAME` | hard-coded `"Arial"`; no `typeface` variable | read `typeface` (once settings files exist) or the theme's own font |
 | `pik/layout.py` `_flatten` | flattens `[ ]` blocks, losing the tree | keep the hierarchy so groups can be written |
 | `pik/layout.py` `behind` | parsed, ignored | affects z-order |
 | `__init__.py` | `argparse`, with `--into --slide --region --rect --id --in-place -o` all working | `--template --settings --block --include-path --align --strict --check --format` besides (the last four depend on template settings/theme reading above) |

@@ -196,6 +196,15 @@ def _as_number(value: PikValue, what: str = "a numeric value") -> float:
     raise LayoutError(f"expected {what}, got a {kind}")
 
 
+def _as_string(value: PikValue, what: str = "a string value") -> str:
+    """Unwrap a value expected to be a string, e.g. `typeface` (docs/spec.md
+    SS3.3/SS3.8)."""
+    if isinstance(value, str):
+        return value
+    kind = "a colour" if isinstance(value, Colour) else "a number"
+    raise LayoutError(f"expected {what}, got {kind}")
+
+
 def _as_colour(value: PikValue | None) -> Colour | None:
     """Coerce a value to what `fill`/`color` hold: a Colour, or None for
     "no colour". A bare number is accepted as a legacy RGB colour (pikchr
@@ -344,6 +353,12 @@ class LayoutResult:
     renderer draws text at the sizes this document actually used -- which
     may differ from the prelude's own 9/10.5/12pt if the program (or a
     template's settings file, once that exists) overrode them."""
+    typeface: str = ""
+    """The resolved `typeface` variable (docs/spec.md SS3.3, ext): empty
+    means "the theme's own font" (a renderer should emit a symbolic
+    `+mn-lt`/`+mj-lt` reference, not a literal name); non-empty is a literal
+    family the program (or a template's settings file, once that exists)
+    asked for explicitly, overriding the theme."""
 
 
 # ---------------------------------------------------------------------------
@@ -1384,4 +1399,5 @@ def resolve_layout(
     else:
         bbox = (0.0, 0.0, 0.0, 0.0)
     text_sizes = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
-    return LayoutResult(shapes=flat, bbox=bbox, text_sizes=text_sizes)
+    typeface = _as_string(ctx.vars.get("typeface", ""), "typeface")
+    return LayoutResult(shapes=flat, bbox=bbox, text_sizes=text_sizes, typeface=typeface)

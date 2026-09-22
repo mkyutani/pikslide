@@ -21,6 +21,7 @@ from pptx.enum.dml import MSO_LINE_DASH_STYLE, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.oxml.ns import qn
+from pptx.oxml.xmlchemy import OxmlElement
 from pptx.util import Emu, Inches, Pt
 
 from .pik import ast
@@ -41,12 +42,13 @@ EMU_PER_INCH = 914400
 # each text slot pik_txt_vertical_layout() can assign -- see assign_text_slots().
 _SLOT_STEP = {"above2": 2, "above": 1, "center": 0, "below": -1, "below2": -2}
 
-# The font *name* embedded in the .pptx (what the viewer's PowerPoint/
-# Keynote/LibreOffice actually renders with -- Arial is close to always
-# available) can differ from the font *file* used here to measure text
-# width for "fit" sizing, since that requires an actual font file on this
-# machine and Arial itself may not be installed here. PilFontMetrics tries
-# a few widely-available metrically-similar substitutes, in order.
+# What "fit" sizing actually measures text *with* (a real installed font
+# file, via Pillow) is necessarily independent of the font family the
+# .pptx itself requests: by default that's a symbolic theme reference,
+# not a literal name at all (docs/spec.md SS3.3, see _apply_run_font()
+# below), so there is no one "the requested font" to look up a substitute
+# for even in principle. PilFontMetrics instead tries a few widely-
+# available, metrically-reasonable substitutes, in order.
 #
 # A Latin-only substitute (Liberation/DejaVu/Arial) silently *undersizes*
 # any CJK text: missing-glyph fallback advances are far narrower than a
@@ -55,7 +57,6 @@ _SLOT_STEP = {"above2": 2, "above": 1, "center": 0, "below": -1, "below2": -2}
 # Sans CJK file, where present, covers Latin *and* CJK correctly, so it's
 # tried first; the Latin-only substitutes remain as a fallback chain for
 # machines without it (where only non-CJK text will still measure well).
-FONT_NAME = "Arial"
 _MEASURE_FONT_CANDIDATES = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttf",
@@ -84,21 +85,21 @@ class PilFontMetrics:
     unlike a fixed per-character-width guess, this gets more (not less)
     accurate as text gets longer or more varied.
 
-    The font used for *measurement* is whatever metrically-close substitute
-    for `font_name` this machine actually has installed (see
-    _MEASURE_FONT_CANDIDATES); the .pptx itself still requests `font_name`,
-    so on a viewer that has it installed, rendering and measurement agree
-    exactly. Where they don't exactly agree, this still generalizes
-    correctly across different text content, unlike a flat estimate.
+    Measures with whatever font this machine actually has installed among
+    _MEASURE_FONT_CANDIDATES -- an approximation independent of what the
+    .pptx itself actually requests, which by default is a symbolic theme
+    font reference, not a literal name at all (docs/spec.md SS3.3, see
+    _apply_run_font() below), so on a viewer whose theme font isn't
+    metrically close to the substitute, "fit" sizing can disagree with
+    what's actually rendered. This still generalizes correctly across
+    different text content, unlike a flat estimate.
     """
 
     def __init__(
         self,
-        font_name: str = FONT_NAME,
         text_sizes: dict[str, float] | None = None,
         font_path: str | None = None,
     ):
-        self.font_name = font_name
         # inches, keyed "small"/"medium"/"large" -- docs/spec.md SS3.3/SS3.7.
         self._text_sizes = text_sizes if text_sizes is not None else default_text_sizes()
         self._font_path = font_path if font_path is not None else _find_measure_font()
@@ -131,7 +132,7 @@ class PilFontMetrics:
         return size_pt / 72.0
 
 
-def resolve_for_pptx(doc: ast.Document, font_name: str = FONT_NAME, base_dir: str = ".") -> LayoutResult:
+def resolve_for_pptx(doc: ast.Document, base_dir: str = ".") -> LayoutResult:
     """resolve_layout(), using real font metrics so "fit" objects are
     sized to match what write_pptx() will actually draw. Text sizes come
     from the prelude's own small/medium/large (docs/spec.md SS3.7), not a
@@ -140,7 +141,7 @@ def resolve_for_pptx(doc: ast.Document, font_name: str = FONT_NAME, base_dir: st
 
     `base_dir` is the source file's own directory, against which an
     `image` object's path resolves (docs/spec.md SS3.5)."""
-    return resolve_layout(doc, metrics=PilFontMetrics(font_name), base_dir=base_dir)
+    return resolve_layout(doc, metrics=PilFontMetrics(), base_dir=base_dir)
 
 
 def _font_size(flags: list[str], text_sizes: dict[str, float]) -> Pt:
@@ -276,7 +277,35 @@ def _apply_line_style(line, shape: Shape) -> None:
         line.dash_style = MSO_LINE_DASH_STYLE.ROUND_DOT
 
 
-def _apply_text(pptx_shape, shape: Shape, font_name: str, text_sizes: dict[str, float]) -> None:
+def _apply_run_font(run, flags: list[str], typeface: str) -> None:
+    """Set a run's font family (docs/spec.md SS3.3): by default the
+    theme's own minor font (`+mn-lt`/`+mn-ea`), or its major (heading)
+    font (`+mj-lt`/`+mj-ea`) when the `major` text flag is present --
+    kept as a symbolic theme reference, exactly like a `theme` colour
+    (never resolved to a literal family here, checked: round-trips and
+    renders correctly through real PowerPoint, picking each script's own
+    family, not just the Latin one), unless `typeface` (empty by default,
+    §3.3/§3.7) is a literal family, which then overrides both the Latin
+    and East Asian slots.
+
+    python-pptx's `Font.name` only ever touches `<a:latin>` -- `<a:ea>` has
+    no public API at all (checked), so it's set directly on the run's `rPr`."""
+    major = "major" in flags
+    if typeface:
+        latin_val = ea_val = typeface
+    else:
+        latin_val = "+mj-lt" if major else "+mn-lt"
+        ea_val = "+mj-ea" if major else "+mn-ea"
+    run.font.name = latin_val
+    rPr = run.font._rPr
+    ea = rPr.find(qn("a:ea"))
+    if ea is None:
+        ea = OxmlElement("a:ea")
+        rPr.find(qn("a:latin")).addnext(ea)  # <a:ea> must follow <a:latin> in schema order
+    ea.set("typeface", ea_val)
+
+
+def _apply_text(pptx_shape, shape: Shape, typeface: str, text_sizes: dict[str, float]) -> None:
     if not shape.texts:
         return
     tf = pptx_shape.text_frame
@@ -296,14 +325,14 @@ def _apply_text(pptx_shape, shape: Shape, font_name: str, text_sizes: dict[str, 
         )
         run = para.add_run()
         run.text = text
-        run.font.name = font_name
+        _apply_run_font(run, flags, typeface)
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, text_sizes)
         _apply_colour(run.font.color, shape.color or Colour(rgb=0))
 
 
-def _add_image_shape(container, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+def _add_image_shape(container, shape: Shape, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
     """`image` (docs/spec.md SS3.5). A Picture has no text_frame of its own
     in python-pptx (checked, like a connector), so any text on it is drawn
     as a separate textbox, centred over it -- one box, not per-string
@@ -335,14 +364,14 @@ def _add_image_shape(container, shape: Shape, tf: _Transform, font_name: str, te
         para.alignment = PP_ALIGN.CENTER
         run = para.add_run()
         run.text = text
-        run.font.name = font_name
+        _apply_run_font(run, flags, typeface)
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, text_sizes)
         _apply_colour(run.font.color, shape.color or Colour(rgb=0))
 
 
-def _add_block_shape(container, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+def _add_block_shape(container, shape: Shape, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
     autoshape_type = _AUTOSHAPE.get(shape.kind, MSO_SHAPE.RECTANGLE)
@@ -375,10 +404,10 @@ def _add_block_shape(container, shape: Shape, tf: _Transform, font_name: str, te
             _apply_colour(pptx_shape.fill.fore_color, shape.fill)
         _apply_line_style(pptx_shape.line, shape)
 
-    _apply_text(pptx_shape, shape, font_name, text_sizes)
+    _apply_text(pptx_shape, shape, typeface, text_sizes)
 
 
-def _add_line_shape(container, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+def _add_line_shape(container, shape: Shape, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
@@ -396,7 +425,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform, font_name: str, tex
         _apply_line_style(freeform.line, shape)
         _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
 
-    _add_line_text(container, shape, tf, font_name, text_sizes)
+    _add_line_text(container, shape, tf, typeface, text_sizes)
 
 
 def _line_label_rects(
@@ -424,7 +453,7 @@ def _line_label_rects(
     return out
 
 
-def _add_line_text(container, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+def _add_line_text(container, shape: Shape, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
     """A connector/freeform shape has no text_frame in python-pptx, so a
     line's text (e.g. an arrow's label) is rendered as small floating
     textboxes instead, placed above/on/below the line per assign_text_slots()."""
@@ -439,7 +468,7 @@ def _add_line_text(container, shape: Shape, tf: _Transform, font_name: str, text
         para.alignment = PP_ALIGN.CENTER
         run = para.add_run()
         run.text = text
-        run.font.name = font_name
+        _apply_run_font(run, flags, typeface)
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, text_sizes)
@@ -464,13 +493,17 @@ def write_pptx(
     result: LayoutResult,
     path: str,
     margin: float = 0.15,
-    font_name: str = FONT_NAME,
 ) -> None:
     """Render `result` (from :func:`pikslide.pik.layout.resolve_layout`, or
     `resolve_for_pptx`) to a single-slide PowerPoint file at `path`, sized
     to fit the diagram. Text sizes come from `result.text_sizes` -- the
     same small/medium/large this document's own layout used (docs/spec.md
-    SS3.7) -- rather than a separate parameter that could disagree with it.
+    SS3.7) -- rather than a separate parameter that could disagree with it;
+    the font family is `result.typeface` likewise (SS3.3) -- empty, by
+    far the common case, means every run gets a symbolic theme font
+    reference rather than a literal name (see `_apply_run_font`), so a
+    fresh standalone deck's own built-in Office theme decides the actual
+    family, the same as any other new PowerPoint file.
 
     `margin` only needs to cover the diagram's own edge (e.g. a thick
     stroke's outer half, or PowerPoint's arrowhead overshoot) -- line
@@ -482,22 +515,22 @@ def write_pptx(
     prs.slide_height = Emu(int(tf.slide_height * EMU_PER_INCH))
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank layout
 
-    _add_all_shapes(slide, result, tf, font_name, text_sizes)
+    _add_all_shapes(slide, result, tf, result.typeface, text_sizes)
     prs.save(path)
 
 
-def _add_all_shapes(container, result: LayoutResult, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+def _add_all_shapes(container, result: LayoutResult, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
     """Draw every shape in `result` into `container` (a Slide, for
     `write_pptx()`, or a group, for `insert_into_pptx()` -- both expose
     the same `.shapes.add_X()` API, checked, so this needs no branching
     on which one it got)."""
     for shape in result.shapes:
         if shape.kind in ("line", "arrow", "spline", "arc"):
-            _add_line_shape(container, shape, tf, font_name, text_sizes)
+            _add_line_shape(container, shape, tf, typeface, text_sizes)
         elif shape.kind == "image":
-            _add_image_shape(container, shape, tf, font_name, text_sizes)
+            _add_image_shape(container, shape, tf, typeface, text_sizes)
         else:
-            _add_block_shape(container, shape, tf, font_name, text_sizes)
+            _add_block_shape(container, shape, tf, typeface, text_sizes)
 
 
 # ---------------------------------------------------------------------------
@@ -560,7 +593,6 @@ def insert_into_pptx(
     region: str | None = None,
     rect: tuple[float, float, float, float] | None = None,
     group_id: str = "diagram",
-    font_name: str = FONT_NAME,
 ) -> Presentation:
     """Insert `result` into slide `slide_no` (1-based) of the deck at
     `deck_path`, as one top-level group named `pikslide:<group_id>`
@@ -572,7 +604,14 @@ def insert_into_pptx(
     A diagram is never scaled (SS4.2): one larger than its region is an
     error, not silently shrunk. Running this again against the same
     `deck_path`/`slide_no`/`group_id` replaces the group in place, keeping
-    its z-order position, rather than adding a second copy."""
+    its z-order position, rather than adding a second copy.
+
+    Text is drawn with `result.typeface` (SS3.3): empty, the common case,
+    means a symbolic theme font reference (`+mn-lt` etc., see
+    `_apply_run_font`) rather than a literal name -- which needs no theme
+    file of its own to be read here at all, since the reference resolves
+    against whatever theme `deck_path`'s own slide master already uses
+    once the file is back open in PowerPoint (SS3.3 rule 1)."""
     prs = Presentation(deck_path)
     if not 1 <= slide_no <= len(prs.slides):
         raise LayoutError(f"--slide {slide_no} is out of range: this deck has {len(prs.slides)} slide(s)")
@@ -600,7 +639,7 @@ def insert_into_pptx(
 
     group = slide.shapes.add_group_shape()
     group.name = group_name
-    _add_all_shapes(group, result, _LocalTransform(bbox), font_name, text_sizes)
+    _add_all_shapes(group, result, _LocalTransform(bbox), result.typeface, text_sizes)
     group.left, group.top = Inches(region_left), Inches(region_top)
     group.width, group.height = Inches(max(diagram_w, 0.01)), Inches(max(diagram_h, 0.01))
 

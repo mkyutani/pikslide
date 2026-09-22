@@ -9,6 +9,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL_TYPE, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
+from pptx.oxml.ns import qn
 from pptx.util import Inches
 
 from pikslide.pik import parse
@@ -132,6 +133,61 @@ def test_overriding_medium_changes_the_default_text_size(tmp_path: pathlib.Path)
     prs = render('medium = 14pt\nbox "hi"\n', tmp_path)
     run = prs.slides[0].shapes[0].text_frame.paragraphs[0].runs[0]
     assert run.font.size.pt == pytest.approx(14.0)
+
+
+# ---------------------------------------------------------------------------
+# Fonts (docs/spec.md SS3.3): symbolic theme references by default, `major`,
+# `typeface` -- checked, as elsewhere, against what's actually saved to disk
+# (not just what's readable back in memory before saving).
+# ---------------------------------------------------------------------------
+
+
+def _ea_typeface(run) -> str | None:
+    ea = run.font._rPr.find(qn("a:ea"))
+    return ea.get("typeface") if ea is not None else None
+
+
+def test_default_font_is_the_symbolic_minor_theme_reference(tmp_path: pathlib.Path):
+    prs = render('box "hi"\n', tmp_path)
+    run = prs.slides[0].shapes[0].text_frame.paragraphs[0].runs[0]
+    assert run.font.name == "+mn-lt"
+    assert _ea_typeface(run) == "+mn-ea"
+
+
+def test_major_flag_selects_the_major_theme_reference(tmp_path: pathlib.Path):
+    prs = render('box "Heading" major\n', tmp_path)
+    run = prs.slides[0].shapes[0].text_frame.paragraphs[0].runs[0]
+    assert run.font.name == "+mj-lt"
+    assert _ea_typeface(run) == "+mj-ea"
+
+
+def test_typeface_variable_overrides_with_a_literal_family(tmp_path: pathlib.Path):
+    prs = render('typeface = "Comic Sans MS"\nbox "hi" major\n', tmp_path)
+    run = prs.slides[0].shapes[0].text_frame.paragraphs[0].runs[0]
+    # Overrides both slots, and applies regardless of `major` (docs/spec.md
+    # SS3.3: "a specific family" -- one value for everything, not a
+    # major/minor pair of its own).
+    assert run.font.name == "Comic Sans MS"
+    assert _ea_typeface(run) == "Comic Sans MS"
+
+
+def test_typeface_must_be_a_string(tmp_path: pathlib.Path):
+    with pytest.raises(LayoutError):
+        resolve_for_pptx(parse("typeface = 5\nbox\n"))
+
+
+def test_line_label_and_image_caption_also_get_the_theme_font(tmp_path: pathlib.Path):
+    # _add_line_text() and _add_image_shape() build runs independently of
+    # _apply_text() -- checked separately, since nothing shares that code path.
+    _make_image(tmp_path)
+    prs = render('arrow right "Label"\nimage "logo.png" width 50% "Caption"\n', tmp_path, name="fonts.pptx")
+    slide = prs.slides[0]
+    label = next(s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX and s.text_frame.text == "Label")
+    caption = next(s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX and s.text_frame.text == "Caption")
+    for box in (label, caption):
+        run = box.text_frame.paragraphs[0].runs[0]
+        assert run.font.name == "+mn-lt"
+        assert _ea_typeface(run) == "+mn-ea"
 
 
 def test_preset_shape_renders_as_the_named_autoshape(tmp_path: pathlib.Path):

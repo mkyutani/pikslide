@@ -229,3 +229,14 @@ thickness = 0.015
 small = 9pt
 medium = 10.5pt
 large = 12pt
+
+# --- Font family (docs/spec.md SS3.3) --------------------------------------
+# Empty means "the theme's own font": a renderer emits a symbolic reference
+# (the theme's minor font, or its major/heading font where the `major` text
+# flag is used) rather than a literal family, so the diagram's text follows
+# whatever theme the deck actually uses -- this is the point that matters
+# for Japanese, since the deck's theme decides the CJK face. Set this
+# (typically in a template's settings file, once that exists) to override
+# with one specific family for both the Latin and East Asian slots.
+
+typeface = ""

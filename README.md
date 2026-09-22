@@ -31,7 +31,11 @@ resolved and contained under the source file's own directory); `include
 detection); Markdown diagram names (the `pikslide` fence tag, naming a
 diagram when a file has more than one); inserting a diagram into an
 existing slide as one named, idempotently-replaceable group, via the CLI's
-`--into` (see below) or `pikslide.pptx_writer.insert_into_pptx` directly.
+`--into` (see below) or `pikslide.pptx_writer.insert_into_pptx` directly;
+text set in the theme's own font, not a hard-coded family — a symbolic
+reference (like a theme colour), so it follows whatever theme the diagram
+actually lands in, with `major` selecting the heading font and the
+`typeface` variable available to override both with one literal family.
 
 **Specified, not implemented yet**: SVG images, reading a
 template's own theme (`.potx`/`.pptx`), per-template settings files, and

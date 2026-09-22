@@ -2,50 +2,48 @@
 
 A text language for drawing **diagrams that live inside Office slides**.
 
-pikslide descends from the *pic → pik* line ([pikchr](https://pikchr.org/)):
-you don't write coordinates, you place objects one after another in a
-direction and refer to earlier objects by name. Where pikchr emits an SVG
-picture, pikslide emits **native, editable PowerPoint objects** — shapes a
-person can select, restyle and move afterwards.
+You don't write coordinates: you place objects one after another in a
+direction, and refer to earlier objects by name. A diagram becomes
+**native, editable PowerPoint objects** — shapes a person can select,
+restyle and move afterwards.
 
-pikslide is its own language. It starts from pikchr's grammar and departs from
-it where its design calls for it; compatibility with pikchr is not a goal. The
-language is specified in [docs/spec.md](docs/spec.md) and defined, in BNF, in
-[docs/grammar.md](docs/grammar.md).
+The language is specified in [docs/spec.md](docs/spec.md) and defined, in
+BNF, in [docs/grammar.md](docs/grammar.md). (pikslide's own design traces
+back through two earlier languages; see Acknowledgments, below.)
 
 ## Status
 
-v1 (docs/spec.md §1) is implemented: the pikchr-derived core (a parser, a
-layout stage — a pragmatic subset of pikchr's own — and PowerPoint output);
-colors as a type of their own, with theme colors (`theme "accent1"`,
-`lighter`/`darker`) rendered as real `schemeClr`, never resolved to RGB;
-fonts the same way — text set in the theme's own font by default, not a
-hard-coded family, with `major` selecting the heading font and `typeface`
-overriding both with one literal family; three fixed text sizes
-(`small`/`medium`/`large`); a prelude of built-in names (CSS color names,
-pikchr's own defaults, the theme-color names); preset shapes (`shape
-roundRect`, any of the ~180 OOXML presets, matched case-insensitively);
-images (PNG/JPEG/GIF, and SVG — embedded together with a PNG fallback for
-older viewers, sized explicitly or by aspect ratio, path resolved and
-contained under the source file's own directory); `include "house.pik"`
-for shared definitions (contained the same way, with cycle detection);
-object identity — a pik label becomes the shape's real PowerPoint name
-(an unlabeled object gets a default `box 1`-style name), `[ ... ]` blocks
-become real, nameable, nestable PowerPoint groups, and `behind X` places
-an object immediately below `X` in z-order — so the Selection Pane reads
-like the source; Markdown diagram names (the `pikslide` fence tag, naming
-a diagram when a file has more than one, and selecting one with
-`--block`); inserting a diagram into an existing slide as one named,
-idempotently-replaceable group (`--into`, with `--region`/`--rect`/
-`--align` placing it); starting a new standalone deck from another file's
-theme instead of the built-in Office one (`--template`); a template's
-settings file (`<name>.theme.pik`, or `--settings FILE`), for its slide
-layout, font, accent colors, text sizes and content area (`--into`'s
-default target region when neither `--region` nor `--rect` is given); and
-diagnostics — `file:line:column`, the source line and a caret for a syntax
-error (naming the right file even inside a nested `include`), "did you
-mean" suggestions for an unknown color/preset/image/region name,
-`--strict`, `--check`, and `--format json`.
+v1 (docs/spec.md §1) is implemented: a parser, a layout stage, and
+PowerPoint output; colors as a type of their own, with theme colors
+(`theme "accent1"`, `lighter`/`darker`) rendered as real `schemeClr`,
+never resolved to RGB; fonts the same way — text set in the theme's own
+font by default, not a hard-coded family, with `major` selecting the
+heading font and `typeface` overriding both with one literal family;
+three fixed text sizes (`small`/`medium`/`large`); a prelude of built-in
+names (CSS color names, built-in defaults, the theme-color names); preset
+shapes (`shape roundRect`, any of the ~180 OOXML presets, matched
+case-insensitively); images (PNG/JPEG/GIF, and SVG — embedded together
+with a PNG fallback for older viewers, sized explicitly or by aspect
+ratio, path resolved and contained under the source file's own
+directory); `include "house.pik"` for shared definitions (contained the
+same way, with cycle detection); object identity — a label becomes the
+shape's real PowerPoint name (an unlabeled object gets a default `box
+1`-style name), `[ ... ]` blocks become real, nameable, nestable
+PowerPoint groups, and `behind X` places an object immediately below `X`
+in z-order — so the Selection Pane reads like the source; Markdown
+diagram names (the `pikslide` fence tag, naming a diagram when a file has
+more than one, and selecting one with `--block`); inserting a diagram
+into an existing slide as one named, idempotently-replaceable group
+(`--into`, with `--region`/`--rect`/`--align` placing it); starting a new
+standalone deck from another file's theme instead of the built-in Office
+one (`--template`); a template's settings file (`<name>.theme.pik`, or
+`--settings FILE`), for its slide layout, font, accent colors, text sizes
+and content area (`--into`'s default target region when neither
+`--region` nor `--rect` is given); and diagnostics — `file:line:column`,
+the source line and a caret for a syntax error (naming the right file
+even inside a nested `include`), "did you mean" suggestions for an
+unknown color/preset/image/region name, `--strict`, `--check`, and
+`--format json`.
 
 Deliberately out of v1 (docs/spec.md §7): connectors, SVG *output*,
 auto-layout, tables/charts/SmartArt, animation, multi-slide authoring,
@@ -79,8 +77,8 @@ Render a `.pik` file straight to PowerPoint:
 uv run pikslide diagram.pik diagram.pptx
 ```
 
-`.pik` or `.pikchr` fenced code blocks inside a Markdown file are also
-accepted directly — every block in the file is processed in order:
+` ```pikslide ` fenced code blocks inside a Markdown file are also accepted
+directly — every block in the file is processed in order:
 
 ```sh
 uv run pikslide doc.md doc.pptx
@@ -123,7 +121,7 @@ the diagram, no separate cropping needed.
 
 `examples/pipeline.pik`:
 
-```pik
+```pikslide
 arrow right 200% "Markdown" "Source"
 box rad 10px "Markdown" "Formatter" "(markdown.c)" fit
 arrow right 200% "HTML+SVG" "Output"
@@ -137,11 +135,11 @@ uv run pikslide examples/pipeline.pik examples/pipeline.pptx
 
 ## Limits of the current layout stage
 
-Today's parser and tokenizer still accept pikchr's language. The layout stage
-is a deliberately pragmatic *subset* of pikchr's own: default object sizes,
-sequential chaining, `at`/`with`/`from`/`to`/`then`/`go`/`same`/`chop`, and
-box/ellipse/diamond edge geometry are ported faithfully, but a few things are
-simplified:
+The layout stage is a deliberately pragmatic subset of a full CAD-style
+layout engine, covering common diagrams well rather than every case:
+default object sizes, sequential chaining,
+`at`/`with`/`from`/`to`/`then`/`go`/`same`/`chop`, and box/ellipse/diamond
+edge geometry are all there, but a few things are simplified:
 
 - spline/arc curves are drawn as straight polylines,
 - `fit` text sizing uses real font metrics when rendering to PowerPoint, but
@@ -157,16 +155,27 @@ See the module docstrings in `src/pikslide/pik/layout.py` for details.
 uv run pytest
 ```
 
-Test fixtures under `tests/fixtures/examples/` are pikchr's own official
-example scripts, kept as a corpus for behavior that has not deliberately
-changed.
+Test fixtures under `tests/fixtures/examples/` are a corpus of official
+example diagrams inherited via the port described in Acknowledgments,
+kept as a regression net for behavior that hasn't deliberately changed.
 
 ## Acknowledgments
 
-The tokenizer, grammar, macro expansion, and layout engine in this project are
-substantially ported from [pikchr](https://pikchr.org/) by D. Richard Hipp,
-whose [source](https://pikchr.org/home/doc/tip/pikchr.y) states it is released
-under the Zero-Clause BSD license. See [NOTICE](NOTICE) for details.
+pikslide traces its lineage through two earlier languages. Brian
+Kernighan's `pic` (1984) introduced sequential, relative placement of
+named objects — draw one thing, then the next one relative to it — rather
+than absolute coordinates. D. Richard Hipp's [pikchr](https://pikchr.org/)
+carried that idea into a full, modern language, emitting SVG. pikslide's
+tokenizer, grammar, macro expansion, and layout engine began as a direct
+port of pikchr's own, and the port goes well beyond syntax — default
+object sizes, placement and chaining math, and edge geometry are all
+inherited from it, not rebuilt from scratch. pikslide's own design departs
+from there where a diagram that lives inside a PowerPoint slide, rather
+than becoming an SVG picture, calls for a different answer.
+
+pikchr's [source](https://pikchr.org/home/doc/tip/pikchr.y) states it is
+released under the Zero-Clause BSD license. See [NOTICE](NOTICE) for
+details.
 
 ## License
 

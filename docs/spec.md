@@ -9,11 +9,11 @@ English in any case.
 ## 1. What pikslide is
 
 pikslide is a text language for drawing **diagrams that live inside Office
-slides**. It descends from the *pic → pik (pikchr)* line: you don't write
-coordinates, you place objects one after another in a direction and refer to
-earlier objects by name. Where pikchr emits an SVG picture, pikslide emits
-**native, editable PowerPoint objects**: shapes a person can select, restyle
-and move after the fact.
+slides**. You don't write coordinates: you place objects one after another
+in a direction, and refer to earlier objects by name. A diagram becomes
+**native, editable PowerPoint objects**: shapes a person can select,
+restyle and move after the fact. (pikslide's own design traces back
+through two earlier languages; see Acknowledgments, §8.)
 
 The target is one *diagram*, not a deck. Deck structure (titles, ordering,
 body text) belongs to whatever assembles the deck; pikslide places a diagram
@@ -26,44 +26,31 @@ names, groups and z-order (§3.1), insertion into an existing slide (§4.2),
 preset shapes (§3.4), and images and icons (§3.5). What v1 leaves out is
 listed in §7.
 
-Placement stays pik's own: objects are placed one after another and relative
-to one another, and there is no auto-layout. Humans and LLMs both write
-pikslide, so the language is kept deterministic, unambiguous and short to
-write, and errors point at exact positions (§5).
+Placement is sequential and relative: objects are placed one after another
+and relative to one another, and there is no auto-layout. Humans and LLMs
+both write pikslide, so the language is kept deterministic, unambiguous and
+short to write, and errors point at exact positions (§5).
 
 Where a diagram goes (which deck, slide and region, and which theme) is never
 written in a `.pik`; see §4.
 
-## 2. Relation to pikchr
+## 2. Design principles
 
-pikslide is its own language. It starts from pikchr's way of drawing
-(sequential placement, relative positions, labels, text) and from pikchr's
-grammar, but **compatibility with pikchr is not a goal**: a pikchr program may
-run unchanged or may not, and where pikslide differs, this specification says
-so.
-
-- **Origin.** The parser and layout began as a port of pikchr and are changed
-  step by step, not rewritten. pikchr's official example scripts
-  (`tests/fixtures/examples/`) stay in the tests as a corpus for behavior
-  pikslide has not deliberately changed; a test that pins a deliberate
-  difference is changed along with it.
-- **New words are reserved.** The words pikslide adds (`shape`, `image`,
-  `include`, `alt`, `theme`, `major`, `medium`, `large`, `lighter`, `darker`,
-  `none`, `off`, and `connector` for later) are ordinary reserved words: they
-  cannot be used as variable or macro names. Names such as `accent1` are not
-  among them; the prelude defines those as ordinary variables (§3.7). See
-  [grammar.md](grammar.md), *Reserved words*.
 - **Colors are a type of their own.** A color is not a number. It is an RGB
   value (a hex literal such as `0xff0000`) or a theme color (§3.3), and
   variables can hold colors. Color names such as `red` are not built into
   the language: they are ordinary variables defined by a prelude that is read
   first (§3.7), so a program can override them. An undefined name is an
-  error.
-- **Text size** is in points (§3.3); pikchr gives it as a percentage of the
-  viewer's font.
-- **File extension.** Source files keep `.pik`: editor support for pik keeps
-  working, and the language is close enough to pikchr that a separate
-  extension would gain little.
+  error. Arithmetic on a color (`primary + 1`) is an error too.
+- **New words are reserved.** The words `shape`, `image`, `include`, `alt`,
+  `theme`, `major`, `medium`, `large`, `lighter`, `darker`, `none`, `off`,
+  and `connector` (for later) are ordinary reserved words: they cannot be
+  used as variable or macro names. Names such as `accent1` are not among
+  them; the prelude defines those as ordinary variables (§3.7). See
+  [grammar.md](grammar.md), *Reserved words*.
+- **Text size** is in points, not a percentage (§3.3).
+- **File extension.** Source files use `.pik`, for the syntax-highlighting
+  and editor support that extension already carries in the wild.
 
 ## 3. Features added in v1
 
@@ -71,9 +58,10 @@ so.
 
 Goal: the Selection Pane in PowerPoint reads like the source.
 
-- **Shape name.** A pik label names the shape: `Web: box "Web"` produces a
+- **Shape name.** A label names the shape: `Web: box "Web"` produces a
   shape named `Web`. Unlabeled objects are named `<class> <n>`, where `n` is
-  the object's ordinal among that class in its scope (mirrors pik's `2nd box`).
+  the object's ordinal among that class in its scope (the same ordinal a
+  `2nd box` reference would address).
 - **Z-order** follows source order. `behind X` is honoured: the object is
   placed immediately below `X`.
 - **Blocks are groups.** A `[ ... ]` block becomes a PowerPoint group named by
@@ -85,11 +73,11 @@ Goal: the Selection Pane in PowerPoint reads like the source.
 
 ### 3.2 Lines and arrows; `connector` is deferred
 
-**v1 has no connectors.** `line`, `arrow`, `spline` and `arc` keep their
-pikchr meaning: *a line drawn with fixed geometry*. They are emitted as plain
-PowerPoint lines (a two-point path as a line, a longer path as a freeform),
-with `dashed`, `dotted`, `thick`, `thin` and `<-`, `->`, `<->` mapped to dash
-style, weight and arrowheads as today.
+**v1 has no connectors.** `line`, `arrow`, `spline` and `arc` are *lines
+drawn with fixed geometry*. They are emitted as plain PowerPoint lines (a
+two-point path as a line, a longer path as a freeform), with `dashed`,
+`dotted`, `thick`, `thin` and `<-`, `->`, `<->` mapped to dash style,
+weight and arrowheads.
 
 They are **never attached to shapes**, even when an endpoint lies exactly on
 a shape's edge. Moving a box in PowerPoint leaves the line where it was.
@@ -97,9 +85,9 @@ a shape's edge. Moving a box in PowerPoint leaves the line where it was.
 **`connector` will be a separate object class, not something `arrow` turns
 into.** In Office a connector is a *link between two objects*: it names its
 two ends, follows them when they move, and chooses its own route. That is a
-different idea from pik's arrow, which is only geometry, and inferring it
-from where an arrow's endpoint happens to fall would be implicit and
-surprising. So:
+different idea from `arrow`, which is only geometry, drawn once and never
+re-routed — inferring a link from where an arrow's endpoint happens to fall
+would be implicit and surprising. So:
 
 - `arrow` and `line` stay geometry, forever; nothing turns them into links.
 - When links are added, they get their own word, `connector`, with explicit
@@ -124,7 +112,7 @@ this, `theme`, which takes the name of a slot in the theme: `theme "accent1"`.
 The usual slot names are defined for you as variables (§3.7), so programs
 write:
 
-```pik
+```pikslide
 box "Primary"  fill accent1
 box "Soft"     fill accent1 lighter 40%
 box "Outline"  fill bg1 color text1
@@ -158,18 +146,15 @@ box "Outline"  fill bg1 color text1
   template's settings file (§3.8); the prelude gives it the empty string,
   which means the theme's font. This is the point that matters for Japanese:
   the deck's theme decides the CJK face.
-- **Size.** Text size does **not** follow pikchr. pikchr states it as a
-  percentage of whatever font the viewer uses (`big` = 125 %, `small` =
-  80 %); PowerPoint needs points. pikslide has three sizes: `small` = 9 pt,
-  `medium` = 10.5 pt (the default, so no flag is needed), and `large` or
-  `big` = 12 pt (`big` is a synonym for `large`). Like `fill`, `color` and
-  `thickness`, the words themselves can be assigned to set their values; the
-  prelude (§3.7) has `small = 9pt`, `medium = 10.5pt`, `large = 12pt`. Assign
-  to them to change the sizes, or set them in the template's settings file
-  (§3.8). If a string
-  carries more than one size flag, the last one wins, so pikchr's repeated
-  `big big` has no extra effect. `fit` sizing measures with the size in
-  effect.
+- **Size.** PowerPoint needs points, not a percentage of the viewer's own
+  font. pikslide has three sizes: `small` = 9 pt, `medium` = 10.5 pt (the
+  default, so no flag is needed), and `large` or `big` = 12 pt (`big` is a
+  synonym for `large`). Like `fill`, `color` and `thickness`, the words
+  themselves can be assigned to set their values; the prelude (§3.7) has
+  `small = 9pt`, `medium = 10.5pt`, `large = 12pt`. Assign to them to
+  change the sizes, or set them in the template's settings file (§3.8). If
+  a string carries more than one size flag, the last one wins. `fit` sizing
+  measures with the size in effect.
 
 **Where the theme comes from.** The tool reads it straight out of the file
 the diagram is going into; the language never names a theme file.
@@ -210,7 +195,7 @@ widths are approximate for a face that is not installed.
 
 One new class keyword instead of ~180 reserved words:
 
-```pik
+```pikslide
 shape chevron "Step 1" fit
 shape roundRect "Card" fill accent2
 shape wedgeRectCallout "Note" fit
@@ -226,18 +211,18 @@ shape wedgeRectCallout "Note" fit
   already supported for `box`.
 - Existing classes map onto presets as follows:
 
-  | pik class | PowerPoint |
+  | Class | PowerPoint |
   |---|---|
   | `box` | `rect` (`roundRect` when `rad > 0`) |
   | `circle`, `ellipse`, `oval`, `dot` | `ellipse` |
   | `diamond` | `diamond` |
   | `cylinder` | `can` |
-  | `file` | `flowChartDocument` (a document with a wavy bottom edge; it does not reproduce pikchr's folded top-right corner; chosen after comparing `snip1Rect` and `foldedCorner` rendered in PowerPoint) |
+  | `file` | `flowChartDocument` (a document with a wavy bottom edge; chosen after comparing `snip1Rect` and `foldedCorner` rendered in PowerPoint) |
   | `text` | text box (no fill, no outline) |
 
 ### 3.5 Images and icons: `image`
 
-```pik
+```pikslide
 Logo: image "logo.png" width 0.6in
       image "icons/db.svg" height 0.4in alt "Database"   # an SVG icon
 ```
@@ -263,15 +248,16 @@ Logo: image "logo.png" width 0.6in
 
 ### 3.6 Shared definitions: `include`
 
-pikchr has no `include`, so a shared house style would have to be copied
-into every diagram. A deck holds many diagrams, so pikslide adds one.
+A deck typically holds many diagrams that share a house style — colors,
+macros, defaults — so pikslide provides `include` to define these once and
+bring them into each diagram, rather than copying them everywhere:
 
-```pik
+```pikslide
 include "house.pik"
 Web: box "Web" fill primary card            # a color variable, a macro
 ```
 
-```pik
+```pikslide
 # house.pik: definitions only
 boxwid = 1.2
 primary = accent1 lighter 60%
@@ -310,7 +296,7 @@ Before every program, pikslide reads a **prelude**: a file of definitions that
 ships with it (`src/pikslide/prelude.pik`). It follows the rules of an
 included file (§3.6): definitions only.
 
-```pik
+```pikslide
 # prelude.pik (excerpt)
 black      = 0x000000
 red        = 0xff0000
@@ -347,10 +333,10 @@ emphasis   = accent1
 - **It defines the theme-color names** `accent1`–`accent6`, `text1`, `text2`,
   `bg1`, `bg2`, `link` and `followed`, with `theme` (§3.3). They are ordinary
   variables, so a template's settings file can redefine or add them.
-- **It defines the built-in defaults.** The 33 variables that pikchr keeps in
-  a table in its code (`boxwid`, `linewid`, `charwid`, `thickness`, `fill`,
-  `color`, and so on) are defined here instead, so the defaults are readable
-  and changeable in one place.
+- **It defines the built-in defaults.** Default object sizes and drawing
+  style (`boxwid`, `linewid`, `charwid`, `thickness`, `fill`, `color`, and
+  so on) are defined here, so the defaults are readable and changeable in
+  one place.
 - **It defines the three text sizes** (§3.3). Lengths are inches internally,
   so `9pt` is 9/72 in; the PowerPoint writer converts back to points.
 - **It defines `layout` and `typeface`**, both empty strings: the slide layout
@@ -367,9 +353,8 @@ emphasis   = accent1
   without them would fail. A project's own definitions are layered on top of
   it, by an `include` (§3.6) or by a settings file (§3.8), which `--settings
   FILE` supplies from outside the program.
-- **Names are lowercase**, like every variable. pikchr's capitalized
-  spellings (`Red`, `DarkBlue`) are not colors; a capitalized name is an
-  object label.
+- **Names are lowercase**, like every variable. A capitalized name (`Red`,
+  `DarkBlue`) is not a color — capitalization means an object label.
 - **A hex literal is a color.** `0xRRGGBB` is a color value, not a number;
   decimal numbers are numbers.
 - **`none` and `off`** (*no color*) cannot be written as a value, so they
@@ -401,7 +386,7 @@ layout. A
 `.pik` still never names the file: the tool finds it from the template or
 deck the diagram goes into, or the caller names it (§4).
 
-```pik
+```pikslide
 # corporate.theme.pik (beside corporate.potx)
 layout        = "1_本文"   # the layout for a new slide; fixes the master too
 typeface      = "BIZ UDPゴシック"
@@ -507,9 +492,9 @@ Humans and LLMs both need errors they can act on.
 
 ## 6. Use from Markdown and from other tools
 
-- Markdown fence tag: **`pikslide`** names this language, so a toolchain can
-  send ` ```pikchr ` blocks to pikchr and ` ```pikslide ` blocks to pikslide.
-  pikslide keeps accepting `pik` and `pikchr` fences as it does today.
+- **Markdown fence tag: `pikslide`.** Only a ` ```pikslide ` fence is
+  recognized; a toolchain that also sends diagrams elsewhere tags each
+  fence for the tool it's meant for.
 - **Diagram names.** A fence may name its diagram with the word after the
   language tag: ` ```pikslide architecture `. A Markdown file with more than
   one diagram must name every one of them; a missing or duplicate name is an
@@ -531,3 +516,19 @@ piece of work of its own) · tables, charts, SmartArt · animation,
 transitions, speaker notes · multi-slide or whole-deck authoring · true
 Bézier curves (`spline`/`arc` stay polylines) · shape adjustment handles ·
 arithmetic on colors.
+
+## 8. Acknowledgments
+
+pikslide traces its lineage through two earlier languages. Brian
+Kernighan's `pic` (1984) introduced sequential, relative placement of
+named objects — draw one thing, then the next one relative to it — rather
+than absolute coordinates. D. Richard Hipp's [pikchr](https://pikchr.org/)
+carried that idea into a full, modern language, emitting SVG. pikslide's
+parser and layout engine began as a direct port of pikchr's own
+(`pikchr.y`), and the port goes well beyond syntax — default object sizes,
+placement and chaining math, and edge geometry are all inherited from it,
+not rebuilt from scratch. pikslide's own design departs from there where a
+diagram that lives inside a PowerPoint slide, rather than becoming an SVG
+picture, calls for a different answer: native, editable, themed shapes
+instead of drawn paths, among the other choices this specification
+describes.

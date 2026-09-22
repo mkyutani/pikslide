@@ -2,29 +2,10 @@
 
 This document defines the pikslide language: its lexical grammar, its
 syntax in BNF/EBNF, and a short account of what the constructs mean. For
-*why* the extensions exist and how they map to PowerPoint, see
+*why* the constructs exist and how they map to PowerPoint, see
 [spec.md](spec.md).
 
-The language has two layers:
-
-- **pikchr core.** Every rule that carries no marker is implemented today by
-  pikslide's hand-written recursive-descent parser
-  (`src/pikslide/pik/parser.py`, tokenizer in `src/pikslide/pik/tokens.py`).
-  It is derived from pikchr's own LALR(1) grammar (`pikchr.y`, built with the
-  Lemon parser generator). A few local ambiguities that Lemon resolves with
-  `%left`/`%right` precedence declarations and 1-token lookahead are resolved
-  here by rule ordering or small bounded backtracking; those spots are called
-  out below. For the authoritative upstream grammar see pikchr's
-  [grammar documentation](https://pikchr.org/home/doc/trunk/doc/grammar.md)
-  and [`pikchr.y`](https://pikchr.org/home/doc/tip/pikchr.y).
-- **pikslide additions.** Rules and alternatives marked `(* ext *)` (prose:
-  `(ext)`) are pikslide's own additions, not part of pikchr's grammar.
-  pikslide is its own language ([spec.md](spec.md) §2): it starts from
-  pikchr's grammar and departs from it where its design calls for it. Every
-  difference is listed in [Differences from pikchr](#differences-from-pikchr),
-  at the end.
-
-**This document describes the target language.** Every `(ext)` rule is
+This document describes the target language. Every rule here is
 implemented, with one reserved-but-inactive exception: `connector`, a word
 held for a future object class ([spec.md](spec.md) §3.2/§7) that parses as
 a reserved word but nothing more yet.
@@ -36,19 +17,19 @@ a reserved word but nothing more yet.
 - `{ x }` — zero or more repetitions of `x`.
 - `( x | y )` — grouping.
 - `"literal"` — a literal token or keyword.
-- `(* ... *)` — a comment; `(* ext *)` marks a pikslide extension.
+- `(* ... *)` — a comment.
 - `UPPERCASE` names are terminals produced by the lexer (see
   [Lexical grammar](#lexical-grammar)); e.g. `NUMBER`, `STRING`, `PLACENAME`
   (an identifier starting with an uppercase letter), `ID` (starting
   lowercase), `EDGEPT` (a compass abbreviation like `ne`, `sw`).
-- Other terminals are pikchr keywords, written as their lowercase spelling
-  in quotes.
+- Other terminals are keywords, written as their lowercase spelling in
+  quotes.
 
 ## Lexical grammar
 
-The lexer (`pikslide.pik.tokens.Lexer`) is a port of pikchr's
-`pik_token_length()`. Whitespace and comments are discarded; everything
-else becomes a token.
+The lexer (`pikslide.pik.tokens.Lexer`) turns raw source text into a flat
+list of tokens. Whitespace and comments are discarded; everything else
+becomes a token.
 
 ```
 blank           ::= " " | TAB | FF | CR
@@ -63,7 +44,7 @@ EOL             ::= NEWLINE | ";"
 STRING          ::= '"' { not-quote-or-backslash | "\" any } '"'
 
 NUMBER          ::= decimal [ unit ]
-                   | "0" ( "x" | "X" ) { hexdigit }        (* no unit; a color literal (ext) *)
+                   | "0" ( "x" | "X" ) { hexdigit }        (* no unit; a color literal *)
 decimal         ::= ( digit { digit } [ "." { digit } ] | "." digit { digit } )
                     [ ( "e" | "E" ) [ "+" | "-" ] digit { digit } ]
 unit            ::= "in" | "cm" | "mm" | "pt" | "px" | "pc"
@@ -93,7 +74,7 @@ Notes:
 
 - **Lengths are inches.** A `NUMBER` with a unit is converted to inches
   (`px` = 1/96 in, `pt` = 1/72 in, `pc` = 1/6 in, `cm` = 1/2.54 in). A bare
-  number is already inches. A hex number is a color literal (ext).
+  number is already inches. A hex number is a color literal.
 - **`ID` vs `PLACENAME`.** An identifier starting with a lowercase letter is
   looked up first among the keywords, then among `CLASSNAME`s, and is an
   `ID` otherwise. An identifier starting with an uppercase letter is always a
@@ -125,23 +106,25 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
 - The `(` of an invocation must touch the name. `pair (a)` invokes `pair`
   with no arguments, then continues with `(a)`.
 - Inside the body, `$1`…`$9` are the arguments; up to nine are allowed.
+  Substitution doesn't reach inside `STRING` tokens: an already-tokenized
+  string is opaque to macro expansion, so `$1` written inside a quoted
+  string stays literal text, not a substitution.
 - Recursion is an error; nesting is limited to 50 levels.
-- **A macro name must not already be a variable** (ext). A reserved word
-  can never collide, since only an `ID` can start a `macro-definition`,
-  and no reserved word lexes as one. An ordinary `ID` can: without this
-  check, `define boxwid { 99 }` would fail only downstream and
-  confusingly (`boxwid = 2` expands to `99 = 2`, a syntax error at `99`,
-  not at the real cause), and `define legend { fill }` then `legend = 5`
-  would not fail at all — it would silently expand to `fill = 5`,
-  changing the default fill color instead of setting a variable named
-  `legend` (checked, before this guard existed). Because a diagram may be
-  written by an LLM, and pikslide's prelude (§3.7) makes many more names
-  collision-prone than pikchr's own, this is checked at the `define`
-  itself — against every variable already assigned by the prelude, a
-  settings file, an earlier `include`, or earlier in the same
+- **A macro name must not already be a variable.** A reserved word can
+  never collide, since only an `ID` can start a `macro-definition`, and no
+  reserved word lexes as one. An ordinary `ID` can: without this check,
+  `define boxwid { 99 }` would fail only downstream and confusingly
+  (`boxwid = 2` expands to `99 = 2`, a syntax error at `99`, not at the
+  real cause), and `define legend { fill }` then `legend = 5` would not
+  fail at all — it would silently expand to `fill = 5`, changing the
+  default fill color instead of setting a variable named `legend`
+  (checked, before this guard existed). Because a diagram may be written
+  by an LLM, and the prelude (§3.7) defines many names, this is checked at
+  the `define` itself — against every variable already assigned by the
+  prelude, a settings file, an earlier `include`, or earlier in the same
   program — instead of only surfacing, unreliably, at each later use.
 
-### Includes (ext)
+### Includes
 
 `include "path"` is resolved in this same pass, before parsing, so the
 `include` statement never reaches the parser either. Macros defined by the
@@ -150,7 +133,7 @@ line onward. An included file is not a full `document`; it has its own,
 narrower start symbol:
 
 ```
-include-file    ::= [ include-item { EOL include-item } ]      (* ext *)
+include-file    ::= [ include-item { EOL include-item } ]
 
 include-item    ::= lvalue ASSIGN value                         (* fill = …, boxwid = 1.2 *)
                    | "include" STRING
@@ -177,28 +160,28 @@ document        ::= statement-list
 statement-list  ::= statement { EOL statement }
 
 statement       ::= direction
-                   | lvalue ASSIGN value             (* value: ext *)
+                   | lvalue ASSIGN value
                    | PLACENAME ":" unnamed-statement
                    | PLACENAME ":" position
                    | unnamed-statement
                    | "print" print-item { "," print-item }
                    | "assert" "(" expr "==" expr ")"
                    | "assert" "(" position "==" position ")"
-                   | "include" STRING                (* ext: resolved before parsing, see Macros *)
+                   | "include" STRING                (* resolved before parsing, see Macros *)
 
 direction       ::= "up" | "down" | "left" | "right"
 
 lvalue          ::= ID | "fill" | "color" | "thickness"
-                   | "small" | "medium" | "large"    (* ext: the text sizes *)
+                   | "small" | "medium" | "large"    (* the text sizes *)
 
 print-item      ::= "fill" | "color" | "thickness" | STRING | rvalue
 ```
 
 A `PLACENAME ":"` label is followed by either an *object*
 (`unnamed-statement`, when the next token is `CLASSNAME`/`STRING`/`"["`,
-or, with the extensions, `shape`/`image`) or a bare *position* (naming a
-point in space) — there's no ambiguity between the two, since no
-`position` alternative starts with those tokens.
+or `shape`/`image`) or a bare *position* (naming a point in space) —
+there's no ambiguity between the two, since no `position` alternative
+starts with those tokens.
 
 ## Objects
 
@@ -208,15 +191,15 @@ unnamed-statement ::= basetype { attribute }
 basetype        ::= CLASSNAME
                    | STRING { text-flag }
                    | "[" statement-list "]"
-                   | "shape" preset-name             (* ext *)
-                   | "image" STRING                  (* ext *)
+                   | "shape" preset-name
+                   | "image" STRING
 
-preset-name     ::= ID | CLASSNAME                   (* ext: an OOXML preset geometry name,
+preset-name     ::= ID | CLASSNAME                   (* an OOXML preset geometry name,
                                                         e.g. chevron, roundRect, ellipse *)
 
 text-flag       ::= "center" | "ljust" | "rjust" | "above" | "below"
                    | "italic" | "bold" | "mono" | "aligned" | "big" | "small"
-                   | "major" | "medium" | "large"    (* ext *)
+                   | "major" | "medium" | "large"
 ```
 
 `preset-name` allows `CLASSNAME` because some preset names (`ellipse`,
@@ -248,7 +231,7 @@ attribute       ::= numprop relexpr
                    | STRING { text-flag }
                    | "fit"
                    | "behind" object
-                   | "alt" STRING                    (* ext: image only *)
+                   | "alt" STRING                    (* image only *)
 
 numprop         ::= "width" | "height" | "radius" | "diameter" | "thickness"
 dashprop        ::= "dashed" | "dotted"
@@ -267,19 +250,19 @@ moving yet.
 ## Colors
 
 ```
-value           ::= STRING                           (* ext *)
+value           ::= STRING
                    | color-value
 
-color-value     ::= color-base [ ( "lighter" | "darker" ) expr "%" ]     (* ext *)
+color-value     ::= color-base [ ( "lighter" | "darker" ) expr "%" ]
 
-color-base      ::= "theme" STRING                   (* ext *)
-                   | "none" | "off"                  (* ext *)
+color-base      ::= "theme" STRING
+                   | "none" | "off"
                    | rvalue
 
-rvalue          ::= expr                             (* a color name is an ID (ext) *)
+rvalue          ::= expr                             (* a color name is an ID *)
 ```
 
-A color is a value of its own type, distinct from a number (ext). It is a hex
+A color is a value of its own type, distinct from a number. It is a hex
 literal (`0xff0000`), a theme color (`theme "accent1"`), `none` or `off`, or
 the value of a variable that holds one. `lighter` and `darker` apply to any
 color. The names of the theme's slots (`accent1`, `text1`, …) are ordinary
@@ -288,7 +271,7 @@ only `theme`, which takes a slot name as a string, so the set of slots is data
 ([spec.md](spec.md) §3.3).
 
 Color names are ordinary variables (`ID`) defined by the prelude, which is
-read as an `include-file` before the document (ext; see [spec.md](spec.md)
+read as an `include-file` before the document (see [spec.md](spec.md)
 §3.7). `red`, `lightblue` and the other CSS names can be overridden
 (`red = 0xcc0000`) and added to, and are lowercase like every variable. The
 words `none` and `off` mean *no color* and are reserved. An undefined name is
@@ -297,7 +280,7 @@ an error.
 A variable can hold a color (`primary = accent1 lighter 60%`, then
 `box fill primary`); arithmetic on a color (`primary + 1`) is an error.
 
-A variable can also hold a string (`typeface = "BIZ UDPゴシック"`; ext). A
+A variable can also hold a string (`typeface = "BIZ UDPゴシック"`). A
 string is not a number and cannot be used in an expression. Strings serve the
 template's settings ([spec.md](spec.md) §3.8); a string variable is not
 accepted as the text of an object.
@@ -362,16 +345,12 @@ objectname      ::= "this"
 
 The `expr`-led alternatives of `position` are all tried before the
 `place`-led one; if none of the former match, the parser backtracks and
-tries `place [(+|-) (dx,dy)]` instead
-(`Parser.parse_position()`). This is exactly the kind of local
-ambiguity pikchr's LALR(1) table resolves deterministically with
-1-token lookahead; a hand-written recursive-descent parser has to fall
-back to bounded backtracking for it instead.
+tries `place [(+|-) (dx,dy)]` instead (`Parser.parse_position()`).
 
-## Reserved words (ext)
+## Reserved words
 
-The additions introduce these words. They are ordinary reserved words, like
-the other keywords: they cannot be used as variable or macro names.
+The words below are reserved: they cannot be used as variable or macro
+names.
 
 | Word | Used for |
 |---|---|
@@ -399,8 +378,11 @@ ordinary name and fails as an undefined variable.
 
 ## Meaning of the constructs
 
-This summarizes what the layout stage (`src/pikslide/pik/layout.py`) does; it
-is not exhaustive.
+This summarizes what the layout stage (`src/pikslide/pik/layout.py`) does
+— a deliberately narrower approximation than a full CAD-style layout
+engine, covering common diagrams well rather than every case; see that
+module's own docstring for exactly what it does and doesn't reproduce —
+and is not exhaustive.
 
 **Placement.** There is a *current direction* (initially `right`). Each
 object is placed so that its entry edge — the edge opposite the current
@@ -446,74 +428,48 @@ size (a `relexpr` with `%` is a percentage of the current value);
 stroke by 1.5/0.67, `solid` resets stroke and dashing, `invis` hides the
 outline; `cw`/`ccw` set an arc's direction; `<-`/`->`/`<->` add arrowheads;
 `fit` sizes the object to its text; `chop` shortens a line's ends to the
-outlines of the objects it joins; `close` closes a path; `behind X` (ext)
-places the object immediately below `X` in z-order.
+outlines of the objects it joins; `close` closes a path; `behind X` places
+the object immediately below `X` in z-order.
 
 **Text.** Each `STRING` is a line of text on the object. Placement flags
 are `center`, `ljust`, `rjust`, `above`, `below`, and `aligned` (rotate
 along a line); style flags are `bold`, `italic`, `mono`. Size flags select
-one of three sizes (ext): `small`, `medium` (the default), and `large` or
+one of three sizes: `small`, `medium` (the default), and `large` or
 `big`. Their values are set by assigning to the words themselves, as
 `fill`, `color` and `thickness` set theirs; the prelude gives `small = 9pt`,
 `medium = 10.5pt` and `large = 12pt`. The last size flag on a string wins.
 See [spec.md](spec.md) §3.3.
 
-**Why some added words are reserved and others aren't.** A word is
-reserved exactly when the grammar needs it as a literal token somewhere
-— an object class, a statement, an attribute, a text flag, a modifier —
-regardless of whether its *value* also comes from the prelude or a
-settings file. `small`/`medium`/`large` are reserved because they are
-text flags (`"Label" large`), not because their values are
-prelude-supplied; the same is true of `fill`/`color`/`thickness` in
-pikchr itself, which are attribute keywords *and* lvalues. Names that are
-never used as syntax — `content_left`, `layout`, `typeface`, `primary`,
-`accent1`, the CSS color names, … — are ordinary `ID`s and are never
-reserved, however important their value is.
+**Why some words are reserved and others aren't.** A word is reserved
+exactly when the grammar needs it as a literal token somewhere — an object
+class, a statement, an attribute, a text flag, a modifier — regardless of
+whether its *value* also comes from the prelude or a settings file.
+`small`/`medium`/`large` are reserved because they are text flags
+(`"Label" large`), not because their values are prelude-supplied; the
+same is true of `fill`/`color`/`thickness`, which are attribute keywords
+and lvalues both. Names that are never used as syntax —
+`content_left`, `layout`, `typeface`, `primary`, `accent1`, the CSS color
+names, … — are ordinary `ID`s and are never reserved, however important
+their value is.
 
 **Variables.** `name = expr` (and `+=`, `-=`, `*=`, `/=`; dividing by zero
-leaves the value unchanged) assigns a number, a color or a string (ext). The built-in
-variables above are ordinary variables and can be reassigned to change every
-later default; they are defined by the prelude (ext; see [spec.md](spec.md)
-§3.7). `fill`, `color` and `thickness` set the defaults for later objects, and
-`small`, `medium` and `large` (ext) set the three text sizes. `print` and
-`assert` are parsed but have no effect on the drawing.
+leaves the value unchanged) assigns a number, a color or a string. The
+built-in variables above are ordinary variables and can be reassigned to
+change every later default; they are defined by the prelude (see
+[spec.md](spec.md) §3.7). `fill`, `color` and `thickness` set the defaults
+for later objects, and `small`, `medium` and `large` set the three text
+sizes. `print` and `assert` are parsed but have no effect on the drawing.
 
-## Differences from pikchr
+## Acknowledgments
 
-pikslide starts from pikchr's grammar and departs from it where its design
-calls for it ([spec.md](spec.md) §2). This is the complete list; the sections
-above describe pikslide only. Every row is implemented, except the last
-(`connector` is reserved, not yet a real construct).
-
-| Topic | pikchr | pikslide |
-|---|---|---|
-| Text size | `big` ×1.25 and `small` ×0.8 of the viewer's font size; repeating a flag (`big big`) compounds | three sizes in points, `small` / `medium` (the default) / `large` or `big`, set by assigning to the words themselves, with values from the prelude; the last size flag wins (ext) |
-| Variable values | numbers only | numbers, colors and strings (ext) |
-| Color type | a color is a number (24-bit RGB) | a color is a value of its own type; arithmetic on a color is an error (ext) |
-| Hex literals | plain numbers | color literals (ext) |
-| Color names | a fixed table in the code, matched case-insensitively (`Red`, `red`); a variable of the same name takes precedence | ordinary lowercase variables defined by the prelude, overridable; a capitalized name is an object label (ext) |
-| Theme colors | none | `theme "accent1"`; the slot names are variables defined by the prelude; `lighter` / `darker` apply to any color (ext) |
-| Built-in defaults (`boxwid`, `linewid`, …) | a table in the code | variables defined by the prelude (ext) |
-| Prelude | none | a file of definitions read before every program (ext) |
-| `include` | none | brings in definitions only (ext) |
-| Object classes | `arc arrow box circle cylinder diamond dot ellipse file line move oval spline text` | adds `shape` and `image` (ext) |
-| Attributes and text flags | as in the grammar above | adds `alt` and the text flags `major`, `medium`, `large` (ext) |
-| Reserved words | pikchr's keywords | adds the words in [Reserved words](#reserved-words-ext); a pikchr program that uses one as a name (`shape = 3`) does not parse (ext) |
-| Connectors | none | the word `connector` is reserved for a future class (ext) |
-
-Where pikslide inherits pikchr's behavior, and the inheritance is worth
-knowing:
-
-- pikchr's grammar also lists `expr "on" "heading" ...` position forms,
-  but `"on"` isn't a keyword in pikchr's own tokenizer
-  (`pik_keywords`), so the upstream lexer never actually produces that
-  token either — those rules are unreachable in *real* pikchr, and are
-  deliberately not supported here.
-- `define` macro parameter substitution (`$1`..`$9`) doesn't reach
-  inside `STRING` tokens — an already-tokenized string is opaque to
-  macro expansion. This matches upstream pikchr's own behavior exactly;
-  it isn't a pikslide gap.
-- The layout stage (turning the parsed tree into concrete coordinates) is
-  a deliberately narrower approximation of pikchr's own layout engine —
-  see the module docstring in `src/pikslide/pik/layout.py` for what it
-  does and doesn't reproduce.
+pikslide's grammar began as a port of pikchr's own (`pikchr.y`, by D.
+Richard Hipp), itself a descendant of Brian Kernighan's `pic`: sequential,
+relative placement of named objects, rather than absolute coordinates, is
+`pic`'s idea, carried through pikchr into a full language that pikslide
+then built its own design on top of. The port goes beyond syntax — default
+sizes, chaining and edge geometry, precedence and associativity all trace
+back to it — down to a handful of spots (the position grammar above, in
+particular) where a hand-written recursive-descent parser has to resolve
+with backtracking an ambiguity pikchr's own Lemon-generated LALR(1) parser
+resolves with one-token lookahead. Where pikslide's own design calls for a
+different answer, it has one; see [spec.md](spec.md) for why.

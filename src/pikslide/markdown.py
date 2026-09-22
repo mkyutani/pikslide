@@ -1,8 +1,8 @@
-"""Extract pikchr/pikslide source embedded in Markdown fenced code blocks.
+"""Extract pikslide source embedded in Markdown fenced code blocks.
 
-Recognizes fences tagged ```pik```, ```pikchr```, or ```pikslide``` (either
-backtick or tilde fences, per CommonMark), so pikslide can be pointed
-directly at a ``.md`` document that contains one or more diagrams.
+Recognizes fences tagged ```pikslide``` (either backtick or tilde fences,
+per CommonMark), so pikslide can be pointed directly at a ``.md`` document
+that contains one or more diagrams.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_PIK_LANGS = {"pik", "pikchr", "pikslide"}
+_PIK_LANGS = {"pikslide"}
 
 # A CommonMark-style fenced code block: an opening fence of 3+ backticks or
 # tildes, an info string (the first word of which is the language tag,
@@ -46,10 +46,9 @@ class PikBlock:
 
 
 def extract_pik_blocks(markdown_text: str) -> list[PikBlock]:
-    """Return every ```pik```/```pikchr```/```pikslide``` fenced code
-    block in ``markdown_text``, in document order. Raises
-    :class:`MarkdownDiagramError` if the file has more than one diagram
-    and any is unnamed, or two share a name."""
+    """Return every ```pikslide``` fenced code block in ``markdown_text``,
+    in document order. Raises :class:`MarkdownDiagramError` if the file
+    has more than one diagram and any is unnamed, or two share a name."""
     blocks = [
         PikBlock(m.group("name"), m.group("body"))
         for m in _FENCE_RE.finditer(markdown_text)

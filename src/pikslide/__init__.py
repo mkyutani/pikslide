@@ -37,7 +37,7 @@ def main() -> None:
         except MarkdownDiagramError as e:
             _fail(args, str(e))
         if not blocks:
-            _fail(args, "no ```pik```/```pikchr```/```pikslide``` code blocks found")
+            _fail(args, "no ```pikslide``` code blocks found")
         if args.block is not None or args.into is not None or args.template is not None:
             block = _select_block(args, blocks)
             default_id = block.name or os.path.splitext(os.path.basename(args.input))[0]
@@ -77,12 +77,12 @@ def _select_block(args: argparse.Namespace, blocks: list[PikBlock]) -> PikBlock:
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="pikslide",
-        description="Render a .pik/.pikchr/.pikslide diagram (or a Markdown file "
-        "containing one) to PowerPoint, either as a new deck or inserted into an "
-        "existing one (docs/spec.md SS4).",
+        description="Render a .pik diagram (or a Markdown file containing one) to "
+        "PowerPoint, either as a new deck or inserted into an existing one "
+        "(docs/spec.md SS4).",
     )
     parser.add_argument(
-        "input", help="a .pik/.pikchr/.pikslide source file, or a Markdown file containing fenced blocks"
+        "input", help="a .pik source file, or a Markdown file containing ```pikslide``` fenced blocks"
     )
     parser.add_argument(
         "output", nargs="?", default=None, help="output .pptx path; omit to dump the parsed tree (standalone mode only)"

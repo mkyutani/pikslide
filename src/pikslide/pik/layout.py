@@ -594,8 +594,7 @@ _prelude_document_cache: ast.Document | None = None
 
 def _prelude_document() -> ast.Document:
     """Parse `prelude.pik` (cached: the prelude is fixed at install time,
-    packaged beside this module -- see the wheel layout check in
-    docs/implementation-plan.md)."""
+    packaged beside this module -- `uv build --wheel` checked to include it)."""
     global _prelude_document_cache
     if _prelude_document_cache is None:
         text = resources.files("pikslide").joinpath("prelude.pik").read_text(encoding="utf-8")

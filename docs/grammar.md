@@ -27,10 +27,7 @@ The language has two layers:
 **This document describes the target language.** Every `(ext)` rule is
 implemented, with one reserved-but-inactive exception: `connector`, a word
 held for a future object class ([spec.md](spec.md) §3.2/§7) that parses as
-a reserved word but nothing more yet. Implementation status against this
-grammar is tracked separately, in
-[docs/implementation-plan.md](implementation-plan.md), rather than marked
-per rule here.
+a reserved word but nothing more yet.
 
 ## Notation
 

@@ -1,13 +1,10 @@
 # pikslide language specification — draft 0.1
 
-Status: **draft for review.** A syntax example marked *(proposed)* is not
-implemented yet; one without the mark runs on today's parser (checked
-against `src/pikslide/pik/parser.py`). Which parts of the language are
-implemented changes as work continues, so it is tracked separately, in
-[docs/implementation-plan.md](implementation-plan.md), rather than kept in
-step with every marker here. The language itself is defined, in BNF, in
-[grammar.md](grammar.md). Like the rest of `docs/`, this document is written
-in English; keywords are English in any case.
+Status: **draft for review.** v1 (§1) is fully implemented; every syntax
+example here runs as shown (checked against `src/pikslide/pik/parser.py`).
+The language itself is defined, in BNF, in [grammar.md](grammar.md). Like
+the rest of `docs/`, this document is written in English; keywords are
+English in any case.
 
 ## 1. What pikslide is
 
@@ -534,9 +531,3 @@ piece of work of its own) · tables, charts, SmartArt · animation,
 transitions, speaker notes · multi-slide or whole-deck authoring · true
 Bézier curves (`spline`/`arc` stay polylines) · shape adjustment handles ·
 arithmetic on colors.
-
-## 8. Implementation status
-
-The gap between this specification and the current code is tracked
-separately, in [implementation-plan.md](implementation-plan.md), since it
-changes on a different schedule than the language itself.

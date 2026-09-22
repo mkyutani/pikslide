@@ -51,10 +51,6 @@ Deliberately out of v1 (docs/spec.md §7): connectors, SVG *output*,
 auto-layout, tables/charts/SmartArt, animation, multi-slide authoring,
 true Bézier curves, shape adjustment handles, arithmetic on colors.
 
-[docs/implementation-plan.md](docs/implementation-plan.md) has the
-implementation notes behind all of this — what was checked, how, and any
-bugs found along the way — for whoever touches this code next.
-
 ## How it works
 
 1. **Parse** — source is tokenized and parsed into an AST

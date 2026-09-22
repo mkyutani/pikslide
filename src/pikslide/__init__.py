@@ -233,8 +233,7 @@ def _fail_syntax(args: argparse.Namespace, err: PikSyntaxError, main_path: str, 
 def _fail_layout(args: argparse.Namespace, err: LayoutError) -> None:
     """A LayoutError (docs/spec.md SS5: undefined names, a diagram larger
     than its region, and so on) carries no file position -- unlike a
-    PikSyntaxError, it isn't tied to one token (docs/implementation-plan.md
-    notes this as a known gap against SS5's "every error")."""
+    PikSyntaxError, it isn't tied to one token."""
     if args.format == "json":
         print(json.dumps({"ok": False, "errors": [{"file": None, "line": None, "column": None, "message": str(err)}]}))
     else:

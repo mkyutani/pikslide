@@ -136,6 +136,34 @@ def test_overriding_medium_changes_the_default_text_size(tmp_path: pathlib.Path)
     assert run.font.size.pt == pytest.approx(14.0)
 
 
+def test_a_mid_document_override_does_not_retroactively_resize_earlier_text(tmp_path: pathlib.Path):
+    # docs/spec.md SS3.3, ext -- checked as the actual bug this was
+    # before Shape.text_sizes existed: both ended up at 20pt.
+    prs = render('box "a" small\nsmall = 20pt\nbox "b" small\n', tmp_path)
+    a_run = prs.slides[0].shapes[0].text_frame.paragraphs[0].runs[0]
+    b_run = prs.slides[0].shapes[1].text_frame.paragraphs[0].runs[0]
+    assert a_run.font.size.pt == pytest.approx(9.0)
+    assert b_run.font.size.pt == pytest.approx(20.0)
+
+
+def test_a_mid_document_typeface_override_does_not_retroactively_change_earlier_text(tmp_path: pathlib.Path):
+    prs = render('box "a"\ntypeface = "Georgia"\nbox "b"\n', tmp_path)
+    a_run = prs.slides[0].shapes[0].text_frame.paragraphs[0].runs[0]
+    b_run = prs.slides[0].shapes[1].text_frame.paragraphs[0].runs[0]
+    assert a_run.font.name == "+mn-lt"
+    assert b_run.font.name == "Georgia"
+
+
+def test_fit_sizing_tracks_a_medium_override_at_render_time_too(tmp_path: pathlib.Path):
+    # Same fix, checked through the real PilFontMetrics-backed render()
+    # path (tests/test_layout.py's equivalent test uses a stub metrics
+    # instead, to isolate the mechanism from font-file availability).
+    small = render('box "Wide Wide Wide Text" fit\n', tmp_path, name="small.pptx").slides[0].shapes[0]
+    big = render('medium = 30pt\nbox "Wide Wide Wide Text" fit\n', tmp_path, name="big.pptx").slides[0].shapes[0]
+    assert big.width.inches > small.width.inches
+    assert big.height.inches > small.height.inches
+
+
 # ---------------------------------------------------------------------------
 # Fonts (docs/spec.md SS3.3): symbolic theme references by default, `major`,
 # `typeface` -- checked, as elsewhere, against what's actually saved to disk

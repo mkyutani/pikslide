@@ -46,17 +46,16 @@ diagnostics — `file:line:column`, the source line and a caret for a syntax
 error (naming the right file even inside a nested `include`), `--strict`,
 `--check`, and `--format json`.
 
-**What's left** (all independent, all minor — see
+**What's left** (both independent, both minor — see
 [docs/implementation-plan.md](docs/implementation-plan.md) for the full,
 current list): reading a template's actual theme *content* would sharpen
 `fit` sizing for a font this machine doesn't have installed, but isn't
 needed for correctness, since colours and fonts both stay theme-linked
-regardless; a `LayoutError` (unlike a syntax error) carries no source
-position yet; and a couple of narrow, documented staleness gaps around a
-mid-document text-size/typeface override. Deliberately out of v1 (docs/
-spec.md §7): connectors, SVG *output*, auto-layout, tables/charts/SmartArt,
-animation, multi-slide authoring, true Bézier curves, shape adjustment
-handles, arithmetic on colours.
+regardless; and a `LayoutError` (unlike a syntax error) carries no source
+position yet. Deliberately out of v1 (docs/spec.md §7): connectors, SVG
+*output*, auto-layout, tables/charts/SmartArt, animation, multi-slide
+authoring, true Bézier curves, shape adjustment handles, arithmetic on
+colours.
 
 ## How it works
 

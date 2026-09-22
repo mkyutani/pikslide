@@ -45,15 +45,23 @@ class FontMetrics(Protocol):
     so a fitted object's size tracks the font that will actually draw it
     rather than a flat per-character estimate. `flags` are a text item's
     position/style flags (see ast.TextAttribute) -- only "big"/"small"
-    matter here, for the font-size step pikchr's own pik_font_scale() applies."""
+    matter here, for the font-size step pikchr's own pik_font_scale() applies.
 
-    def text_width(self, text: str, flags: list[str] = ()) -> float:
+    `text_sizes`, if given, is the small/medium/large (inches) to measure
+    with -- the *object's own* `Shape.text_sizes` (docs/spec.md SS3.3,
+    ext), not necessarily this metrics' own default, so a `medium`/etc.
+    override elsewhere in the document doesn't retroactively change how
+    an already-`fit` object was measured. `None` (the default, for a
+    caller with no particular object in mind) falls back to whatever this
+    metrics implementation would otherwise use."""
+
+    def text_width(self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
         """Width, in inches, of one line of `text` at this flags' size,
         including whatever margin this metrics considers standard (mirrors
         pik_size_to_fit()'s own "+ one charWidth" margin)."""
         ...
 
-    def line_height(self, flags: list[str] = ()) -> float:
+    def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
         """Height, in inches, of one line of text at this flags' size."""
         ...
 
@@ -329,6 +337,22 @@ class Shape:
     (docs/spec.md SS3.5)."""
     alt_text: str | None = None
     """An image's accessibility description, from `alt STRING`."""
+    text_sizes: dict[str, float] = field(default_factory=dict)
+    """`small`/`medium`/`large` (inches) as they stood when *this* object
+    was written (docs/spec.md SS3.3, ext), captured once in
+    `_layout_object()` before its own attributes are applied -- since an
+    object's own attributes can never themselves reassign these (that
+    needs a separate top-level `AssignStatement`, never nested inside an
+    object's attribute list), any point during this object's own
+    processing gives the same answer. A renderer draws this object's own
+    text at *these* sizes, not `LayoutResult.text_sizes` (the document's
+    final ones): `box "a" small\\nsmall = 20pt\\nbox "b" small` renders
+    "a" at 9pt and "b" at 20pt, not both at 20pt (checked -- this was the
+    bug before this field existed)."""
+    typeface: str = ""
+    """Like `text_sizes`, but for the `typeface` variable (docs/spec.md
+    SS3.3): this object's own text renders in the family that was in
+    effect when it was written, not the document's final one."""
 
     def offset(self, edge: str | None) -> tuple[float, float]:
         return _edge_offset(self, edge)
@@ -523,11 +547,15 @@ class _ApproxMetrics:
     def __init__(self, ctx: "_Ctx"):
         self._ctx = ctx
 
-    def text_width(self, text: str, flags: list[str] = ()) -> float:
+    def text_width(self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
+        # Reads ctx.vars live, at call time -- always the object's own
+        # (never stale, unlike PilFontMetrics below, so the explicit
+        # `text_sizes` override this Protocol method accepts is unneeded
+        # here and ignored.
         charw = self._ctx.vars["charwid"] * _font_scale(flags, self._ctx)
         return charw * len(text) + charw
 
-    def line_height(self, flags: list[str] = ()) -> float:
+    def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
         return self._ctx.vars["charht"] * _font_scale(flags, self._ctx)
 
 
@@ -1036,12 +1064,19 @@ def _apply_circle_constraint(shape: Shape) -> None:
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     """Approximate pik_size_to_fit() using ctx.metrics: real pikchr (and,
     for the pptx backend, PilFontMetrics) measures actual glyph widths;
-    only the fallback _ApproxMetrics estimates from flat constants."""
+    only the fallback _ApproxMetrics estimates from flat constants.
+
+    Measures at `shape.text_sizes` (docs/spec.md SS3.3, ext) -- captured
+    when this object was created, in `_layout_object()` -- not whatever
+    text_sizes a renderer's FontMetrics might otherwise default to, so a
+    `medium`/etc. override elsewhere in the document can't retroactively
+    change how an earlier "fit" object was measured."""
     if not shape.texts:
         return
     m = ctx.metrics
-    shape.w = max((m.text_width(text, flags) for text, flags in shape.texts), default=0.0)
-    shape.h = sum(m.line_height(flags) for _text, flags in shape.texts) + 0.75 * m.line_height([])
+    sizes = shape.text_sizes
+    shape.w = max((m.text_width(text, flags, sizes) for text, flags in shape.texts), default=0.0)
+    shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 0.75 * m.line_height([], sizes)
     if shape.kind == "diamond":
         # A diamond's text sits well inside its points, so needs extra room.
         shape.w *= 1.6
@@ -1326,6 +1361,11 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
     (docs/spec.md SS3.1, ext) named, if any -- for `_layout_statements()`
     to place it correctly, since the shape isn't in any pool yet here."""
     base = stmt.base
+    # Captured once, up front -- see Shape.text_sizes/.typeface -- rather
+    # than read from ctx.vars again wherever text is drawn, by which
+    # point a later object's own override may already have changed them.
+    text_sizes_now = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
+    typeface_now = _as_string(ctx.vars.get("typeface", ""), "typeface")
 
     if isinstance(base, ast.BlockBase):
         ctx.scope_stack.append({})
@@ -1363,6 +1403,8 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
         _init_class_defaults(shape, classname, ctx)
         is_line = classname in LINE_LIKE
 
+    shape.text_sizes = text_sizes_now
+    shape.typeface = typeface_now
     shape.in_dir = direction
     shape.out_dir = direction
 

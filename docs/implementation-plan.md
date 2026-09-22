@@ -26,28 +26,37 @@ already-built behaviour.
   etc.) are now `.pik` assignments, read once before every program.
 - **Three fixed text sizes** (`small`/`medium`/`large`, prelude-defined,
   9/10.5/12pt): assignable like `fill`/`color`/`thickness` (`lvalue` grammar
-  extended), read back from `LayoutResult.text_sizes` by `pptx_writer.py`
-  instead of a hard-coded `_BASE_FONT_PT`. Two distinct staleness gaps here,
-  both checked directly rather than assumed:
-  - *Rendered* size (`run.font.size`) comes from `LayoutResult.text_sizes`,
-    read from `ctx.vars` once, *after* the whole document has run -- not the
-    value in effect at each object's own position, so a later override
-    applies to the *entire* diagram, including text already drawn earlier
-    in the source (checked: `box "a" small\nsmall=20pt\nbox "b" small`
-    renders **both** at 20pt). `typeface` (below) shares this, for the same
-    reason (same resolution mechanism).
-  - *`fit`-object measurement* (`PilFontMetrics`, used during layout itself
-    to size a `fit` box to its text) is worse: it never tracks a program
-    override at all, ever, at any position -- it measures with the
-    prelude's fixed 9/10.5/12pt regardless (checked: `medium = 30pt` before
-    a `fit` box changes nothing about its measured size), because
-    `resolve_for_pptx()` builds `PilFontMetrics` from `default_text_sizes()`
-    once, before the document runs.
+  extended). Originally read back from a single document-wide
+  `LayoutResult.text_sizes` by `pptx_writer.py`, which turned out stale in
+  two ways -- fixed since (`Shape.text_sizes`/`.typeface`, docs/spec.md
+  SS3.3, ext):
+  - *Rendered* size/family (`run.font.size`, `_apply_run_font`) now reads
+    `Shape.text_sizes`/`.typeface`, captured once per object in
+    `_layout_object()` -- the value in effect *where that object was
+    written*, mirroring exactly how `Shape.fill`/`.color` already worked
+    (captured at creation, from `ctx.vars`) -- rather than
+    `LayoutResult.text_sizes` (the document's *final* value, read once
+    after the whole document ran, so a later override used to apply
+    retroactively to the entire diagram: checked, before this fix, `box
+    "a" small\nsmall=20pt\nbox "b" small` rendered **both** at 20pt; now
+    "a" stays at 9pt).
+  - *`fit`-object measurement* (`FontMetrics.text_width`/`.line_height`,
+    used during layout to size a `fit` box to its text) gained an
+    optional `text_sizes` parameter -- `_autosize_text()` now always
+    passes the *object's own* `shape.text_sizes` explicitly, so
+    `PilFontMetrics` (which previously measured with a fixed snapshot
+    from before the document ran, never tracking any override at all, at
+    any position: checked, `medium = 30pt` before a `fit` box changed
+    nothing about its measured size) now measures correctly too;
+    `_ApproxMetrics` accepts but ignores the new parameter, since it
+    already read `ctx.vars` live and so was never actually stale.
 
-  Rare in practice (a template's settings file, once that exists, sets
-  these once up front, not mid-document) but real; fixing either needs
-  per-statement resolution during layout, not a value read once before or
-  after it -- not done here.
+  `LayoutResult.text_sizes`/`.typeface` themselves are unchanged (still
+  the document's final values, still tested) -- pptx_writer.py just
+  doesn't read them for rendering any more, using the more precise
+  per-shape fields instead. Checked through real PowerPoint too (a `small`
+  override partway through a document, and a `typeface` override): both
+  render exactly as the source implies, not as of the document's end.
 - **An undefined variable is now an error** (`eval_expr`'s `ast.Var` case),
   matching real pikchr (checked: `box width undefinedvar` → "no such
   variable" in real pikchr too) — the old code silently defaulted to `0.0`.
@@ -356,5 +365,4 @@ each row is independent of the others:
 |---|---|---|
 | *(new)* theme reader | not needed for correctness -- colours and fonts both stay symbolic and resolve against whatever theme the target deck (or `--template`) actually has | only a `fit`-measurement accuracy improvement: real font *names* (not just `+mn-lt` symbols) would let `PilFontMetrics` pick a closer installed substitute; read `ppt/theme/*.xml`'s `<a:fontScheme>` (via the already-open `Presentation` for `--into`/`--template`, no raw zip work needed there) |
 | `pik/layout.py` `LayoutError` | no position at all | `file`/`line`/`column`, matching what `PikSyntaxError` now has -- needs it threaded through `ast` and most of `layout.py`, not a small change (see the Diagnostics bullet above) |
-| `pik/layout.py`, `pptx_writer.py` | text size (`small`/`medium`/`large`) and `typeface` resolve once for the *whole* document (the value in effect at the end, not at each object's own position); `fit` measurement never tracks a program override at all | resolve both per-statement, during layout, not once before or after it (see the text-sizes bullet above for exactly what's stale today) |
 | Docs | README's *Status* section | keep it in step with this file as items are implemented |

@@ -114,20 +114,27 @@ class PilFontMetrics:
         self._font_path = font_path if font_path is not None else _find_measure_font()
         self._cache: dict[int, ImageFont.FreeTypeFont] = {}
 
-    def _size_pt(self, flags: list[str]) -> float:
-        medium = self._text_sizes.get("medium", 10.5 / 72.0)
-        inches = self._text_sizes.get(_text_size_name(flags), medium)
+    def _size_pt(self, flags: list[str], text_sizes: dict[str, float] | None) -> float:
+        # An explicit override (a specific object's own Shape.text_sizes,
+        # docs/spec.md SS3.3, ext) takes precedence over this instance's
+        # own default, so measuring an already-placed "fit" object can't
+        # be skewed by a `medium`/etc. override later in the document.
+        sizes = text_sizes if text_sizes is not None else self._text_sizes
+        medium = sizes.get("medium", 10.5 / 72.0)
+        inches = sizes.get(_text_size_name(flags), medium)
         return inches * 72.0
 
-    def _font(self, flags: list[str]) -> tuple[ImageFont.FreeTypeFont | None, float]:
-        size_pt = self._size_pt(flags)
+    def _font(
+        self, flags: list[str], text_sizes: dict[str, float] | None
+    ) -> tuple[ImageFont.FreeTypeFont | None, float]:
+        size_pt = self._size_pt(flags, text_sizes)
         size_px = max(1, round(size_pt))
         if size_px not in self._cache:
             self._cache[size_px] = ImageFont.truetype(self._font_path, size_px) if self._font_path else None
         return self._cache[size_px], size_pt
 
-    def text_width(self, text: str, flags: list[str] = ()) -> float:
-        font, size_pt = self._font(flags)
+    def text_width(self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
+        font, size_pt = self._font(flags, text_sizes)
         if font is not None:
             px = font.getlength(text) if text else 0.0
         else:
@@ -136,8 +143,8 @@ class PilFontMetrics:
             px = len(text) * size_pt * 0.55
         return px / 72.0 + (size_pt * 0.5) / 72.0
 
-    def line_height(self, flags: list[str] = ()) -> float:
-        _font, size_pt = self._font(flags)
+    def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
+        _font, size_pt = self._font(flags, text_sizes)
         return size_pt / 72.0
 
 
@@ -323,7 +330,12 @@ def _apply_run_font(run, flags: list[str], typeface: str) -> None:
     ea.set("typeface", ea_val)
 
 
-def _apply_text(pptx_shape, shape: Shape, typeface: str, text_sizes: dict[str, float]) -> None:
+def _apply_text(pptx_shape, shape: Shape) -> None:
+    """Draws `shape.texts` at `shape.text_sizes`/`.typeface` -- captured
+    when this object was created (docs/spec.md SS3.3, ext; `pik/layout.py`
+    `_layout_object()`), not read from some document-wide default here,
+    so a later `medium`/`typeface` override elsewhere can't retroactively
+    change already-drawn text."""
     if not shape.texts:
         return
     tf = pptx_shape.text_frame
@@ -343,10 +355,10 @@ def _apply_text(pptx_shape, shape: Shape, typeface: str, text_sizes: dict[str, f
         )
         run = para.add_run()
         run.text = text
-        _apply_run_font(run, flags, typeface)
+        _apply_run_font(run, flags, shape.typeface)
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
-        run.font.size = _font_size(flags, text_sizes)
+        run.font.size = _font_size(flags, shape.text_sizes)
         _apply_colour(run.font.color, shape.color or Colour(rgb=0))
 
 
@@ -385,7 +397,7 @@ def _attach_svg_extension(picture, svg_path: str) -> None:
     picture._element.blipFill.blip.append(parse_xml(ext_xml))
 
 
-def _add_image_shape(container, shape: Shape, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
+def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
     """`image` (docs/spec.md SS3.5). A Picture has no text_frame of its own
     in python-pptx (checked, like a connector), so any text on it is drawn
     as a separate textbox, centred over it -- one box, not per-string
@@ -432,14 +444,14 @@ def _add_image_shape(container, shape: Shape, tf: _Transform, typeface: str, tex
         para.alignment = PP_ALIGN.CENTER
         run = para.add_run()
         run.text = text
-        _apply_run_font(run, flags, typeface)
+        _apply_run_font(run, flags, shape.typeface)
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
-        run.font.size = _font_size(flags, text_sizes)
+        run.font.size = _font_size(flags, shape.text_sizes)
         _apply_colour(run.font.color, shape.color or Colour(rgb=0))
 
 
-def _add_block_shape(container, shape: Shape, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
+def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
     autoshape_type = _AUTOSHAPE.get(shape.kind, MSO_SHAPE.RECTANGLE)
@@ -474,10 +486,10 @@ def _add_block_shape(container, shape: Shape, tf: _Transform, typeface: str, tex
             _apply_colour(pptx_shape.fill.fore_color, shape.fill)
         _apply_line_style(pptx_shape.line, shape)
 
-    _apply_text(pptx_shape, shape, typeface, text_sizes)
+    _apply_text(pptx_shape, shape)
 
 
-def _add_line_shape(container, shape: Shape, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
+def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
@@ -499,20 +511,20 @@ def _add_line_shape(container, shape: Shape, tf: _Transform, typeface: str, text
         _apply_line_style(freeform.line, shape)
         _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
 
-    _add_line_text(container, shape, tf, typeface, text_sizes)
+    _add_line_text(container, shape, tf)
 
 
-def _line_label_rects(
-    shape: Shape, text_sizes: dict[str, float]
-) -> list[tuple[tuple[float, float, float, float], str, list[str]]]:
+def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, float], str, list[str]]]:
     """Compute each text label's (x0, y0, x1, y1) rect in pik space (y-up,
     unmargined), alongside its text/flags -- shared by _add_line_text()
     (which draws these) and _content_bbox() (which needs to know how far
     they extend beyond shape.bbox, since a line's own bbox -- just its
-    path -- doesn't account for labels floating above/below it)."""
+    path -- doesn't account for labels floating above/below it). Sized at
+    `shape.text_sizes` -- this line's own, as it stood when written
+    (docs/spec.md SS3.3, ext) -- not some other, possibly later, size."""
     if not shape.texts:
         return []
-    base_size_pt = text_sizes.get("medium", 10.5 / 72.0) * 72.0
+    base_size_pt = shape.text_sizes.get("medium", 10.5 / 72.0) * 72.0
     label_box_h = base_size_pt * 1.15 / 72.0  # a touch taller than line_height(), just for rendering safety
     label_step = base_size_pt / 9.0 * _LABEL_STEP_IN
     bx0, by0, bx1, by1 = shape.bbox
@@ -527,13 +539,13 @@ def _line_label_rects(
     return out
 
 
-def _add_line_text(container, shape: Shape, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
+def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
     """A connector/freeform shape has no text_frame in python-pptx, so a
     line's text (e.g. an arrow's label) is rendered as small floating
     textboxes instead, placed above/on/below the line per
     assign_text_slots(); named "<line name> text <k>" (docs/spec.md SS3.1,
     ext), 1-based among *this line's own* labels, not a diagram-wide count."""
-    for i, ((x0, y0, x1, y1), text, flags) in enumerate(_line_label_rects(shape, text_sizes), start=1):
+    for i, ((x0, y0, x1, y1), text, flags) in enumerate(_line_label_rects(shape), start=1):
         left, top = tf.point((x0, y1))
         textbox = container.shapes.add_textbox(Inches(left), Inches(top), Inches(x1 - x0), Inches(y1 - y0))
         if shape.name:
@@ -546,14 +558,14 @@ def _add_line_text(container, shape: Shape, tf: _Transform, typeface: str, text_
         para.alignment = PP_ALIGN.CENTER
         run = para.add_run()
         run.text = text
-        _apply_run_font(run, flags, typeface)
+        _apply_run_font(run, flags, shape.typeface)
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
-        run.font.size = _font_size(flags, text_sizes)
+        run.font.size = _font_size(flags, shape.text_sizes)
         _apply_colour(run.font.color, shape.color or Colour(rgb=0))
 
 
-def _content_bbox(result: LayoutResult, text_sizes: dict[str, float]) -> tuple[float, float, float, float]:
+def _content_bbox(result: LayoutResult) -> tuple[float, float, float, float]:
     """result.bbox, expanded to also cover line labels -- a line's own
     bbox is just its path, so a label floating above/below it (see
     _line_label_rects()) can stick out past result.bbox on its own.
@@ -563,7 +575,7 @@ def _content_bbox(result: LayoutResult, text_sizes: dict[str, float]) -> tuple[f
     for shape in flatten_shapes(result.shapes):
         if shape.kind not in ("line", "arrow", "spline", "arc"):
             continue
-        for (lx0, ly0, lx1, ly1), _text, _flags in _line_label_rects(shape, text_sizes):
+        for (lx0, ly0, lx1, ly1), _text, _flags in _line_label_rects(shape):
             x0, y0 = min(x0, lx0), min(y0, ly0)
             x1, y1 = max(x1, lx1), max(y1, ly1)
     return x0, y0, x1, y1
@@ -599,26 +611,25 @@ def write_pptx(
 ) -> None:
     """Render `result` (from :func:`pikslide.pik.layout.resolve_layout`, or
     `resolve_for_pptx`) to a single-slide PowerPoint file at `path`, sized
-    to fit the diagram. Text sizes come from `result.text_sizes` -- the
-    same small/medium/large this document's own layout used (docs/spec.md
-    SS3.7) -- rather than a separate parameter that could disagree with it;
-    the font family is `result.typeface` likewise (SS3.3) -- empty, by
-    far the common case, means every run gets a symbolic theme font
-    reference rather than a literal name (see `_apply_run_font`), so a
-    fresh standalone deck's own built-in Office theme decides the actual
-    family, the same as any other new PowerPoint file.
+    to fit the diagram. Each shape draws with its *own* captured text
+    size/family (docs/spec.md SS3.3, ext -- `Shape.text_sizes`/`.typeface`,
+    as they stood when that object was written), not a single
+    document-wide default; empty `typeface`, by far the common case, means
+    a symbolic theme font reference rather than a literal name (see
+    `_apply_run_font`), so a fresh standalone deck's own built-in Office
+    theme decides the actual family, the same as any other new PowerPoint
+    file.
 
     `margin` only needs to cover the diagram's own edge (e.g. a thick
     stroke's outer half, or PowerPoint's arrowhead overshoot) -- line
     labels are already accounted for by _content_bbox(), not by margin."""
-    text_sizes = result.text_sizes or default_text_sizes()
-    tf = _Transform(_content_bbox(result, text_sizes), margin)
+    tf = _Transform(_content_bbox(result), margin)
     prs = Presentation()
     prs.slide_width = Emu(int(tf.slide_width * EMU_PER_INCH))
     prs.slide_height = Emu(int(tf.slide_height * EMU_PER_INCH))
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank layout
 
-    _add_all_shapes(slide, result.shapes, tf, result.typeface, text_sizes)
+    _add_all_shapes(slide, result.shapes, tf)
     prs.save(path)
 
 
@@ -725,19 +736,18 @@ def write_pptx_from_template(
     prs, tmp_path = _open_template_base(template_path)
     try:
         layout = _resolve_template_layout(prs, layout_name)
-        text_sizes = result.text_sizes or default_text_sizes()
-        tf = _Transform(_content_bbox(result, text_sizes), margin)
+        tf = _Transform(_content_bbox(result), margin)
         prs.slide_width = Emu(int(tf.slide_width * EMU_PER_INCH))
         prs.slide_height = Emu(int(tf.slide_height * EMU_PER_INCH))
         slide = prs.slides.add_slide(layout)
-        _add_all_shapes(slide, result.shapes, tf, result.typeface, text_sizes)
+        _add_all_shapes(slide, result.shapes, tf)
         prs.save(path)
     finally:
         if tmp_path is not None:
             os.remove(tmp_path)
 
 
-def _add_all_shapes(container, shapes: list[Shape], tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
+def _add_all_shapes(container, shapes: list[Shape], tf: _Transform) -> None:
     """Draw every shape in `shapes` into `container` (a Slide, for
     `write_pptx()`, or a group, for `insert_into_pptx()` or a nested
     block, below -- all expose the same `.shapes.add_X()` API, checked,
@@ -763,7 +773,7 @@ def _add_all_shapes(container, shapes: list[Shape], tf: _Transform, typeface: st
             # recalculated from its actual contents on every add (checked
             # against python-pptx's own source), so setting .left/.top
             # *before* any children exist just gets overwritten by that.
-            _add_all_shapes(group, shape.sublist, _LocalTransform(shape.bbox), typeface, text_sizes)
+            _add_all_shapes(group, shape.sublist, _LocalTransform(shape.bbox))
             # Reposition by the *delta* to where this block belongs in the
             # parent's frame, not a replacement: after the above, off ==
             # chOff (still), so a plain assignment would silently assume
@@ -780,11 +790,11 @@ def _add_all_shapes(container, shapes: list[Shape], tf: _Transform, typeface: st
         elif shape.kind in NOT_RENDERED:
             continue
         elif shape.kind in ("line", "arrow", "spline", "arc"):
-            _add_line_shape(container, shape, tf, typeface, text_sizes)
+            _add_line_shape(container, shape, tf)
         elif shape.kind == "image":
-            _add_image_shape(container, shape, tf, typeface, text_sizes)
+            _add_image_shape(container, shape, tf)
         else:
-            _add_block_shape(container, shape, tf, typeface, text_sizes)
+            _add_block_shape(container, shape, tf)
 
 
 # ---------------------------------------------------------------------------
@@ -907,8 +917,7 @@ def insert_into_pptx(
         slide, region, rect, group_name, result.content_area
     )
 
-    text_sizes = result.text_sizes or default_text_sizes()
-    bbox = _content_bbox(result, text_sizes)
+    bbox = _content_bbox(result)
     diagram_w, diagram_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     if diagram_w > region_w + 1e-6 or diagram_h > region_h + 1e-6:
         raise LayoutError(
@@ -927,7 +936,7 @@ def insert_into_pptx(
 
     group = slide.shapes.add_group_shape()
     group.name = group_name
-    _add_all_shapes(group, result.shapes, _LocalTransform(bbox), result.typeface, text_sizes)
+    _add_all_shapes(group, result.shapes, _LocalTransform(bbox))
     group.left, group.top = Inches(region_left + dx), Inches(region_top + dy)
     group.width, group.height = Inches(max(diagram_w, 0.01)), Inches(max(diagram_h, 0.01))
 

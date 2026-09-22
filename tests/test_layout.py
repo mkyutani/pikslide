@@ -325,6 +325,47 @@ def test_typeface_must_be_a_string_not_a_number():
         layout("typeface = 5\nbox\n")
 
 
+def test_each_shape_captures_its_own_text_sizes_and_typeface():
+    # Not LayoutResult.text_sizes/.typeface (the document's *final*
+    # values) -- each Shape keeps what was in effect when *it* was
+    # written (docs/spec.md SS3.3, ext), so a later override doesn't
+    # retroactively change an earlier object.
+    result = layout('box "a"\nmedium = 20pt\ntypeface = "Georgia"\nbox "b"\n')
+    a, b = result.shapes
+    assert a.text_sizes["medium"] == pytest.approx(10.5 / 72)
+    assert a.typeface == ""
+    assert b.text_sizes["medium"] == pytest.approx(20 / 72)
+    assert b.typeface == "Georgia"
+    # LayoutResult.text_sizes/.typeface still reflect the final state, as
+    # before -- a document-wide summary, not what any one shape used.
+    assert result.text_sizes["medium"] == pytest.approx(20 / 72)
+    assert result.typeface == "Georgia"
+
+
+def test_fit_measurement_tracks_a_medium_override_at_the_objects_own_position():
+    # Previously PilFontMetrics-style real measurement never tracked an
+    # override at all, anywhere (pik/layout.py's own _ApproxMetrics
+    # fallback, used here via layout(), always did -- it reads ctx.vars
+    # live). Still checked here at the layout level via the explicit
+    # `text_sizes` FontMetrics now threads through, using a stub metrics
+    # that would ignore an override if _autosize_text() stopped passing
+    # one explicitly.
+    calls = []
+
+    class RecordingMetrics:
+        def text_width(self, text, flags=(), text_sizes=None):
+            calls.append(dict(text_sizes))
+            return 1.0
+
+        def line_height(self, flags=(), text_sizes=None):
+            return 0.2
+
+    doc = parse('medium = 30pt\nbox "hi" fit\n')
+    resolve_layout(doc, metrics=RecordingMetrics())
+    assert calls, "text_width was never called"
+    assert calls[0]["medium"] == pytest.approx(30 / 72)
+
+
 # ---------------------------------------------------------------------------
 # Template settings files (docs/spec.md SS3.8, ext)
 # ---------------------------------------------------------------------------

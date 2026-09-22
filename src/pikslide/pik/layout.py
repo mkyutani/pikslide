@@ -32,6 +32,7 @@ import difflib
 import math
 import os
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 from importlib import resources
 from typing import Protocol
 
@@ -838,11 +839,18 @@ def _rsvg_convert_path() -> str:
     return path
 
 
+@lru_cache(maxsize=128)
 def rasterize_svg(svg_path: str) -> bytes:
     """PNG bytes for `svg_path`, via `rsvg-convert` (docs/spec.md SS3.5) --
     used both for `image`'s own aspect-ratio sizing (`_PILImageMetrics`,
     below: Pillow itself can't read an SVG's dimensions) and, by
-    `pptx_writer.py`, for the actual embedded fallback bitmap."""
+    `pptx_writer.py`, for the actual embedded fallback bitmap -- the same
+    icon is often placed more than once in one diagram, or sized (here)
+    and then embedded (there) from the same file, so this is cached by
+    path rather than re-running the external tool each time. Only a
+    *successful* result is cached (`lru_cache` never caches a raised
+    exception), so a missing-tool/bad-file error still surfaces on every
+    call, not just the first."""
     import subprocess
 
     exe = _rsvg_convert_path()

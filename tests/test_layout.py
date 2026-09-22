@@ -16,7 +16,7 @@ import pathlib
 import pytest
 
 from pikslide.pik import parse
-from pikslide.pik.layout import Colour, LayoutError, resolve_layout
+from pikslide.pik.layout import Colour, LayoutError, flatten_shapes, resolve_layout
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "examples"
 EXAMPLE_FILES = sorted(FIXTURES_DIR.glob("*.pik"))
@@ -157,18 +157,77 @@ def test_from_after_movement_rebases_the_whole_path():
 
 
 # ---------------------------------------------------------------------------
+# Object identity: names, groups, z-order (docs/spec.md SS3.1, ext)
+# ---------------------------------------------------------------------------
+
+
+def test_unlabelled_objects_get_default_class_n_names():
+    result = layout('box "a"\nbox "b"\ncircle "c"\n')
+    assert [s.name for s in result.shapes] == ["box 1", "box 2", "circle 1"]
+
+
+def test_labelled_object_keeps_its_pik_label_as_its_name():
+    result = layout('box "a"\nWeb: box "b"\nbox "c"\n')
+    assert [s.name for s in result.shapes] == ["box 1", "Web", "box 3"]
+
+
+def test_default_name_ordinal_counts_labelled_objects_too():
+    # "mirrors pik's 2nd box" (SS3.1): a labelled object still occupies a
+    # slot in the count, so a default name's number always agrees with
+    # what "Nth box" would address for that same object.
+    result = layout('box "a"\nWeb: box "b"\nbox "c"\n')
+    assert result.shapes[2].name == "box 3"  # not "box 2"
+
+
+def test_unnamed_block_gets_a_default_block_n_name():
+    result = layout('[ box "a" ]\n[ box "b" ]\n')
+    assert [s.name for s in result.shapes] == ["block 1", "block 2"]
+
+
+def test_default_naming_restarts_in_each_block_scope():
+    result = layout('box "top"\nInner: [ box "a"; box "b" ]\n')
+    outer_box = result.shapes[0]
+    inner = result.shapes[1]
+    assert outer_box.name == "box 1"
+    assert [s.name for s in inner.sublist] == ["box 1", "box 2"]
+
+
+def test_behind_reorders_the_shape_immediately_before_its_target():
+    result = layout('A: box "a"\nB: box "b"\nC: box "c" behind A\n')
+    assert [s.name for s in result.shapes] == ["C", "A", "B"]
+
+
+def test_behind_default_is_source_order():
+    result = layout('A: box "a"\nB: box "b"\n')
+    assert [s.name for s in result.shapes] == ["A", "B"]
+
+
+def test_behind_an_undefined_object_is_an_error():
+    with pytest.raises(LayoutError):
+        layout('box "a" behind NoSuchThing\n')
+
+
+# ---------------------------------------------------------------------------
 # Nested [...] blocks
 # ---------------------------------------------------------------------------
 
 
 def test_nested_block_children_are_translated_to_global_coordinates():
     result = layout("Outer: [ A: box; B: box ] at (10, 10)\n")
-    a = next(s for s in result.shapes if s.name == "A")
-    b = next(s for s in result.shapes if s.name == "B")
+    # result.shapes is the *tree* (docs/spec.md SS3.1, ext: a block renders
+    # as its own group) -- "Outer" itself, not flattened into A/B directly.
+    assert [s.name for s in result.shapes] == ["Outer"]
+    outer = result.shapes[0]
+    assert outer.kind == "block"
+    a = next(s for s in outer.sublist if s.name == "A")
+    b = next(s for s in outer.sublist if s.name == "B")
     # children keep their relative layout (edge-to-edge, flowing right)...
     assert b.cx - b.w / 2 == pytest.approx(a.cx + a.w / 2)
     # ...translated so the block's own bbox center sits at (10, 10).
     assert (a.cx + b.cx) / 2 == pytest.approx(10.0)
+    # flatten_shapes() gives the flat view instead, for callers that don't
+    # care about the block/group structure (bounding-box math, mainly).
+    assert {s.name for s in flatten_shapes(result.shapes)} == {"A", "B"}
 
 
 def test_nth_and_last_within_current_scope():

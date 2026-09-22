@@ -35,7 +35,12 @@ existing slide as one named, idempotently-replaceable group, via the CLI's
 text set in the theme's own font, not a hard-coded family — a symbolic
 reference (like a theme colour), so it follows whatever theme the diagram
 actually lands in, with `major` selecting the heading font and the
-`typeface` variable available to override both with one literal family.
+`typeface` variable available to override both with one literal family;
+object identity — a pik label becomes the shape's real PowerPoint name
+(an unlabelled object gets a default `box 1`-style name), `[ ... ]` blocks
+become real, nameable, nestable PowerPoint groups, and `behind X` places
+an object immediately below `X` in z-order — so the Selection Pane reads
+like the source.
 
 **Specified, not implemented yet**: SVG images, reading a
 template's own theme (`.potx`/`.pptx`), per-template settings files, and
@@ -128,8 +133,7 @@ simplified:
 - `fit` text sizing uses real font metrics when rendering to PowerPoint, but
   falls back to a flat per-character estimate otherwise,
 - chopping against diamond/cylinder/file shapes uses a rectangle-like
-  approximation rather than each shape's true outline,
-- `behind` is parsed but doesn't yet affect rendering order.
+  approximation rather than each shape's true outline.
 
 See the module docstrings in `src/pikslide/pik/layout.py` for details.
 

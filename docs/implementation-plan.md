@@ -178,9 +178,55 @@ already-built behaviour.
   `--template`'s new-deck case and for more accurate `fit` measurement) is
   still not done -- see the theme reader row below; it was not needed for
   this, since staying symbolic sidesteps it entirely.
+- **Object identity: names, groups, z-order** (`pik/layout.py`
+  `_layout_statements`, `pptx_writer.py` `_add_all_shapes`, docs/spec.md
+  SS3.1, ext -- previously not implemented at all despite being listed as
+  v1 scope, found while working through the rest of this list):
+  - **Shape names**: a pik label becomes the saved shape's real PowerPoint
+    name; an unlabelled object gets `"<class> <n>"`, `n` counting *every*
+    object of that kind in its scope, labelled or not (checked: `box "a"\n
+    Web: box "b"\nbox "c"` names the third one `"box 3"`, not `"box 2"` --
+    matches `resolve_object()`'s own `NthRef` pool-filter-by-kind, so a
+    default name's number always agrees with what `"Nth box"` would
+    address). A line's floating labels are named `"<line name> text <k>"`,
+    `k` 1-based among that line's own labels.
+  - **`behind X`**: places the object immediately before `X` in its
+    scope's shape list -- draw order *is* z-order, so this is a plain
+    list insert (`_layout_object()` now returns the resolved target
+    too, alongside the shape, since it isn't in any pool yet when `behind`
+    is applied). Found and fixed while implementing: `list.index()` uses
+    `Shape`'s generated `==`, not identity, so two structurally-identical
+    shapes (e.g. two bare `box`es) could resolve to the wrong one --
+    `_index_by_identity()` uses `is` instead.
+  - **Blocks are groups**: `LayoutResult.shapes` is now the shape *tree*
+    (a "block" shape keeps its children under `.sublist` rather than being
+    flattened away) -- `flatten_shapes()` (renamed, public; was the
+    private `_flatten()`) is now for callers that want every eventual
+    on-slide shape regardless of nesting (bounding-box math, mainly), not
+    what a renderer draws. `_add_all_shapes()` draws a block as a real
+    nested PowerPoint group, recursively, each with a fresh
+    `_LocalTransform` scoped to *that* block's own bbox. Found and fixed
+    while implementing: a python-pptx group's own `off`/`ext` (and
+    `chOff`/`chExt`, its children's local coordinate frame) are
+    recalculated from its actual contents on every `add_X()` call
+    (checked against python-pptx's own source and docstring) -- so
+    setting `.left`/`.top`/`.width`/`.height` *before* adding children
+    (as seemed natural) just gets silently overwritten once they're
+    added; children must be added first. Even then, a plain assignment
+    (`group.left = Inches(x)`) is only safe when the block's own children
+    never extend past its geometric bbox's corner -- true for shapes, but
+    not always for a line's floating label, since `_LocalTransform` (unlike
+    the top-level `_Transform`, via `_content_bbox()`) doesn't pad for
+    that -- so the fix repositions by the *delta* to the target position
+    (`group.left = Inches(target_left) + group.left`), not a replacement;
+    checked with a deliberately overhanging label inside a block, and
+    against real PowerPoint (nested and doubly-nested blocks, positioned
+    correctly, `behind` ordering correct, both via direct python-pptx
+    introspection and COM rendering).
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
   new coverage for colours, text sizes, the macro-shadow guard, Markdown
-  names, preset shapes, images, `include`, inserting into a deck, and fonts
+  names, preset shapes, images, `include`, inserting into a deck, fonts,
+  and object identity (names/groups/z-order)
   (`tests/test_layout.py`, `tests/test_pik_parser.py`,
   `tests/test_pptx_writer.py`, `tests/test_markdown.py`,
   `tests/test_cli.py`).
@@ -193,7 +239,5 @@ already-built behaviour.
 | `pik/layout.py`, `pptx_writer.py` | SVG `image`s are a clear "not supported yet" error | SVG picture (`svgBlip` + PNG fallback via an external rasteriser, hand-written XML) |
 | *(new)* theme reader | not needed for colours or fonts any more -- both stay symbolic and resolve against whatever theme the target deck actually has (see the Fonts bullet above) | only still needed for (a) `--template`'s new standalone deck, to copy an arbitrary file's theme into it, and (b) real font *names* (not just symbols) for more accurate `fit` measurement; read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base for (a) |
 | *(new)* template settings | none | find the settings file beside a template or deck and read it after the prelude; `layout`, `typeface`, accent colours, text sizes, content area |
-| `pik/layout.py` `_flatten` | flattens `[ ]` blocks, losing the tree | keep the hierarchy so groups can be written |
-| `pik/layout.py` `behind` | parsed, ignored | affects z-order |
 | `__init__.py` | `argparse`, with `--into --slide --region --rect --id --in-place -o` all working | `--template --settings --block --include-path --align --strict --check --format` besides (the last four depend on template settings/theme reading above) |
 | Docs | README's *Status* section | keep it in step with this file as items are implemented |

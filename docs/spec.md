@@ -77,8 +77,8 @@ Goal: the Selection Pane in PowerPoint reads like the source.
 - **Shape name.** A pik label names the shape: `Web: box "Web"` produces a
   shape named `Web`. Unlabelled objects are named `<class> <n>`, where `n` is
   the object's ordinal among that class in its scope (mirrors pik's `2nd box`).
-- **Z-order** follows source order. `behind X` (already parsed, currently
-  ignored) is honoured: the object is placed immediately below `X`.
+- **Z-order** follows source order. `behind X` is honoured: the object is
+  placed immediately below `X`.
 - **Blocks are groups.** A `[ ... ]` block becomes a PowerPoint group named by
   its label (or `block <n>`); nesting is preserved.
 - **Line labels.** A PowerPoint line cannot hold text, so a line's strings

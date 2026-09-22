@@ -92,7 +92,7 @@ _HEADING_ANGLE = {N: 0.0, NE: 45.0, E: 90.0, SE: 135.0, S: 180.0, SW: 225.0, W: 
 
 ELLIPSE_LIKE = {"circle", "ellipse", "oval"}
 LINE_LIKE = {"line", "arrow", "spline", "arc", "move"}
-_NOT_RENDERED = {"move", "point"}
+NOT_RENDERED = {"move", "point"}  # pseudo-objects: real for placement/naming, never drawn
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +347,11 @@ class Shape:
 @dataclass
 class LayoutResult:
     shapes: list[Shape]
+    """The top-level shapes, in source (z-)order. A "block" shape (docs/
+    spec.md SS3.1, ext) is *not* flattened into this list -- its own
+    children stay nested under its `.sublist`, recursively, since a
+    renderer draws a block as its own PowerPoint group. Use
+    `flatten_shapes()` for a flat view (bounding-box math, mainly)."""
     bbox: tuple[float, float, float, float]
     text_sizes: dict[str, float] = field(default_factory=dict)
     """The resolved `small`/`medium`/`large` text sizes (ext, inches), so a
@@ -476,6 +481,15 @@ def _find_by_text(pool: list[Shape], name: str) -> Shape | None:
         if any(text == name for text, _flags in shape.texts):
             return shape
     return None
+
+
+def _index_by_identity(pool: list[Shape], target: Shape) -> int:
+    """`pool.index(target)`, but by identity (`is`), not `Shape`'s
+    generated `==` -- see `_place()` in `_layout_statements()`."""
+    for i, shape in enumerate(pool):
+        if shape is target:
+            return i
+    raise LayoutError("internal error: behind-target not found in its own scope")
 
 
 class _ApproxMetrics:
@@ -982,6 +996,12 @@ class _Build:
     chop: bool = False
     fit: bool = False
     then_flag: bool = False
+    behind: Shape | None = None
+    """The object `behind X` names (docs/spec.md SS3.1, ext), resolved here
+    during attribute application (where `ast.Behind`'s target is a plain
+    `ast.ObjectRef`, same as `same as X`); `_layout_statements()` reorders
+    the finished shape to sit immediately before it once `_layout_object()`
+    returns, since it isn't in any pool yet at attribute-application time."""
     mtpath: int = 0  # bitmask on the *current* point: 1 = x already set, 2 = y already set
 
 
@@ -1069,7 +1089,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
     elif isinstance(attr, ast.Fit):
         build.fit = True
     elif isinstance(attr, ast.Behind):
-        pass  # z-ordering hint; not yet used by the renderers
+        build.behind = resolve_object(attr.obj, ctx)
     elif isinstance(attr, ast.Alt):
         if shape.kind != "image":
             raise LayoutError("'alt' is only valid on an image")
@@ -1207,7 +1227,10 @@ def _set_exit(shape: Shape, direction: int) -> None:
     shape.exit = (shape.cx + dx, shape.cy + dy)
 
 
-def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None, ctx: _Ctx) -> Shape:
+def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None, ctx: _Ctx) -> tuple[Shape, Shape | None]:
+    """Returns the finished shape, plus the object a `behind X` attribute
+    (docs/spec.md SS3.1, ext) named, if any -- for `_layout_statements()`
+    to place it correctly, since the shape isn't in any pool yet here."""
     base = stmt.base
 
     if isinstance(base, ast.BlockBase):
@@ -1306,7 +1329,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
         shape.cx, shape.cy = (x0 + x1) / 2, (y0 + y1) / 2
         shape.w, shape.h = x1 - x0, y1 - y0
 
-    return shape
+    return shape, build.behind
 
 
 def _layout_statements(
@@ -1314,6 +1337,27 @@ def _layout_statements(
 ) -> tuple[list[Shape], int, tuple[float, float, float, float]]:
     shapes: list[Shape] = []
     prev: Shape | None = None
+    # Default names (docs/spec.md SS3.1, ext): "<class> <n>", n = this
+    # kind's ordinal *in this scope* -- a fresh count per _layout_statements()
+    # call, so numbering restarts inside each block, same as `ctx.pool_stack`.
+    class_counts: dict[str, int] = {}
+
+    def _place(shape: Shape, behind_target: Shape | None) -> None:
+        """Append `shape` to this scope's pool -- at the end (source-order
+        z-order, the default), or immediately before `behind_target`
+        (docs/spec.md SS3.1, ext: `behind X`). Finds `behind_target` by
+        identity, not `list.index()`'s `==` -- `Shape` is a plain
+        (unfrozen) dataclass, so two structurally-identical shapes (e.g.
+        two bare `box`es before either gets a distinguishing attribute)
+        compare equal, and `index()` would silently insert before the
+        wrong one of them."""
+        if behind_target is None:
+            shapes.append(shape)
+            ctx.pool_stack[-1].append(shape)
+        else:
+            shapes.insert(_index_by_identity(shapes, behind_target), shape)
+            pool = ctx.pool_stack[-1]
+            pool.insert(_index_by_identity(pool, behind_target), shape)
 
     for stmt in statements:
         if isinstance(stmt, ast.DirectionStatement):
@@ -1330,18 +1374,23 @@ def _layout_statements(
             pt = eval_position(stmt.position, ctx)
             shape = Shape(kind="point", name=stmt.label, cx=pt[0], cy=pt[1], w=0.0, h=0.0,
                           enter=pt, exit=pt, in_dir=direction, out_dir=direction)
-            shapes.append(shape)
-            ctx.pool_stack[-1].append(shape)
+            _place(shape, None)
             ctx.scope_stack[-1][stmt.label] = shape
             prev = shape
             continue
         if isinstance(stmt, ast.ObjectStatement):
-            shape = _layout_object(stmt, direction, prev, ctx)
-            shapes.append(shape)
-            ctx.pool_stack[-1].append(shape)
+            shape, behind_target = _layout_object(stmt, direction, prev, ctx)
+            # Counts every object of this kind, labelled or not (matching
+            # NthRef's own pool-filter-by-kind in resolve_object() above),
+            # so a default name's ordinal always agrees with what "Nth
+            # <class>" would address, even with labelled objects in between.
+            class_counts[shape.kind] = class_counts.get(shape.kind, 0) + 1
             if stmt.label:
                 shape.name = stmt.label
                 ctx.scope_stack[-1][stmt.label] = shape
+            else:
+                shape.name = f"{shape.kind} {class_counts[shape.kind]}"
+            _place(shape, behind_target)
             prev = shape
             direction = shape.out_dir
             continue
@@ -1358,12 +1407,20 @@ def _layout_statements(
     return shapes, direction, bbox
 
 
-def _flatten(shapes: list[Shape]) -> list[Shape]:
+def flatten_shapes(shapes: list[Shape]) -> list[Shape]:
+    """Every drawable shape in `shapes`, recursively -- a "block" shape
+    (docs/spec.md SS3.1, ext) contributes its `sublist`'s own drawable
+    shapes in its place, not itself, and a `move`/`point` pseudo-object
+    (never drawn -- `NOT_RENDERED`) is dropped. `LayoutResult.shapes` is
+    the *tree* (a block shape and its `sublist` intact), since a renderer
+    draws a block as a real nested group (SS3.1: "Blocks are groups");
+    this is for callers that just need every eventual on-slide shape
+    regardless of nesting -- bounding-box math, mainly."""
     out: list[Shape] = []
     for shape in shapes:
         if shape.kind == "block":
-            out.extend(_flatten(shape.sublist))
-        elif shape.kind not in _NOT_RENDERED:
+            out.extend(flatten_shapes(shape.sublist))
+        elif shape.kind not in NOT_RENDERED:
             out.append(shape)
     return out
 
@@ -1389,7 +1446,7 @@ def resolve_layout(
     natural size is read (default: Pillow, directly)."""
     ctx = _Ctx(metrics, image_metrics, base_dir)
     shapes, _direction, _bbox = _layout_statements(doc.statements, DIR_RIGHT, ctx)
-    flat = _flatten(shapes)
+    flat = flatten_shapes(shapes)
     if flat:
         x0 = min(s.bbox[0] for s in flat)
         y0 = min(s.bbox[1] for s in flat)
@@ -1400,4 +1457,4 @@ def resolve_layout(
         bbox = (0.0, 0.0, 0.0, 0.0)
     text_sizes = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
     typeface = _as_string(ctx.vars.get("typeface", ""), "typeface")
-    return LayoutResult(shapes=flat, bbox=bbox, text_sizes=text_sizes, typeface=typeface)
+    return LayoutResult(shapes=shapes, bbox=bbox, text_sizes=text_sizes, typeface=typeface)

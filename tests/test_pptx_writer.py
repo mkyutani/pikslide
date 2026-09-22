@@ -190,6 +190,71 @@ def test_line_label_and_image_caption_also_get_the_theme_font(tmp_path: pathlib.
         assert _ea_typeface(run) == "+mn-ea"
 
 
+# ---------------------------------------------------------------------------
+# Object identity: names, groups, z-order (docs/spec.md SS3.1, ext)
+# ---------------------------------------------------------------------------
+
+
+def test_shape_names_are_set_on_the_saved_pptx_shapes(tmp_path: pathlib.Path):
+    prs = render('box "a"\nWeb: box "b"\n', tmp_path)
+    names = [s.name for s in prs.slides[0].shapes]
+    assert names == ["box 1", "Web"]
+
+
+def test_line_and_image_shapes_are_named_too(tmp_path: pathlib.Path):
+    _make_image(tmp_path)
+    prs = render('arrow right\nimage "logo.png" width 1\n', tmp_path, name="named.pptx")
+    names = [s.name for s in prs.slides[0].shapes]
+    assert names == ["arrow 1", "image 1"]
+
+
+def test_line_label_textbox_naming(tmp_path: pathlib.Path):
+    prs = render('Conn: arrow right "Top" "Bottom"\n', tmp_path)
+    boxes = {s.text_frame.text: s.name for s in prs.slides[0].shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX}
+    assert boxes["Top"] in ("Conn text 1", "Conn text 2")
+    assert boxes["Bottom"] in ("Conn text 1", "Conn text 2")
+    assert boxes["Top"] != boxes["Bottom"]
+
+
+def test_block_becomes_a_named_powerpoint_group(tmp_path: pathlib.Path):
+    prs = render('Outer: [ A: box "x"; B: box "y" ]\n', tmp_path)
+    top = prs.slides[0].shapes
+    assert len(top) == 1
+    group = top[0]
+    assert group.shape_type == MSO_SHAPE_TYPE.GROUP
+    assert group.name == "Outer"
+    assert [s.name for s in group.shapes] == ["A", "B"]
+
+
+def test_nested_blocks_become_nested_groups_positioned_correctly(tmp_path: pathlib.Path):
+    prs = render(
+        'box "before"\n'
+        'Outer: [\n'
+        '  A: box "a"\n'
+        '  Inner: [ D: box "d" ]\n'
+        ']\n',
+        tmp_path,
+    )
+    before, outer = prs.slides[0].shapes
+    assert outer.name == "Outer"
+    a, inner = outer.shapes
+    assert inner.shape_type == MSO_SHAPE_TYPE.GROUP
+    assert inner.name == "Inner"
+    # Outer starts exactly where "before" ends -- proves the block's
+    # position was translated into the *parent* frame, not left at its
+    # post-recalculate_extents() local-frame position (checked: this was
+    # wrong -- (0, 0) -- before repositioning by delta, not replacement).
+    assert outer.left.inches == pytest.approx(before.left.inches + before.width.inches, abs=0.01)
+
+
+def test_behind_places_the_shape_earlier_in_z_order(tmp_path: pathlib.Path):
+    # Z-order is draw order (docs/spec.md SS3.1): the shape added *first*
+    # ends up visually behind one added later, so "C behind A" must put C
+    # before A in the saved shape list.
+    prs = render('A: box "a"\nB: box "b"\nC: box "c" behind A\n', tmp_path)
+    assert [s.name for s in prs.slides[0].shapes] == ["C", "A", "B"]
+
+
 def test_preset_shape_renders_as_the_named_autoshape(tmp_path: pathlib.Path):
     prs = render('shape chevron "Step 1"\n', tmp_path)
     shape = prs.slides[0].shapes[0]

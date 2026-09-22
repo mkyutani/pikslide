@@ -26,6 +26,7 @@ from pptx.util import Emu, Inches, Pt
 
 from .pik import ast
 from .pik.layout import (
+    NOT_RENDERED,
     Colour,
     LayoutError,
     LayoutResult,
@@ -33,6 +34,7 @@ from .pik.layout import (
     _text_size_name,
     assign_text_slots,
     default_text_sizes,
+    flatten_shapes,
     resolve_layout,
 )
 
@@ -342,6 +344,8 @@ def _add_image_shape(container, shape: Shape, tf: _Transform, typeface: str, tex
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
     picture = container.shapes.add_picture(shape.image_path, Inches(left), Inches(top), width=Inches(w), height=Inches(h))
+    if shape.name:
+        picture.name = shape.name
     if shape.alt_text:
         # python-pptx 1.0.2 has no real `alt_text` property (checked: it
         # silently becomes a plain, never-saved instance attribute --
@@ -385,6 +389,8 @@ def _add_block_shape(container, shape: Shape, tf: _Transform, typeface: str, tex
     elif shape.kind == "box" and shape.rad > 0:
         autoshape_type = MSO_SHAPE.ROUNDED_RECTANGLE
     pptx_shape = container.shapes.add_shape(autoshape_type, Inches(left), Inches(top), Inches(w), Inches(h))
+    if shape.name:
+        pptx_shape.name = shape.name
     if autoshape_type == MSO_SHAPE.ROUNDED_RECTANGLE and shape.rad > 0:
         # `adjustments[0]` is the corner radius as a fraction of min(w, h),
         # not an absolute length. `rad == 0` (no explicit `rad` attribute,
@@ -414,6 +420,8 @@ def _add_line_shape(container, shape: Shape, tf: _Transform, typeface: str, text
     if len(points) == 2:
         (x1, y1), (x2, y2) = points
         connector = container.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
+        if shape.name:
+            connector.name = shape.name
         _apply_line_style(connector.line, shape)
         _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
     else:
@@ -421,6 +429,8 @@ def _add_line_shape(container, shape: Shape, tf: _Transform, typeface: str, text
         builder = container.shapes.build_freeform(Inches(x0), Inches(y0))
         builder.add_line_segments([(Inches(x), Inches(y)) for x, y in points[1:]], close=shape.closed)
         freeform = builder.convert_to_shape()
+        if shape.name:
+            freeform.name = shape.name
         freeform.fill.background()
         _apply_line_style(freeform.line, shape)
         _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
@@ -456,10 +466,14 @@ def _line_label_rects(
 def _add_line_text(container, shape: Shape, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
     """A connector/freeform shape has no text_frame in python-pptx, so a
     line's text (e.g. an arrow's label) is rendered as small floating
-    textboxes instead, placed above/on/below the line per assign_text_slots()."""
-    for (x0, y0, x1, y1), text, flags in _line_label_rects(shape, text_sizes):
+    textboxes instead, placed above/on/below the line per
+    assign_text_slots(); named "<line name> text <k>" (docs/spec.md SS3.1,
+    ext), 1-based among *this line's own* labels, not a diagram-wide count."""
+    for i, ((x0, y0, x1, y1), text, flags) in enumerate(_line_label_rects(shape, text_sizes), start=1):
         left, top = tf.point((x0, y1))
         textbox = container.shapes.add_textbox(Inches(left), Inches(top), Inches(x1 - x0), Inches(y1 - y0))
+        if shape.name:
+            textbox.name = f"{shape.name} text {i}"
         text_frame = textbox.text_frame
         text_frame.word_wrap = False
         text_frame.margin_left = text_frame.margin_right = 0
@@ -478,9 +492,11 @@ def _add_line_text(container, shape: Shape, tf: _Transform, typeface: str, text_
 def _content_bbox(result: LayoutResult, text_sizes: dict[str, float]) -> tuple[float, float, float, float]:
     """result.bbox, expanded to also cover line labels -- a line's own
     bbox is just its path, so a label floating above/below it (see
-    _line_label_rects()) can stick out past result.bbox on its own."""
+    _line_label_rects()) can stick out past result.bbox on its own.
+    flatten_shapes(), not result.shapes directly, since a line can be
+    nested inside a block (docs/spec.md SS3.1, ext) at any depth."""
     x0, y0, x1, y1 = result.bbox
-    for shape in result.shapes:
+    for shape in flatten_shapes(result.shapes):
         if shape.kind not in ("line", "arrow", "spline", "arc"):
             continue
         for (lx0, ly0, lx1, ly1), _text, _flags in _line_label_rects(shape, text_sizes):
@@ -515,17 +531,53 @@ def write_pptx(
     prs.slide_height = Emu(int(tf.slide_height * EMU_PER_INCH))
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank layout
 
-    _add_all_shapes(slide, result, tf, result.typeface, text_sizes)
+    _add_all_shapes(slide, result.shapes, tf, result.typeface, text_sizes)
     prs.save(path)
 
 
-def _add_all_shapes(container, result: LayoutResult, tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
-    """Draw every shape in `result` into `container` (a Slide, for
-    `write_pptx()`, or a group, for `insert_into_pptx()` -- both expose
-    the same `.shapes.add_X()` API, checked, so this needs no branching
-    on which one it got)."""
-    for shape in result.shapes:
-        if shape.kind in ("line", "arrow", "spline", "arc"):
+def _add_all_shapes(container, shapes: list[Shape], tf: _Transform, typeface: str, text_sizes: dict[str, float]) -> None:
+    """Draw every shape in `shapes` into `container` (a Slide, for
+    `write_pptx()`, or a group, for `insert_into_pptx()` or a nested
+    block, below -- all expose the same `.shapes.add_X()` API, checked,
+    so this needs no branching on which one it got).
+
+    A "block" shape (docs/spec.md SS3.1, ext: "Blocks are groups") becomes
+    a nested PowerPoint group of its own -- recursively, so nesting is
+    preserved -- named like any other shape (`_layout_statements()` has
+    already given every shape, block or not, a name: its label, or a
+    default "<class> <n>"). Its children are positioned with a fresh
+    `_LocalTransform` scoped to the block's own bounding box, since they
+    sit in the *same* global pik coordinate space as everything else
+    (`_translate()`, at layout time, already placed them there), not one
+    relative to the block -- exactly the same idea as `insert_into_pptx()`
+    scoping one to the whole diagram's bbox, just nested here."""
+    for shape in shapes:
+        if shape.kind == "block":
+            group = container.shapes.add_group_shape()
+            if shape.name:
+                group.name = shape.name
+            # Add children first: a python-pptx group's own off/ext (and
+            # chOff/chExt, its children's local coordinate frame) are
+            # recalculated from its actual contents on every add (checked
+            # against python-pptx's own source), so setting .left/.top
+            # *before* any children exist just gets overwritten by that.
+            _add_all_shapes(group, shape.sublist, _LocalTransform(shape.bbox), typeface, text_sizes)
+            # Reposition by the *delta* to where this block belongs in the
+            # parent's frame, not a replacement: after the above, off ==
+            # chOff (still), so a plain assignment would silently assume
+            # the block's own children never extend past its geometric
+            # bbox's top-left corner -- true for shapes, but not always for
+            # a line's floating label (_LocalTransform(shape.bbox), unlike
+            # the top-level _Transform via _content_bbox(), does not pad
+            # for that). Left untouched, .width/.height already match the
+            # real content (including any such overhang), so no separate
+            # floor/replacement is needed for them either.
+            target_left, target_top, _w, _h = tf.rect(shape)
+            group.left = Inches(target_left) + group.left
+            group.top = Inches(target_top) + group.top
+        elif shape.kind in NOT_RENDERED:
+            continue
+        elif shape.kind in ("line", "arrow", "spline", "arc"):
             _add_line_shape(container, shape, tf, typeface, text_sizes)
         elif shape.kind == "image":
             _add_image_shape(container, shape, tf, typeface, text_sizes)
@@ -639,7 +691,7 @@ def insert_into_pptx(
 
     group = slide.shapes.add_group_shape()
     group.name = group_name
-    _add_all_shapes(group, result, _LocalTransform(bbox), result.typeface, text_sizes)
+    _add_all_shapes(group, result.shapes, _LocalTransform(bbox), result.typeface, text_sizes)
     group.left, group.top = Inches(region_left), Inches(region_top)
     group.width, group.height = Inches(max(diagram_w, 0.01)), Inches(max(diagram_h, 0.01))
 

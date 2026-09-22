@@ -1,7 +1,7 @@
 [project]
 name = "pikslide"
 version = "0.1.0"
-description = "Convert pik format files into PowerPoint objects, SVG, and other formats via an intermediate tree structure"
+description = "A text language for drawing diagrams as native, editable PowerPoint objects"
 readme = "README.md"
 license = "0BSD"
 license-files = ["LICENSE"]

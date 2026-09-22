@@ -34,38 +34,38 @@ write, and errors point at exact positions (§5).
 Where a diagram goes (which deck, slide and region, and which theme) is never
 written in a `.pik`; see §4.
 
-## 2. Compatibility contract with pikchr
+## 2. Relation to pikchr
 
-1. **A valid pikchr program means the same thing in pikslide.** The existing
-   parser/layout port and the official examples in `tests/fixtures/examples/`
-   stay the regression suite. This is why pikslide is a superset rather than
-   a derived dialect (which would break existing `.pik`) or an independent
-   language (which would rewrite most of the parser). The one deliberate
-   exception is **text size**
-   (§3.3): pikchr gives it as a percentage of the viewer's font, pikslide as
-   fixed sizes in points, so text (and `fit` objects sized to it) can differ
-   from pikchr's output.
-2. **Extensions are contextual.** A word is an extension keyword only in a
-   position where pikchr would reject it (syntax error, or an undefined
-   variable in a colour position). Evidence, on today's parser:
-   - `shape = 3` is a valid pik assignment, so `shape` must **not** become a
-     reserved word. It is an object class only when *not* followed by `=`.
-   - `box fill accent1 lighter 40%` is a syntax error today
-     (`unexpected trailing tokens near 'lighter'`), so `lighter` is free to
-     claim.
-3. **A user variable beats an extension name.** If a program defines
-   `accent1 = 0xff0000`, `fill accent1` keeps meaning that variable, because
-   otherwise a valid program would change meaning. This is deliberately
-   *unlike* the existing CSS colour names: today the colour table is checked
-   before variables (`white = 0xff0000` then `box fill white` is still
-   white), and that behaviour is left as is.
-4. **Portability check.** `pikslide --pikchr file.pik` rejects any extension,
-   so an author can confirm a file still runs on real pikchr.
-5. **File extension.** Source files keep `.pik`, whether or not they use
-   extensions. Editor support for pik keeps working, and since most files use
-   no extension, a separate extension would split things for little gain.
+pikslide is its own language. It starts from pikchr's way of drawing
+(sequential placement, relative positions, labels, text) and from pikchr's
+grammar, but **compatibility with pikchr is not a goal**: a pikchr program may
+run unchanged or may not, and where pikslide differs, this specification says
+so.
 
-## 3. Extensions in v1
+- **Origin.** The parser and layout began as a port of pikchr and are changed
+  step by step, not rewritten. pikchr's official example scripts
+  (`tests/fixtures/examples/`) stay in the tests as a corpus for behaviour
+  pikslide has not deliberately changed; a test that pins a deliberate
+  difference is changed along with it.
+- **New words are reserved.** The words pikslide adds (`shape`, `image`,
+  `include`, `alt`, `theme`, `major`, `medium`, `large`, `lighter`, `darker`,
+  `none`, `off`, and `connector` for later) are ordinary reserved words: they
+  cannot be used as variable or macro names. Names such as `accent1` are not
+  among them; the prelude defines those as ordinary variables (§3.7). See
+  [grammar.md](grammar.md), *Reserved words*.
+- **Colours are a type of their own.** A colour is not a number. It is an RGB
+  value (a hex literal such as `0xff0000`) or a theme colour (§3.3), and
+  variables can hold colours. Colour names such as `red` are not built into
+  the language: they are ordinary variables defined by a prelude that is read
+  first (§3.7), so a program can override them. An undefined name is an
+  error.
+- **Text size** is in points (§3.3); pikchr gives it as a percentage of the
+  viewer's font.
+- **File extension.** Source files keep `.pik`: editor support for pik keeps
+  working, and the language is close enough to pikchr that a separate
+  extension would gain little.
+
+## 3. Features added in v1
 
 ### 3.1 Object identity: names, groups, z-order
 
@@ -118,8 +118,11 @@ Groundwork already checked, for when `connector` is designed (python-pptx
 
 ### 3.3 Theme colours and fonts
 
-Colours can name a **theme slot** instead of an RGB value, so the diagram
-follows whatever theme the slide uses.
+Colours can refer to a **theme colour** instead of an RGB value, so the
+diagram follows whatever theme the slide uses. The language has one word for
+this, `theme`, which takes the name of a slot in the theme: `theme "accent1"`.
+The usual slot names are defined for you as variables (§3.7), so programs
+write:
 
 ```pik
 box "Primary"  fill accent1                 # (proposed)
@@ -127,28 +130,43 @@ box "Soft"     fill accent1 lighter 40%     # (proposed)
 box "Outline"  fill bg1 color text1         # (proposed)
 ```
 
-- Slots: `accent1`–`accent6`, `text1`, `text2`, `bg1`, `bg2`, `link`,
-  `followed`. They map to OOXML `schemeClr` values (`tx1`, `tx2`, `bg1`,
-  `bg2`, `accent1`–`accent6`, `hlink`, `folHlink`).
-- Modifiers: `lighter N%` / `darker N%`, following the PowerPoint palette
-  ("Lighter 40%" = `lumMod 60 / lumOff 40`; "Darker 25%" = `lumMod 75`).
+- **`theme "slot"`.** The string is an OOXML `schemeClr` value (`accent1`–
+  `accent6`, `tx1`, `tx2`, `bg1`, `bg2`, `dk1`, `lt1`, `dk2`, `lt2`, `hlink`,
+  `folHlink`). A value the tool does not know is an error that lists the ones
+  it knows. The language does not fix the list of slots: a PowerPoint version
+  that adds one needs only a new definition (`dk3 = theme "dk3"`), not a
+  language change.
+- **Names come from the prelude.** `accent1`–`accent6`, `text1`, `text2`,
+  `bg1`, `bg2`, `link` and `followed` are ordinary variables the prelude
+  defines (`text1 = theme "tx1"`, `link = theme "hlink"`). They can be
+  overridden, and more can be added.
+- **Modifiers** `lighter N%` / `darker N%` apply to any colour: a theme
+  colour, a hex colour, or a variable holding one. They follow the PowerPoint
+  palette ("Lighter 40%" = `lumMod 60 / lumOff 40`; "Darker 25%" =
+  `lumMod 75`); on an RGB colour they are emitted as the same transforms on
+  `srgbClr`.
 - Emitted as `schemeClr`, **never** as resolved RGB, so swapping the theme
-  restyles the diagram. RGB (`0xRRGGBB`) and CSS names remain available.
-- **Theme colours are direct operands of `fill` / `color` only.** They are
-  not numbers: `x = accent1`, `accent1 + 1` and `print accent1` are errors.
-  Reuse goes through macros, which are textual:
-  `define primary { fill accent1 }`.
+  restyles the diagram. RGB (`0xRRGGBB`) and the CSS colour names (from the
+  prelude, §3.7) remain available.
+- **Colours are a type of their own** (§2). A variable can hold one, so a
+  house style is plain variables: `primary = accent1 lighter 60%`, then
+  `box fill primary`. A colour is not a number: `primary + 1` is an error.
 - **Fonts.** Text uses the theme's minor font (Latin `+mn-lt`, East Asian
   `+mn-ea`), not a hard-coded family. A new text flag `major` selects the
-  heading font (`+mj-lt` / `+mj-ea`). A specific family is chosen outside the
-  language (`--font`). This is the point that matters for Japanese: the
-  deck's theme decides the CJK face.
+  heading font (`+mj-lt` / `+mj-ea`). A specific family is set with the
+  string variable `typeface` (`typeface = "BIZ UDPゴシック"`), normally in the
+  template's settings file (§3.8); the prelude gives it the empty string,
+  which means the theme's font. This is the point that matters for Japanese:
+  the deck's theme decides the CJK face.
 - **Size.** Text size does **not** follow pikchr. pikchr states it as a
   percentage of whatever font the viewer uses (`big` = 125 %, `small` =
   80 %); PowerPoint needs points. pikslide has three sizes: `small` = 9 pt,
   `medium` = 10.5 pt (the default, so no flag is needed), and `large` or
-  `big` = 12 pt (`big` is a synonym for `large`). The three values can be
-  changed; where and how is not decided yet (open question 1). If a string
+  `big` = 12 pt (`big` is a synonym for `large`). Like `fill`, `color` and
+  `thickness`, the words themselves can be assigned to set their values; the
+  prelude (§3.7) has `small = 9pt`, `medium = 10.5pt`, `large = 12pt`. Assign
+  to them to change the sizes, or set them in the template's settings file
+  (§3.8). If a string
   carries more than one size flag, the last one wins, so pikchr's repeated
   `big big` has no extra effect. `fit` sizing measures with the size in
   effect.
@@ -159,8 +177,9 @@ the diagram is going into; the language never names a theme file.
 1. `--into deck.pptx --slide N`: the theme of slide N's master
    (slide → layout → master → theme part). A deck with several masters has
    several themes, and the slide's own master decides.
-2. Otherwise `--template FILE` (`.pptx` or `.potx`): the theme of its first
-   master (provisional; see open question 1). Giving both `--into` and
+2. Otherwise `--template FILE` (`.pptx` or `.potx`): the theme of the master
+   that owns the slide layout its settings file names with `layout` (§3.8),
+   or of its first master when there is none. Giving both `--into` and
    `--template` is an error, since the deck is already the template.
 3. Otherwise the built-in Office theme, with a warning that colours and
    fonts are stand-ins.
@@ -168,10 +187,10 @@ the diagram is going into; the language never names a theme file.
 Facts this rests on (checked): a valid theme always defines all 12 colour
 slots (`dk1 lt1 dk2 lt2 accent1`–`6 hlink folHlink`) and both the major and
 minor font, so **a valid slot name is never undefined**. What can go wrong
-is only (a) no theme was supplied → rule 3; (b) the name is not a slot, e.g.
+is only (a) no theme was supplied → rule 3; (b) a name is not defined, e.g.
 `accent7` → an ordinary undefined-variable error, with a "did you mean
-`accent1`?" hint; (c) the program defines a variable of that name → the
-variable wins (see the grammar's contextual-keyword rule).
+`accent1`?" hint; (c) `theme "accent7"` names no slot → an error that lists
+the slots the tool knows.
 
 Reading the theme needs only the zip (`ppt/theme/*.xml`), not python-pptx.
 Writing is different: python-pptx refuses a `.potx` as-is (it raises
@@ -218,7 +237,7 @@ Logo: image "logo.png" width 0.6in           # (proposed)
       image "icons/db.svg" height 0.4in alt "Database"   # (proposed) SVG icon
 ```
 
-- A new class (contextual, as in §2). The string is a **path relative to the
+- A new class. The string is a **path relative to the
   source file** (for Markdown, the `.md` file).
 - Size: `width` and/or `height` given → the missing one follows the aspect
   ratio; both given → stretched; neither → fit inside `boxwid × boxht`,
@@ -243,14 +262,14 @@ into every diagram. A deck holds many diagrams, so pikslide adds one.
 
 ```pik
 include "house.pik"                          # (proposed)
-Web: box "Web" primary card                  # macros expand to attributes
+Web: box "Web" fill primary card            # a colour variable, a macro
 ```
 
 ```pik
 # house.pik: definitions only
 boxwid = 1.2
-define primary { fill accent1 lighter 60% }
-define card    { rad 8px color text1 }
+primary = accent1 lighter 60%
+define card { rad 8px color text1 }
 ```
 
 - **Definitions only.** An included file may contain `define` macros,
@@ -260,8 +279,8 @@ define card    { rad 8px color text1 }
   parts are written as macros (`define legend { [ … ] }`).
 - **Same scope, in order.** Macros and variables defined by the file are
   visible from the `include` line onward, exactly as if written there.
-- **Because theme colours are not numbers (§3.3), house colours are
-  macros**, not variables.
+- **House colours are variables** holding colours (§3.3); macros are for
+  bundles of attributes such as `card`.
 - **Resolution.** The path is relative to the file containing the `include`
   (for a Markdown fence: to the `.md` file), then to each `--include-path DIR`.
 - **Local and contained.** Only local files are read, never URLs. The
@@ -271,6 +290,146 @@ define card    { rad 8px color text1 }
   the definitions-only check beyond the offending token. This matters
   because a diagram may be written by an LLM.
 - Cycles are an error; nesting is limited to 50 levels (as for macros).
+
+### 3.7 The prelude
+
+Before every program, pikslide reads a **prelude**: a file of definitions that
+ships with it (`src/pikslide/prelude.pik`). It follows the rules of an
+included file (§3.6): definitions only.
+
+```pik
+# prelude.pik (excerpt)
+black      = 0x000000
+red        = 0xff0000
+lightblue  = 0xadd8e6
+
+accent1    = theme "accent1"   # accent2 … accent6 likewise
+text1      = theme "tx1"
+text2      = theme "tx2"
+bg1        = theme "bg1"
+bg2        = theme "bg2"
+link       = theme "hlink"
+followed   = theme "folHlink"
+
+boxwid     = 0.75
+linewid    = 0.5
+thickness  = 0.015
+fill       = none
+color      = black
+
+small      = 9pt
+medium     = 10.5pt
+large      = 12pt
+
+layout     = ""
+typeface   = ""
+
+primary    = text2
+emphasis   = accent1
+```
+
+- **It defines the CSS colour names** as variables holding colours. Nothing
+  about colour names is special in the language: `red` is a variable, like
+  `boxwid`.
+- **It defines the theme-colour names** `accent1`–`accent6`, `text1`, `text2`,
+  `bg1`, `bg2`, `link` and `followed`, with `theme` (§3.3). They are ordinary
+  variables, so a template's settings file can redefine or add them.
+- **It defines the built-in defaults.** The 33 variables that pikchr keeps in
+  a table in its code (`boxwid`, `linewid`, `charwid`, `thickness`, `fill`,
+  `color`, and so on) are defined here instead, so the defaults are readable
+  and changeable in one place.
+- **It defines the three text sizes** (§3.3). Lengths are inches internally,
+  so `9pt` is 9/72 in; the PowerPoint writer converts back to points.
+- **It defines `layout` and `typeface`**, both empty strings: the slide layout
+  for a new slide and the font family (§3.3, §3.8). The PowerPoint writer
+  reads them, not the layout stage.
+- **It defines the standard accent-colour names** `primary` and `emphasis`,
+  so a diagram that uses them runs with any template; a template's settings
+  file (§3.8) gives them that template's own colours.
+- **Everything in it can be overridden.** The prelude comes first, so an
+  assignment in the program, or in an `include`d file, wins: `red = 0xcc0000`,
+  `boxwid = 1.2`, `medium = 11pt`, or a project's house file that
+  redefines a palette. New names are added the same way (`brand = 0x123456`).
+- **It cannot be switched off.** The layout reads these variables, so a run
+  without them would fail. A project's own definitions are layered on top of
+  it, by an `include` (§3.6) or by a settings file (§3.8), which `--settings
+  FILE` supplies from outside the program.
+- **Names are lowercase**, like every variable. pikchr's capitalised
+  spellings (`Red`, `DarkBlue`) are not colours; a capitalised name is an
+  object label.
+- **A hex literal is a colour.** `0xRRGGBB` is a colour value, not a number;
+  decimal numbers are numbers.
+- **`none` and `off`** (*no colour*) cannot be written as a value, so they
+  remain reserved words ([grammar.md](grammar.md), *Reserved words*).
+
+### 3.8 Template settings
+
+Which theme, which slide layout and which accent colours suit a diagram
+depend on the template it goes into, and so do sensible text sizes. These
+choices therefore belong to the template, not to the diagram and not to the
+tool. Each `.potx` or `.pptx` used with `--template` or `--into` can have a
+**settings file**, found beside it or named with `--settings FILE`, which
+holds:
+
+- the slide layout for a new slide (`layout`), which also fixes the master
+  and so the theme (§3.3);
+- the font (`typeface`, §3.3);
+- the accent colours: which of the theme's colours the diagram uses for
+  emphasis. `primary` and `emphasis` are the standard names (§3.7); a
+  template may define others;
+- the default text sizes (`small`, `medium`, `large`, §3.7);
+- the content area: the rectangle of a slide that a diagram may use, which is
+  the default target of `--into` (§4.2).
+
+The settings file is read after the prelude and before the program, so its
+definitions override the prelude's, and the program's override its own. A
+template without one gets the prelude's defaults and its first master's blank
+layout. A
+`.pik` still never names the file: the tool finds it from the template or
+deck the diagram goes into, or the caller names it (§4).
+
+```pik
+# corporate.theme.pik (beside corporate.potx)
+layout        = "1_本文"   # the layout for a new slide; fixes the master too
+typeface      = "BIZ UDPゴシック"
+medium        = 12pt       # this template's diagram text size
+primary       = text2      # the standard accent-colour names
+emphasis      = accent1
+warning       = accent5    # any further names the template wants
+content_left   = 15pt       # where a diagram may go on a slide
+content_top    = 37.5pt
+content_right  = 944.9pt
+content_bottom = 534.6pt
+```
+
+- **Format.** The prelude's own: a file of definitions only, as in §3.6. It
+  is read by the tool, not through `include`, so the path rules of §3.6 do not
+  apply to finding it; the definitions-only rule does apply to its content.
+- **Location.** Beside the template or deck by default. `--settings FILE`
+  names it explicitly, wherever it is (a shared folder, say); nothing is then
+  looked for beside the template. The caller names it, so the path rules of
+  §3.6 do not apply. A named file that does not exist is an error.
+  `--settings` also works when no template is given, to set text sizes and
+  accent colours for the built-in theme.
+- **Name.** `<template name>.theme.pik` beside the template or deck
+  (`corporate.potx` → `corporate.theme.pik`).
+- **`layout`** is the name of a slide layout, used when pikslide makes a new
+  slide from the template (with `--into` the slide already has its layout).
+  A layout belongs to one master, so naming it also chooses the master and
+  the theme. The prelude gives it the empty string, which means the first
+  layout of type `blank` in the first master, or that master's first layout
+  if it has none. If two masters have a layout of that name, the first one
+  found wins. A name that no layout has is an error that lists the names it
+  does have. `layout` can be set only in a settings file: assigning it in a
+  program is an error, because a `.pik` never chooses the deck's structure.
+- **Strings.** A variable can hold a string, written as in text
+  (`typeface = "…"`). A string is not a number and cannot be used in an
+  expression; in v1 strings serve settings only, and a string variable is not
+  accepted as the text of an object.
+- **Accent colours** are ordinary colour variables (§3.3) whose values are
+  theme colours: `primary = text2`, or `primary = accent2 lighter 40%`. A
+  value that is a theme colour stays linked to the theme, so switching the
+  template's theme restyles the diagram.
 
 ## 4. Output model
 
@@ -293,18 +452,23 @@ pikslide diagram.pik --into deck.pptx --slide 5 --region "Figure" -o out.pptx
 
 - `--slide` is 1-based. `--region` is the name of a shape or placeholder on
   that slide whose rectangle is the target; `--rect x,y,w,h` (inches) is the
-  explicit alternative. When the region is an *empty placeholder*, it is
+  explicit alternative. With neither, the target is the content area from
+  the settings file (§3.8), and with none of the three it is an error. When
+  the region is an *empty placeholder*, it is
   deleted after the diagram is placed (an empty prompt left behind is clutter
   in edit view); any other shape used as a region is left alone. The theme is
   the deck's own (§3.3), so `--template` is not allowed alongside `--into`.
 - The input deck is never modified in place unless `--in-place` is given.
-- **Fit policy.** Uniform scale `s = min(1, region_w / w, region_h / h)`:
-  shrink to fit, never enlarge. `s` is applied to **geometry, font size and
-  line width at emit time** (a group transform would not scale text). Default
-  alignment is top-left, under the slide title and in line with body text;
-  `--align` overrides. If `s` pushes text below a floor size, warn.
+- **No scaling.** A diagram is placed at its natural size and is never
+  scaled: the text sizes and line widths are the author's, and an automatic
+  reduction could leave text too small to read. A diagram that is larger than
+  its region is an **error** that reports both sizes (the diagram's bounding
+  box, line labels included, and the region's); the source is then adjusted.
+  A smaller diagram is placed at the region's top-left, under the slide title
+  and in line with body text; `--align` overrides.
 - **Idempotent.** The whole diagram is emitted as one top-level group named
-  `pikslide:<id>` (`<id>` = `--id`, else the source file's stem). Running
+  `pikslide:<id>` (`<id>` = `--id`, else the diagram's name in a Markdown fence (§6), else the
+  source file's stem). Running
   again *replaces the group with the same name in place*, keeping its z-index
   and leaving everything else on the slide untouched.
 
@@ -315,19 +479,25 @@ Humans and LLMs both need errors they can act on.
 - Every error carries `file:line:column`, the source line, and a caret; the
   file is the included one when the error is inside an `include` (§3.6).
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
-- Unknown extension names (theme slot, preset, `major`, image path, region)
-  are **errors with suggestions**, not silent fallbacks. Today an unknown
-  colour name silently becomes black; for legacy pik constructs that stays,
-  as a warning, and `--strict` turns warnings into errors.
+- A diagram larger than its region is an **error** (§4.2).
+- Unknown names (colour, theme slot, preset, image path, region) are
+  **errors with suggestions**, not silent fallbacks. `--strict` turns
+  warnings into errors.
 - `--check` parses and lays out without writing; `--format json` emits
   diagnostics as JSON for tooling.
 
 ## 6. Use from Markdown and from other tools
 
-- Markdown fence tags: `pik` and `pikchr` as today, plus **`pikslide`**. A
-  block that uses an extension fails under a plain pikchr renderer, so such
-  blocks are tagged `pikslide`; a toolchain can then send ` ```pikchr `
-  blocks to pikchr and ` ```pikslide ` blocks to pikslide.
+- Markdown fence tag: **`pikslide`** names this language, so a toolchain can
+  send ` ```pikchr ` blocks to pikchr and ` ```pikslide ` blocks to pikslide.
+  pikslide keeps accepting `pik` and `pikchr` fences as it does today.
+- **Diagram names.** A fence may name its diagram with the word after the
+  language tag: ` ```pikslide architecture `. A Markdown file with more than
+  one diagram must name every one of them; a missing or duplicate name is an
+  error. A file with a single diagram needs no name. Names use letters,
+  digits, `-` and `_`. The name is the diagram's id (§4.2), and `--block NAME`
+  selects one diagram of the file, which `--into` needs because it places one
+  diagram.
 - Slide and region come from the caller (command-line options), not from the
   block, per the placement decision.
 - The diagram is written as native shapes directly, so a caller need not
@@ -340,7 +510,7 @@ Connectors (a future `connector` class, §3.2) · SVG *output* · auto-layout
 and declarative graph syntax · tables, charts, SmartArt · animation,
 transitions, speaker notes · multi-slide or whole-deck authoring · true
 Bézier curves (`spline`/`arc` stay polylines) · shape adjustment handles ·
-theme colours in variables and arithmetic.
+arithmetic on colours.
 
 SVG *images* are supported (§3.5); SVG *output* is left out because SVG
 cannot express native shapes or theme colours. The layout result does not
@@ -351,26 +521,22 @@ a large piece of work of its own.
 
 | Area | Today | Needed |
 |---|---|---|
-| `pik/tokens.py` `CLASS_NAMES` | fixed 14 pikchr classes | contextual `shape`, `image`, `include`; `alt`, `lighter`/`darker`, `major`, `medium`, `large`; theme-slot names |
+| `pik/tokens.py` `CLASS_NAMES` | fixed 14 pikchr classes | reserved words `shape`, `image`, `include`, `alt`, `lighter`/`darker`, `major`, `medium`, `large`, `theme`, `none`/`off`, and `connector` (reserved for later) |
 | `pik/tokens.py` `Token`, `PikSyntaxError` | carry a line number only | carry the source file and column, so errors inside an `include` point at the right file |
 | `pik/macros.py` `expand_macros` | one source text, one macro table | resolve `include` in the same pass (shared macro table, definitions-only check, path containment, cycle/depth limits) |
 | *(new)* theme reader | none | read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base |
 | `pik/layout.py` `_flatten` | flattens `[ ]` blocks, losing the tree | keep the hierarchy so groups can be written |
-| `pik/layout.py` `Shape.fill` / `color` | `float` RGB ints | a paint value: `none` \| RGB \| theme slot + modifiers |
+| `pik/layout.py` `Shape.fill` / `color`, `_Ctx.vars` | colours are `float` RGB ints; variables hold numbers only | a colour type: `none` \| RGB \| theme colour + modifiers; variables can hold colours and strings; an unknown colour name is an error |
+| `pik/colors.py` `COLOR_NAMES` | a table the layout stage consults before variables, case-insensitively; an unknown name silently gives black (pikchr itself lets a variable win, and reports an unknown name as an error) | replaced by `src/pikslide/prelude.pik`, read first as an implicit include; no special lookup |
+| *(new)* template settings | none | find the settings file beside a template or deck and read it after the prelude; use its `layout` |
+| `pik/layout.py` `DEFAULTS` | the 33 built-in variables are a Python dict | defined in `prelude.pik` with the colour names and the text sizes; `_Ctx.vars` starts from the prelude |
+| `pik/parser.py` `parse_rvalue` | a bare `PLACENAME` is a colour name | removed: a colour name is an ordinary variable (`ID`) |
+| `tests/` | `box fill Red`, `box color DarkBlue` | lowercase names (`red`, `darkblue`) |
 | `pik/layout.py` `behind` | parsed, ignored | affects z-order |
-| `pptx_writer.py` `FONT_NAME`, `_BASE_FONT_PT` | hard-coded `"Arial"`, 9 pt | theme fonts; the three text sizes, default `medium` (10.5 pt) |
-| `pik/layout.py` `_font_scale` | port of pikchr's `pik_font_scale()`: `big` ×1.25, `small` ×0.8 | three absolute sizes (`small` 9 / `medium` 10.5 / `large`=`big` 12 pt) |
-| `pptx_writer.py` | always a new blank presentation | open an existing deck, insert group, replace by name, scale to fit |
+| `pptx_writer.py` `FONT_NAME`, `_BASE_FONT_PT` | hard-coded `"Arial"`, 9 pt | theme fonts; text sizes read from the prelude variables, default `medium` (10.5 pt) |
+| `pik/layout.py` `_font_scale` | port of pikchr's `pik_font_scale()`: `big` ×1.25, `small` ×0.8 | three sizes taken from the prelude variables (`small` 9 / `medium` 10.5 / `large`=`big` 12 pt by default) |
+| `pptx_writer.py` | always a new blank presentation | open an existing deck, insert group, replace by name, check that the diagram fits its region |
 | `pptx_writer.py` | `_AUTOSHAPE` fixed map; no pictures | preset map, `p:pic`, SVG picture (`svgBlip` + PNG fallback, hand-written XML), `schemeClr` |
-| `__init__.py` | `pikslide <in> [<out>]` only | `--into --slide --region/--rect --id --template --include-path --font --align --strict --check --format --pikchr` |
-| `markdown.py` | `pik`, `pikchr` fences | add `pikslide` |
+| `__init__.py` | `pikslide <in> [<out>]` only | `--into --slide --region/--rect --id --template --settings --block --include-path --align --strict --check --format` |
+| `markdown.py` | `pik`, `pikchr` fences; blocks are numbered | add `pikslide`; read the name after the tag; require names when a file has several diagrams |
 | Docs | README states "pikslide doesn't define its own diagram language"; `pyproject.toml` mentions SVG | rewrite Scope; extend `docs/grammar.md` with an extensions section |
-
-## 9. Open questions
-
-1. **Settings.** How the three text sizes and other defaults are changed is
-   not designed yet, and is to be considered as a whole. The defaults
-   concerned are the text sizes (§3.3), the font, and which slide master a
-   `--template` uses when it has several (§3.3 uses the first master
-   meanwhile; that is provisional). The options are a configuration file,
-   command-line options, or variables in the language.

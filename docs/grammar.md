@@ -17,12 +17,13 @@ The language has two layers:
   out below. For the authoritative upstream grammar see pikchr's
   [grammar documentation](https://pikchr.org/home/doc/trunk/doc/grammar.md)
   and [`pikchr.y`](https://pikchr.org/home/doc/tip/pikchr.y).
-- **pikslide extensions.** Rules and alternatives marked `(* ext *)` are
-  pikslide additions. **They are a proposal and are not implemented yet**;
-  the current parser rejects them. Every extension is *contextual*: it is
-  recognised only where the pikchr core would report an error, so a valid
-  pikchr program never changes meaning (see
-  [Contextual keywords](#contextual-keywords-ext)).
+- **pikslide additions.** Rules and alternatives marked `(* ext *)` are
+  pikslide's own additions. **They are a proposal and are not implemented
+  yet**; the current parser rejects them. Prose marked `(ext)` likewise
+  describes an addition that is not implemented yet. pikslide is its own
+  language ([spec.md](spec.md) §2): it starts from pikchr's grammar and
+  departs from it where its design calls for it. Every difference is listed
+  in [Differences from pikchr](#differences-from-pikchr), at the end.
 
 ## Notation
 
@@ -58,7 +59,7 @@ EOL             ::= NEWLINE | ";"
 STRING          ::= '"' { not-quote-or-backslash | "\" any } '"'
 
 NUMBER          ::= decimal [ unit ]
-                   | "0" ( "x" | "X" ) { hexdigit }        (* no unit; a colour or plain number *)
+                   | "0" ( "x" | "X" ) { hexdigit }        (* no unit; a colour literal (ext) *)
 decimal         ::= ( digit { digit } [ "." { digit } ] | "." digit { digit } )
                     [ ( "e" | "E" ) [ "+" | "-" ] digit { digit } ]
 unit            ::= "in" | "cm" | "mm" | "pt" | "px" | "pc"
@@ -88,12 +89,11 @@ Notes:
 
 - **Lengths are inches.** A `NUMBER` with a unit is converted to inches
   (`px` = 1/96 in, `pt` = 1/72 in, `pc` = 1/6 in, `cm` = 1/2.54 in). A bare
-  number is already inches. A hex number is taken as-is, which is what makes
-  `fill 0xff0000` work.
+  number is already inches. A hex number is a colour literal (ext).
 - **`ID` vs `PLACENAME`.** An identifier starting with a lowercase letter is
   looked up first among the keywords, then among `CLASSNAME`s, and is an
   `ID` otherwise. An identifier starting with an uppercase letter is always a
-  `PLACENAME`: an object label or a colour name.
+  `PLACENAME`: an object label.
 - **The `.` token.** The lexer looks at what follows a `.` and yields one of
   four tokens, all written `"."` in the grammar below: before a lowercase
   edge/`start`/`end` keyword (`.e`, `.start`), before `x`/`y` (`.x`), before
@@ -117,8 +117,7 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
 ```
 
 - The macro name is an `ID`, so it starts with a **lowercase** letter
-  (`define box2 { … }` works; `define Box2 { … }` does not). `#define` is
-  *not* the syntax: `#` starts a comment.
+  (`define box2 { … }`).
 - The `(` of an invocation must touch the name. `pair (a)` invokes `pair`
   with no arguments, then continues with `(a)`.
 - Inside the body, `$1`…`$9` are the arguments; up to nine are allowed.
@@ -135,7 +134,7 @@ narrower start symbol:
 ```
 include-file    ::= [ include-item { EOL include-item } ]      (* ext *)
 
-include-item    ::= lvalue ASSIGN rvalue                        (* fill = …, boxwid = 1.2 *)
+include-item    ::= lvalue ASSIGN value                         (* fill = …, boxwid = 1.2 *)
                    | "include" STRING
                    | (* empty *)
 ```
@@ -146,6 +145,12 @@ appear. Anything else in an included file — an object, a label, a
 never place anything. Path resolution, containment and cycle rules are in
 [spec.md §3.6](spec.md#36-shared-definitions-include).
 
+The **prelude** is read the same way, as an implicit `include-file` before
+the document. It defines the colour names, the built-in default variables
+(`boxwid`, `linewid`, …) and the text sizes ([spec.md](spec.md) §3.7). A
+template's settings file ([spec.md](spec.md) §3.8) is read the same way,
+after the prelude.
+
 ## Document
 
 ```
@@ -154,7 +159,7 @@ document        ::= statement-list
 statement-list  ::= statement { EOL statement }
 
 statement       ::= direction
-                   | lvalue ASSIGN rvalue
+                   | lvalue ASSIGN value             (* value: ext *)
                    | PLACENAME ":" unnamed-statement
                    | PLACENAME ":" position
                    | unnamed-statement
@@ -166,6 +171,7 @@ statement       ::= direction
 direction       ::= "up" | "down" | "left" | "right"
 
 lvalue          ::= ID | "fill" | "color" | "thickness"
+                   | "small" | "medium" | "large"    (* ext: the text sizes *)
 
 print-item      ::= "fill" | "color" | "thickness" | STRING | rvalue
 ```
@@ -196,7 +202,7 @@ text-flag       ::= "center" | "ljust" | "rjust" | "above" | "below"
 ```
 
 `preset-name` allows `CLASSNAME` because some preset names (`ellipse`,
-`diamond`, `line`, `arc`) are also pikchr class names and lex as such.
+`diamond`, `line`, `arc`) are also class names and lex as such.
 
 An `attribute` list may optionally start with one leading `relexpr` and
 no keyword — e.g. the `150%` in `arrow 150%` — meaning "move this far in
@@ -243,30 +249,40 @@ moving yet.
 ## Colours
 
 ```
-color-value     ::= theme-color                      (* ext *)
+value           ::= STRING                           (* ext *)
+                   | color-value
+
+color-value     ::= color-base [ ( "lighter" | "darker" ) expr "%" ]     (* ext *)
+
+color-base      ::= "theme" STRING                   (* ext *)
+                   | "none" | "off"                  (* ext *)
                    | rvalue
 
-rvalue          ::= PLACENAME                        (* a colour name, unless followed by "." *)
-                   | expr
-
-theme-color     ::= THEME-SLOT [ ( "lighter" | "darker" ) expr "%" ]     (* ext *)
-
-THEME-SLOT      ::= "accent1" | "accent2" | "accent3" | "accent4"
-                   | "accent5" | "accent6"
-                   | "text1" | "text2" | "bg1" | "bg2"
-                   | "link" | "followed"             (* ext: lexed as ID, see below *)
+rvalue          ::= expr                             (* a colour name is an ID (ext) *)
 ```
 
-A colour is an ordinary number: a 24-bit RGB value. `fill 0xff0000`,
-`fill Red`, `fill red` and `fill lightblue` all denote such a number; the
-CSS colour names live in `pikslide.pik.colors` and are matched
-case-insensitively. A lowercase name such as `lightblue` lexes as an `ID`,
-so the layout stage checks the colour table before treating it as a
-variable. `"none"` and `"off"` mean *no colour*.
+A colour is a value of its own type, distinct from a number (ext). It is a hex
+literal (`0xff0000`), a theme colour (`theme "accent1"`), `none` or `off`, or
+the value of a variable that holds one. `lighter` and `darker` apply to any
+colour. The names of the theme's slots (`accent1`, `text1`, …) are ordinary
+variables defined by the prelude, not words of the language: the language has
+only `theme`, which takes a slot name as a string, so the set of slots is data
+([spec.md](spec.md) §3.3).
 
-A `theme-color` is **not a number**. It is accepted only as the direct
-operand of `fill`/`color`; it cannot be assigned to a variable, used in
-arithmetic, or printed.
+Colour names are ordinary variables (`ID`) defined by the prelude, which is
+read as an `include-file` before the document (ext; see [spec.md](spec.md)
+§3.7). `red`, `lightblue` and the other CSS names can be overridden
+(`red = 0xcc0000`) and added to, and are lowercase like every variable. The
+words `none` and `off` mean *no colour* and are reserved. An undefined name is
+an error.
+
+A variable can hold a colour (`primary = accent1 lighter 60%`, then
+`box fill primary`); arithmetic on a colour (`primary + 1`) is an error.
+
+A variable can also hold a string (`typeface = "BIZ UDPゴシック"`; ext). A
+string is not a number and cannot be used in an expression. Strings serve the
+template's settings ([spec.md](spec.md) §3.8); a string variable is not
+accepted as the text of an object.
 
 ## Expressions
 
@@ -334,43 +350,38 @@ ambiguity pikchr's LALR(1) table resolves deterministically with
 1-token lookahead; a hand-written recursive-descent parser has to fall
 back to bounded backtracking for it instead.
 
-## Contextual keywords (ext)
+## Reserved words (ext)
 
-The extensions add words that are not reserved. Each is recognised only in
-the one position given below, and only where the pikchr core has no valid
-reading of that token sequence:
+The additions introduce these words. They are ordinary reserved words, like
+the other keywords: they cannot be used as variable or macro names.
 
-| Word | Recognised as | Only when |
-|---|---|---|
-| `shape` | object class, followed by a `preset-name` | at the start of a `basetype`, and the next token is not `ASSIGN` |
-| `image` | object class, followed by a `STRING` | at the start of a `basetype`, and the next token is not `ASSIGN` |
-| `include` | statement, followed by a `STRING` | at the start of a statement, and the next token is a `STRING` (so `include = 1` stays an assignment) |
-| `alt` | attribute, followed by a `STRING` | inside an attribute list |
-| `major`, `medium`, `large` | text flag | directly after a `STRING` |
-| `accent1`…`accent6`, `text1`, `text2`, `bg1`, `bg2`, `link`, `followed` | `THEME-SLOT` | as the operand of `fill`/`color`, and **no variable of that name is defined** |
-| `lighter`, `darker` | theme-colour modifier | directly after a `THEME-SLOT` |
-
-So `shape = 3` stays an assignment and `accent1 = 0xff0000` followed by
-`box fill accent1` keeps meaning that variable: **a user-defined variable
-always beats an extension word.** A file that uses no extension parses
-identically under the core grammar alone; `pikslide --pikchr` is meant to
-check exactly that.
+| Word | Used for |
+|---|---|
+| `shape`, `image` | object classes |
+| `include` | the include statement |
+| `alt` | an attribute of `image` |
+| `major`, `medium`, `large` | text flags |
+| `theme` | builds a theme colour from a slot name, `theme "accent1"` |
+| `lighter`, `darker` | colour modifiers |
+| `none`, `off` | the *no colour* value |
+| `connector` | reserved for a future object class ([spec.md](spec.md) §3.2); not used yet |
 
 Semantic constraints the grammar cannot express (each is an error):
 
 - a statement in an included file that is not an `include-item`;
 - `alt` on anything other than an `image`;
-- a theme colour used anywhere but as the operand of `fill`/`color`;
-- a `preset-name` that is not a known OOXML preset geometry.
+- arithmetic on a colour (`primary + 1`);
+- a `preset-name` that is not a known OOXML preset geometry;
+- a `theme` string that names no known slot;
+- an unknown colour name.
 
-A name that merely looks like a theme slot but is not one (`accent7`) is
-not special: it follows the ordinary variable rule and fails as an
-undefined variable.
+A name that merely looks like a theme slot but is not one (`accent7`) is an
+ordinary name and fails as an undefined variable.
 
-## Meaning of the core constructs
+## Meaning of the constructs
 
-This is a summary of the pikchr semantics that pikslide's layout stage
-implements (`src/pikslide/pik/layout.py`); it is not exhaustive.
+This summarises what the layout stage (`src/pikslide/pik/layout.py`) does; it
+is not exhaustive.
 
 **Placement.** There is a *current direction* (initially `right`). Each
 object is placed so that its entry edge — the edge opposite the current
@@ -406,8 +417,8 @@ or through a block (`Outer.Inner`), and points on them by edge (`Web.ne`,
 **Lines are geometry.** `line`, `arrow`, `spline` and `arc` are drawn at
 fixed coordinates. They are never attached to the objects they touch, in the
 language or in any output format. A link between two named objects is a
-different concept: it is planned as a separate `connector` object class and
-is not part of this grammar (see [spec.md](spec.md) §3.2).
+different concept, planned as a separate `connector` object class (see
+[spec.md](spec.md) §3.2).
 
 **Attributes.** `width`/`height`/`radius`/`diameter`/`thickness` set a
 size (a `relexpr` with `%` is a percentage of the current value);
@@ -421,20 +432,45 @@ for drawing below `X` (parsed, not yet applied).
 
 **Text.** Each `STRING` is a line of text on the object. Placement flags
 are `center`, `ljust`, `rjust`, `above`, `below`, and `aligned` (rotate
-along a line); style flags are `bold`, `italic`, `mono`. Size flags: in
-pikchr `big`/`small` scale the font by ×1.25/×0.8, and that is what the code
-does today. pikslide **replaces this** with three fixed sizes (ext, not yet
-implemented): `small` = 9 pt, `medium` = 10.5 pt (the default), `large` or
-`big` = 12 pt; the last size flag on a string wins. See
-[spec.md](spec.md) §3.3.
+along a line); style flags are `bold`, `italic`, `mono`. Size flags select
+one of three sizes (ext): `small`, `medium` (the default), and `large` or
+`big`. Their values are set by assigning to the words themselves, as
+`fill`, `color` and `thickness` set theirs; the prelude gives `small = 9pt`,
+`medium = 10.5pt` and `large = 12pt`. The last size flag on a string wins.
+See [spec.md](spec.md) §3.3.
 
 **Variables.** `name = expr` (and `+=`, `-=`, `*=`, `/=`; dividing by zero
-leaves the value unchanged) assigns a number. The built-in variables above
-are ordinary variables and can be reassigned to change every later default;
-`fill`, `color` and `thickness` set the defaults for later objects. `print`
-and `assert` are parsed but have no effect on the drawing.
+leaves the value unchanged) assigns a number, a colour or a string (ext). The built-in
+variables above are ordinary variables and can be reassigned to change every
+later default; they are defined by the prelude (ext; see [spec.md](spec.md)
+§3.7). `fill`, `color` and `thickness` set the defaults for later objects, and
+`small`, `medium` and `large` (ext) set the three text sizes. `print` and
+`assert` are parsed but have no effect on the drawing.
 
-## Known deviations from pikchr's own grammar
+## Differences from pikchr
+
+pikslide starts from pikchr's grammar and departs from it where its design
+calls for it ([spec.md](spec.md) §2). This is the complete list; the sections
+above describe pikslide only. Rows marked (ext) are not implemented yet.
+
+| Topic | pikchr | pikslide |
+|---|---|---|
+| Text size | `big` ×1.25 and `small` ×0.8 of the viewer's font size; repeating a flag (`big big`) compounds | three sizes in points, `small` / `medium` (the default) / `large` or `big`, set by assigning to the words themselves, with values from the prelude; the last size flag wins (ext) |
+| Variable values | numbers only | numbers, colours and strings (ext) |
+| Colour type | a colour is a number (24-bit RGB) | a colour is a value of its own type; arithmetic on a colour is an error (ext) |
+| Hex literals | plain numbers | colour literals (ext) |
+| Colour names | a fixed table in the code, matched case-insensitively (`Red`, `red`); a variable of the same name takes precedence | ordinary lowercase variables defined by the prelude, overridable; a capitalised name is an object label (ext) |
+| Theme colours | none | `theme "accent1"`; the slot names are variables defined by the prelude; `lighter` / `darker` apply to any colour (ext) |
+| Built-in defaults (`boxwid`, `linewid`, …) | a table in the code | variables defined by the prelude (ext) |
+| Prelude | none | a file of definitions read before every program (ext) |
+| `include` | none | brings in definitions only (ext) |
+| Object classes | `arc arrow box circle cylinder diamond dot ellipse file line move oval spline text` | adds `shape` and `image` (ext) |
+| Attributes and text flags | as in the grammar above | adds `alt` and the text flags `major`, `medium`, `large` (ext) |
+| Reserved words | pikchr's keywords | adds the words in [Reserved words](#reserved-words-ext); a pikchr program that uses one as a name (`shape = 3`) does not parse (ext) |
+| Connectors | none | the word `connector` is reserved for a future class (ext) |
+
+Where pikslide inherits pikchr's behaviour, and the inheritance is worth
+knowing:
 
 - pikchr's grammar also lists `expr "on" "heading" ...` position forms,
   but `"on"` isn't a keyword in pikchr's own tokenizer

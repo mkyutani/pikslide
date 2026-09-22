@@ -291,14 +291,66 @@ class Token:
     line: int
     code: object = None   # eCode: sub-operator for ASSIGN, direction id, fn name, ordinal...
     edge: str | None = None  # eEdge: compass/edge tag for EDGEPT-like tokens
+    file: str | None = None
+    """Which file this token came from (docs/spec.md SS5: an error names
+    the file it's actually in) -- `None` for the main source text, an
+    included file's resolved path otherwise. Set once, after lexing
+    (`Lexer.tokenize()`'s own `self.file`, the same for every token in one
+    lex pass), not per-token at construction."""
+
+
+def column_at(text: str, pos: int) -> int:
+    """1-based column for a character offset `pos` into `text` (docs/
+    spec.md SS5). `pos` is always relative to whichever text actually
+    produced the token at that offset -- the main source, or (for a
+    token from an `include`d file) that file's own text, never the outer
+    file's -- see `Token.file`."""
+    line_start = text.rfind("\n", 0, pos) + 1  # 0 if no earlier newline (rfind -1, +1)
+    return pos - line_start + 1
 
 
 class PikSyntaxError(Exception):
-    def __init__(self, message: str, line: int, text: str = ""):
+    def __init__(self, message: str, line: int, text: str = "", pos: int = 0, file: str | None = None):
         super().__init__(f"line {line}: {message}" + (f" near {text!r}" if text else ""))
         self.message = message
         self.line = line
         self.text = text
+        self.pos = pos
+        """Character offset into whichever text is at `.file` (the main
+        source if `None`) -- for `column_at()`, at display time."""
+        self.file = file
+        """The file this error is actually in (docs/spec.md SS5), when it
+        differs from the main source being parsed -- an included file's
+        resolved path. `None` means the main source itself."""
+
+
+def format_syntax_error(err: PikSyntaxError, main_path: str, main_text: str) -> str:
+    """`file:line:col: message`, the source line, and a caret under the
+    error position (docs/spec.md SS5): "every error carries file:line:
+    column, the source line, and a caret; the file is the included one
+    when the error is inside an include". `err.file`, when set, is read
+    again here for its own source line -- not cached anywhere, since a
+    diagnostic is the rare path, not a hot one.
+
+    `main_path` is only a display name for `err.file is None` -- for a
+    Markdown source, line/column are still relative to the *extracted
+    fenced block*, not the .md file's own lines (pre-existing, since
+    parsing already only ever saw the block's own text, not the file's)."""
+    if err.file is None:
+        path, text = main_path, main_text
+    else:
+        path = err.file
+        try:
+            text = open(path, encoding="utf-8").read()
+        except OSError:
+            text = ""
+    col = column_at(text, err.pos) if text else 1
+    header = f"{path}:{err.line}:{col}: {err.message}" + (f" (near {err.text!r})" if err.text else "")
+    lines = text.split("\n")
+    source_line = lines[err.line - 1] if text and 0 < err.line <= len(lines) else None
+    if source_line is None:
+        return header
+    return f"{header}\n{source_line}\n{' ' * (col - 1)}^"
 
 
 def unescape_string(raw: str) -> str:
@@ -355,9 +407,14 @@ class Lexer:
     This does not perform macro expansion; see :mod:`pikslide.pik.macros`.
     """
 
-    def __init__(self, text: str):
+    def __init__(self, text: str, file: str | None = None):
         self.text = text
         self.n = len(text)
+        self.file = file
+        """Which file `text` came from (docs/spec.md SS5) -- `None` for
+        the main source; an included file's resolved path otherwise. Set
+        on every token this lexer produces, and on any PikSyntaxError it
+        raises."""
 
     def tokenize(self) -> list[Token]:
         out: list[Token] = []
@@ -366,8 +423,11 @@ class Lexer:
         while i < self.n:
             tok, length, _ = self._lex_one(i, line)
             if tok.type == TokType.ERROR:
-                raise PikSyntaxError("unrecognized token", line, self.text[i : i + max(length, 1)])
+                raise PikSyntaxError(
+                    "unrecognized token", line, self.text[i : i + max(length, 1)], pos=i, file=self.file
+                )
             if tok.type != TokType.WHITESPACE:
+                tok.file = self.file
                 out.append(tok)
             # Count newlines in the consumed span rather than trusting a
             # per-branch "next line" value: '{...}' code blocks, block
@@ -404,7 +464,7 @@ class Lexer:
                 if cj == '"':
                     return Token(TokType.STRING, z[i : j + 1], i, line), j + 1 - i, line
                 j += 1
-            raise PikSyntaxError("unterminated string literal", line, z[i : min(j, n)])
+            raise PikSyntaxError("unterminated string literal", line, z[i : min(j, n)], pos=i, file=self.file)
 
         if c in " \t\f\r":
             j = i + 1
@@ -425,7 +485,7 @@ class Lexer:
                     j += 1
                 if j + 1 < n:
                     return Token(TokType.WHITESPACE, z[i : j + 2], i, line), j + 2 - i, line
-                raise PikSyntaxError("unterminated block comment", line)
+                raise PikSyntaxError("unterminated block comment", line, pos=i, file=self.file)
             if i + 1 < n and z[i + 1] == "/":
                 j = i + 2
                 while j < n and z[j] != "\n":
@@ -500,7 +560,7 @@ class Lexer:
                         depth -= 1
                 j += length
             if depth != 0:
-                raise PikSyntaxError("unterminated macro code block", line)
+                raise PikSyntaxError("unterminated macro code block", line, pos=i, file=self.file)
             return Token(TokType.CODEBLOCK, z[i:j], i, line), j - i, line
 
         if c == "&":

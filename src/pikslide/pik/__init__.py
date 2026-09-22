@@ -8,6 +8,6 @@ into PowerPoint objects, SVG, and other output formats.
 from . import ast
 from .dump import dump
 from .parser import parse
-from .tokens import PikSyntaxError
+from .tokens import PikSyntaxError, format_syntax_error
 
-__all__ = ["ast", "parse", "dump", "PikSyntaxError"]
+__all__ = ["ast", "parse", "dump", "PikSyntaxError", "format_syntax_error"]

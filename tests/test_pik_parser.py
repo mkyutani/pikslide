@@ -556,6 +556,62 @@ def test_variable_from_an_included_file_cannot_be_shadowed_by_a_later_define(tmp
 
 
 # ---------------------------------------------------------------------------
+# Diagnostics: file/line/column (docs/spec.md SS5, ext)
+# ---------------------------------------------------------------------------
+
+
+def test_syntax_error_in_the_main_file_has_no_file_set():
+    with pytest.raises(PikSyntaxError) as exc:
+        parse('"unterminated\n')
+    assert exc.value.file is None  # None means "the main source", docs/pik/tokens.py Token.file
+
+
+def test_syntax_error_column_points_at_the_offending_character():
+    with pytest.raises(PikSyntaxError) as exc:
+        parse('box\n"unterminated\n')
+    from pikslide.pik.tokens import column_at
+
+    assert exc.value.line == 2
+    assert column_at('box\n"unterminated\n', exc.value.pos) == 1  # the opening quote
+
+
+def test_syntax_error_inside_an_include_names_the_included_file(tmp_path: Path):
+    (tmp_path / "bad.pik").write_text('box "oops"\n', encoding="utf-8")
+    with pytest.raises(PikSyntaxError) as exc:
+        parse('include "bad.pik"\nbox\n', base_dir=str(tmp_path))
+    assert exc.value.file == str(tmp_path / "bad.pik")
+    assert exc.value.line == 1  # bad.pik's own line 1, not the including file's line 1
+
+
+def test_syntax_error_inside_a_nested_include_names_the_deepest_file(tmp_path: Path):
+    (tmp_path / "mid.pik").write_text('include "deep.pik"\n', encoding="utf-8")
+    (tmp_path / "deep.pik").write_text('box "oops"\n', encoding="utf-8")
+    with pytest.raises(PikSyntaxError) as exc:
+        parse('include "mid.pik"\nbox\n', base_dir=str(tmp_path))
+    assert exc.value.file == str(tmp_path / "deep.pik")
+
+
+def test_format_syntax_error_shows_the_right_files_own_source_line(tmp_path: Path):
+    from pikslide.pik import format_syntax_error
+
+    (tmp_path / "bad.pik").write_text('box "oops"\n', encoding="utf-8")
+    main_text = 'include "bad.pik"\nbox\n'
+    with pytest.raises(PikSyntaxError) as exc:
+        parse(main_text, base_dir=str(tmp_path))
+    formatted = format_syntax_error(exc.value, "main.pik", main_text)
+    assert formatted.startswith(str(tmp_path / "bad.pik") + ":1:1:")
+    assert 'box "oops"' in formatted  # bad.pik's own line, not main.pik's
+
+
+def test_missing_include_file_error_still_names_the_including_file(tmp_path: Path):
+    # The include statement itself is in the *including* file, even though
+    # the target doesn't exist -- distinct from test_syntax_error_inside_an_include*.
+    with pytest.raises(PikSyntaxError) as exc:
+        parse('include "nope.pik"\nbox\n', base_dir=str(tmp_path))
+    assert exc.value.file is None  # the main source, not "nope.pik" (which was never read)
+
+
+# ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
 

@@ -157,9 +157,12 @@ class Parser:
 
     def _error(self, message: str):
         t = self.peek()
-        line = t.line if t is not None else (self.toks[-1].line if self.toks else 0)
+        last = self.toks[-1] if self.toks else None
+        line = t.line if t is not None else (last.line if last is not None else 0)
         text = t.text if t is not None else ""
-        raise PikSyntaxError(message, line, text)
+        pos = t.pos if t is not None else (last.pos if last is not None else 0)
+        file = t.file if t is not None else (last.file if last is not None else None)
+        raise PikSyntaxError(message, line, text, pos=pos, file=file)
 
     def _starts_expr(self) -> bool:
         return self.at(*_EXPR_START)

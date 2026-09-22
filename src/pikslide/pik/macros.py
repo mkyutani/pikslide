@@ -57,16 +57,24 @@ def _prelude_variable_names() -> frozenset[str]:
     return _prelude_var_names_cache
 
 
-def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[str], line: int) -> str:
+def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[str], path_tok: Token) -> str:
     """Resolve an `include "path"` (docs/spec.md SS3.6): relative to
     `current_dir` (the including file's own directory) first, then to
     each `include_paths` entry in order.
 
     Rejects an absolute path, and any resolution that escapes its own
     base directory: a diagram may be written by an LLM, and must not be
-    able to reach, or reveal the existence of, arbitrary local files."""
+    able to reach, or reveal the existence of, arbitrary local files.
+
+    `path_tok` (the `include` statement's own STRING token) supplies
+    `line`/`pos`/`file` for the error (docs/spec.md SS5): this error is
+    about the `include` line itself, in whichever file contains it --
+    which, for a nested `include`, is `path_tok.file`, not necessarily
+    the outermost source (`path_tok` already carries the right one, set
+    when *its own* file was lexed)."""
+    line, pos, file = path_tok.line, path_tok.pos, path_tok.file
     if os.path.isabs(raw_path) or raw_path.startswith("~"):
-        raise PikSyntaxError(f"include path must be relative, not {raw_path!r}", line, raw_path)
+        raise PikSyntaxError(f"include path must be relative, not {raw_path!r}", line, raw_path, pos=pos, file=file)
     tried = []
     for base_dir in (current_dir, *include_paths):
         base = os.path.realpath(base_dir)
@@ -77,10 +85,12 @@ def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[s
         if os.path.isfile(resolved):
             return resolved
         tried.append(base_dir)
-    raise PikSyntaxError(f"include file not found: {raw_path!r} (tried: {', '.join(tried)})", line, raw_path)
+    raise PikSyntaxError(
+        f"include file not found: {raw_path!r} (tried: {', '.join(tried)})", line, raw_path, pos=pos, file=file
+    )
 
 
-def _validate_definitions_only(tokens: list[Token], source_desc: str) -> None:
+def _validate_definitions_only(tokens: list[Token]) -> None:
     """Check that `tokens` -- an included file's own already-expanded
     output -- match the include-file grammar (docs/grammar.md, Includes):
     each EOL-separated statement must be `lvalue ASSIGN ...`. `define`
@@ -89,7 +99,10 @@ def _validate_definitions_only(tokens: list[Token], source_desc: str) -> None:
 
     Anything else -- an object, a label, a direction, `print`, `assert`
     -- is an error, so an include can change *definitions* but never
-    place anything."""
+    place anything. The offending token's own `.file` (docs/spec.md SS5)
+    names the file with the violation directly -- correct even for a
+    deeper nested `include`, since every token here already carries
+    whichever file its own lexer pass actually stamped it with."""
     i, n = 0, len(tokens)
     while i < n:
         if tokens[i].type == TokType.EOL:
@@ -102,9 +115,9 @@ def _validate_definitions_only(tokens: list[Token], source_desc: str) -> None:
                 i += 1
             continue
         raise PikSyntaxError(
-            f"{source_desc}: only definitions are allowed in an included file "
+            "only definitions are allowed in an included file "
             "(an assignment, or define) -- not an object, a label, or anything else",
-            tokens[i].line, tokens[i].text,
+            tokens[i].line, tokens[i].text, pos=tokens[i].pos, file=tokens[i].file,
         )
 
 
@@ -149,8 +162,11 @@ def _expand(
     include_stack: tuple[str, ...],
 ) -> None:
     if depth > MAX_MACRO_DEPTH:
-        line = tokens[start].line if start < end else 0
-        raise PikSyntaxError("include/macro nesting too deep", line)
+        tok = tokens[start] if start < end else None
+        raise PikSyntaxError(
+            "include/macro nesting too deep", tok.line if tok else 0,
+            pos=tok.pos if tok else 0, file=tok.file if tok else None,
+        )
 
     i = start
     while i < end:
@@ -167,15 +183,17 @@ def _expand(
         if tok.type == TokType.INCLUDE and i + 1 < end and tokens[i + 1].type == TokType.STRING:
             path_tok = tokens[i + 1]
             raw_path = unescape_string(path_tok.text)
-            resolved = _resolve_include_path(raw_path, current_dir, include_paths, path_tok.line)
+            resolved = _resolve_include_path(raw_path, current_dir, include_paths, path_tok)
             if resolved in include_stack:
                 chain = " -> ".join((*include_stack, resolved))
-                raise PikSyntaxError(f"include cycle: {chain}", path_tok.line, raw_path)
+                raise PikSyntaxError(f"include cycle: {chain}", path_tok.line, raw_path, pos=path_tok.pos, file=path_tok.file)
             try:
                 included_text = open(resolved, encoding="utf-8").read()
             except OSError as e:
-                raise PikSyntaxError(f"cannot read included file: {e}", path_tok.line, raw_path) from e
-            included_tokens = Lexer(included_text).tokenize()
+                raise PikSyntaxError(
+                    f"cannot read included file: {e}", path_tok.line, raw_path, pos=path_tok.pos, file=path_tok.file
+                ) from e
+            included_tokens = Lexer(included_text, file=resolved).tokenize()
             out_start = len(state.out)
             _expand(
                 included_tokens, 0, len(included_tokens), None, state, depth + 1,
@@ -183,7 +201,7 @@ def _expand(
                 include_paths=include_paths,
                 include_stack=(*include_stack, resolved),
             )
-            _validate_definitions_only(state.out[out_start:], resolved)
+            _validate_definitions_only(state.out[out_start:])
             i += 2
             continue
 
@@ -201,7 +219,8 @@ def _expand(
             # `legend = 5` expands to `fill = 5` with no error at all.
             if name in _prelude_variable_names() or name in _scan_assigned_names(state.out):
                 raise PikSyntaxError(
-                    f"'{name}' is already a variable; a macro cannot shadow it", tokens[i + 1].line, name
+                    f"'{name}' is already a variable; a macro cannot shadow it", tokens[i + 1].line, name,
+                    pos=tokens[i + 1].pos, file=tokens[i + 1].file,
                 )
             body = tokens[i + 2].text[1:-1]  # strip the outer { }
             state.macros[name] = _Macro(name, body)
@@ -216,11 +235,12 @@ def _expand(
             nxt = tokens[i + 1] if i + 1 < end else None
             if nxt is not None and nxt.type == TokType.ASSIGN:
                 raise PikSyntaxError(
-                    f"'{tok.text}' is already a macro; it cannot be used as a variable", tok.line, tok.text
+                    f"'{tok.text}' is already a macro; it cannot be used as a variable", tok.line, tok.text,
+                    pos=tok.pos, file=tok.file,
                 )
             mac = state.macros[tok.text]
             if mac.in_use:
-                raise PikSyntaxError(f"recursive macro definition: {tok.text}", tok.line)
+                raise PikSyntaxError(f"recursive macro definition: {tok.text}", tok.line, pos=tok.pos, file=tok.file)
             j = i + 1
             args: list[list[Token]] | None = None
             if j < end and tokens[j].type == TokType.LP and tokens[j].pos == tok.pos + len(tok.text):
@@ -237,7 +257,7 @@ def _expand(
 
         state.out.append(tok)
         if len(state.out) > TOKEN_LIMIT:
-            raise PikSyntaxError("script is too complex", tok.line)
+            raise PikSyntaxError("script is too complex", tok.line, pos=tok.pos, file=tok.file)
         i += 1
 
 
@@ -280,10 +300,12 @@ def _parse_macro_args(
         current.append(t)
         i += 1
     else:
-        raise PikSyntaxError("unterminated macro argument list", tokens[lp_index].line)
+        lp = tokens[lp_index]
+        raise PikSyntaxError("unterminated macro argument list", lp.line, pos=lp.pos, file=lp.file)
 
     if len(args) > MAX_MACRO_ARGS:
-        raise PikSyntaxError("too many macro arguments - max 9", tokens[lp_index].line)
+        lp = tokens[lp_index]
+        raise PikSyntaxError("too many macro arguments - max 9", lp.line, pos=lp.pos, file=lp.file)
 
     resolved: list[list[Token]] = []
     for a in args:

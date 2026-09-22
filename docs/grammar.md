@@ -128,16 +128,16 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
   with no arguments, then continues with `(a)`.
 - Inside the body, `$1`…`$9` are the arguments; up to nine are allowed.
 - Recursion is an error; nesting is limited to 50 levels.
-- **A macro name must not already be a variable** (ext; not yet
-  implemented). A reserved word can never collide, since only an `ID`
-  can start a `macro-definition`, and no reserved word lexes as one. An
-  ordinary `ID` can: `define boxwid { 99 }` already fails today, but only
-  downstream and confusingly (`boxwid = 2` expands to `99 = 2`, a syntax
-  error at `99`, not at the real cause). Worse, `define legend { fill }`
-  then `legend = 5` does not fail at all — it silently expands to
-  `fill = 5`, changing the default fill colour instead of setting a
-  variable named `legend` (checked). Because a diagram may be written by
-  an LLM, and pikslide's prelude (§3.7) makes many more names
+- **A macro name must not already be a variable** (ext). A reserved word
+  can never collide, since only an `ID` can start a `macro-definition`,
+  and no reserved word lexes as one. An ordinary `ID` can: without this
+  check, `define boxwid { 99 }` would fail only downstream and
+  confusingly (`boxwid = 2` expands to `99 = 2`, a syntax error at `99`,
+  not at the real cause), and `define legend { fill }` then `legend = 5`
+  would not fail at all — it would silently expand to `fill = 5`,
+  changing the default fill colour instead of setting a variable named
+  `legend` (checked, before this guard existed). Because a diagram may be
+  written by an LLM, and pikslide's prelude (§3.7) makes many more names
   collision-prone than pikchr's own, this is checked at the `define`
   itself — against every variable already assigned by the prelude, a
   settings file, an earlier `include`, or earlier in the same
@@ -448,8 +448,8 @@ size (a `relexpr` with `%` is a percentage of the current value);
 stroke by 1.5/0.67, `solid` resets stroke and dashing, `invis` hides the
 outline; `cw`/`ccw` set an arc's direction; `<-`/`->`/`<->` add arrowheads;
 `fit` sizes the object to its text; `chop` shortens a line's ends to the
-outlines of the objects it joins; `close` closes a path; `behind X` asks
-for drawing below `X` (parsed, not yet applied).
+outlines of the objects it joins; `close` closes a path; `behind X` (ext)
+places the object immediately below `X` in z-order.
 
 **Text.** Each `STRING` is a line of text on the object. Placement flags
 are `center`, `ljust`, `rjust`, `above`, `below`, and `aligned` (rotate

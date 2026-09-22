@@ -25,8 +25,8 @@ slide sized to the diagram.
 (`shape`), images and icons (`image`), `include`, a prelude of built-in names,
 three fixed text sizes, per-template settings files, and insertion into an
 existing deck. The rules marked `(ext)` in [docs/grammar.md](docs/grammar.md)
-are the ones not implemented yet; [docs/spec.md](docs/spec.md) §8 lists
-everything that has to change.
+are the ones not implemented yet; [docs/implementation-plan.md](docs/implementation-plan.md)
+lists everything that has to change.
 
 ## How it works
 

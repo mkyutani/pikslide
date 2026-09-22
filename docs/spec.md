@@ -290,6 +290,13 @@ define card { rad 8px color text1 }
   the definitions-only check beyond the offending token. This matters
   because a diagram may be written by an LLM.
 - Cycles are an error; nesting is limited to 50 levels (as for macros).
+- **A macro cannot shadow a variable.** `define` and variable assignment
+  share the token-substitution pass, so a macro named after an existing
+  variable (a prelude colour or default, a settings-file name, or one
+  from an earlier `include`) would silently replace every later use of
+  that name, including as an assignment target. `define <name> { … }` is
+  an error when `<name>` is already a variable; see
+  [grammar.md](grammar.md), *Macros*.
 
 ### 3.7 The prelude
 
@@ -483,6 +490,7 @@ Humans and LLMs both need errors they can act on.
 - Unknown names (colour, theme slot, preset, image path, region) are
   **errors with suggestions**, not silent fallbacks. `--strict` turns
   warnings into errors.
+- A `define` naming an already-defined variable is an **error** (§3.6).
 - `--check` parses and lays out without writing; `--format json` emits
   diagnostics as JSON for tooling.
 
@@ -523,7 +531,7 @@ a large piece of work of its own.
 |---|---|---|
 | `pik/tokens.py` `CLASS_NAMES` | fixed 14 pikchr classes | reserved words `shape`, `image`, `include`, `alt`, `lighter`/`darker`, `major`, `medium`, `large`, `theme`, `none`/`off`, and `connector` (reserved for later) |
 | `pik/tokens.py` `Token`, `PikSyntaxError` | carry a line number only | carry the source file and column, so errors inside an `include` point at the right file |
-| `pik/macros.py` `expand_macros` | one source text, one macro table | resolve `include` in the same pass (shared macro table, definitions-only check, path containment, cycle/depth limits) |
+| `pik/macros.py` `expand_macros` | one source text, one macro table; a macro name can silently shadow an existing variable (checked: `define legend { fill }` then `legend = 5` expands to `fill = 5`) | resolve `include` in the same pass (shared macro table, definitions-only check, path containment, cycle/depth limits); a `define` whose name is already a variable is an error |
 | *(new)* theme reader | none | read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base |
 | `pik/layout.py` `_flatten` | flattens `[ ]` blocks, losing the tree | keep the hierarchy so groups can be written |
 | `pik/layout.py` `Shape.fill` / `color`, `_Ctx.vars` | colours are `float` RGB ints; variables hold numbers only | a colour type: `none` \| RGB \| theme colour + modifiers; variables can hold colours and strings; an unknown colour name is an error |

@@ -122,6 +122,20 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
   with no arguments, then continues with `(a)`.
 - Inside the body, `$1`…`$9` are the arguments; up to nine are allowed.
 - Recursion is an error; nesting is limited to 50 levels.
+- **A macro name must not already be a variable** (ext; not yet
+  implemented). A reserved word can never collide, since only an `ID`
+  can start a `macro-definition`, and no reserved word lexes as one. An
+  ordinary `ID` can: `define boxwid { 99 }` already fails today, but only
+  downstream and confusingly (`boxwid = 2` expands to `99 = 2`, a syntax
+  error at `99`, not at the real cause). Worse, `define legend { fill }`
+  then `legend = 5` does not fail at all — it silently expands to
+  `fill = 5`, changing the default fill colour instead of setting a
+  variable named `legend` (checked). Because a diagram may be written by
+  an LLM, and pikslide's prelude (§3.7) makes many more names
+  collision-prone than pikchr's own, this is checked at the `define`
+  itself — against every variable already assigned by the prelude, a
+  settings file, an earlier `include`, or earlier in the same
+  program — instead of only surfacing, unreliably, at each later use.
 
 ### Includes (ext)
 
@@ -439,6 +453,18 @@ one of three sizes (ext): `small`, `medium` (the default), and `large` or
 `fill`, `color` and `thickness` set theirs; the prelude gives `small = 9pt`,
 `medium = 10.5pt` and `large = 12pt`. The last size flag on a string wins.
 See [spec.md](spec.md) §3.3.
+
+**Why some added words are reserved and others aren't.** A word is
+reserved exactly when the grammar needs it as a literal token somewhere
+— an object class, a statement, an attribute, a text flag, a modifier —
+regardless of whether its *value* also comes from the prelude or a
+settings file. `small`/`medium`/`large` are reserved because they are
+text flags (`"Label" large`), not because their values are
+prelude-supplied; the same is true of `fill`/`color`/`thickness` in
+pikchr itself, which are attribute keywords *and* lvalues. Names that are
+never used as syntax — `content_left`, `layout`, `typeface`, `primary`,
+`accent1`, the CSS colour names, … — are ordinary `ID`s and are never
+reserved, however important their value is.
 
 **Variables.** `name = expr` (and `+=`, `-=`, `*=`, `/=`; dividing by zero
 leaves the value unchanged) assigns a number, a colour or a string (ext). The built-in

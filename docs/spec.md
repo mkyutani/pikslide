@@ -236,7 +236,7 @@ shape wedgeRectCallout "Note" fit
 ### 3.5 Images and icons: `image`
 
 ```pik
-Logo: image "logo.png" width 0.6in           # (proposed)
+Logo: image "logo.png" width 0.6in
       image "icons/db.svg" height 0.4in alt "Database"   # (proposed) SVG icon
 ```
 

@@ -1,3 +1,4 @@
+import os
 import sys
 
 from .markdown import MarkdownDiagramError, extract_pik_blocks
@@ -16,6 +17,10 @@ def main() -> None:
     out_path = args[1] if len(args) > 1 else None
     with open(path, encoding="utf-8") as f:
         text = f.read()
+    # An `image` object's path resolves against the source file's own
+    # directory (docs/spec.md SS3.5) -- for Markdown, that's the .md file
+    # itself, not some notional location of the extracted block.
+    base_dir = os.path.dirname(os.path.abspath(path))
 
     if path.endswith((".md", ".markdown")):
         try:
@@ -31,10 +36,10 @@ def main() -> None:
             if len(blocks) > 1 and block_out is None:
                 label = f'"{block.name}"' if block.name else f"{i} of {len(blocks)}"
                 print(f"--- block {label} ---")
-            _process(block.text, block_out)
+            _process(block.text, block_out, base_dir)
         return
 
-    _process(text, out_path)
+    _process(text, out_path, base_dir)
 
 
 def _numbered(path: str, i: int, total: int) -> str:
@@ -44,7 +49,7 @@ def _numbered(path: str, i: int, total: int) -> str:
     return f"{stem}-{i}.{ext}" if dot else f"{path}-{i}"
 
 
-def _process(text: str, out_path: str | None) -> None:
+def _process(text: str, out_path: str | None, base_dir: str = ".") -> None:
     try:
         doc = parse(text)
     except PikSyntaxError as e:
@@ -57,7 +62,7 @@ def _process(text: str, out_path: str | None) -> None:
 
     if out_path.endswith(".pptx"):
         try:
-            write_pptx(resolve_for_pptx(doc), out_path)
+            write_pptx(resolve_for_pptx(doc, base_dir=base_dir), out_path)
         except LayoutError as e:
             print(f"error: {e}", file=sys.stderr)
             raise SystemExit(1)

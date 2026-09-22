@@ -123,9 +123,8 @@ _EXPR_START = {
 }
 
 # Tokens that can start a `basetype` (docs/grammar.md, Objects): the
-# pikchr core (CLASSNAME/STRING/'[') plus pikslide's `shape` (ext). `image`
-# isn't wired in yet -- see docs/implementation-plan.md.
-_BASETYPE_START = {TokType.CLASSNAME, TokType.STRING, TokType.LB, TokType.SHAPE}
+# pikchr core (CLASSNAME/STRING/'[') plus pikslide's `shape`/`image` (ext).
+_BASETYPE_START = {TokType.CLASSNAME, TokType.STRING, TokType.LB, TokType.SHAPE, TokType.IMAGE}
 
 _OBJECT_START = {TokType.PLACENAME, TokType.THIS, TokType.NTH, TokType.LAST}
 
@@ -294,7 +293,11 @@ class Parser:
         if self.at(TokType.SHAPE):
             self.advance()
             return ast.ShapeBase(self.parse_preset_name())
-        self._error("expected an object class, a string, '[', or 'shape'")
+        if self.at(TokType.IMAGE):
+            self.advance()
+            path_tok = self.expect(TokType.STRING)
+            return ast.ImageBase(_unescape_string(path_tok.text))
+        self._error("expected an object class, a string, '[', 'shape', or 'image'")
 
     def parse_preset_name(self) -> str:
         # preset-name ::= ID | CLASSNAME (ext; docs/grammar.md, Objects) --
@@ -419,6 +422,11 @@ class Parser:
         if tt == TokType.BEHIND:
             self.advance()
             return ast.Behind(self.parse_object())
+
+        if tt == TokType.ALT:
+            self.advance()
+            text_tok = self.expect(TokType.STRING)
+            return ast.Alt(_unescape_string(text_tok.text))
 
         return None
 

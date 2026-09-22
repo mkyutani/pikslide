@@ -436,6 +436,26 @@ def test_shape_can_be_labeled():
 
 
 # ---------------------------------------------------------------------------
+# Images: `image` (docs/spec.md SS3.5)
+# ---------------------------------------------------------------------------
+
+
+def test_image_with_path_and_size():
+    doc = parse('image "logo.png" width 0.6in\n')
+    stmt = doc.statements[0]
+    assert stmt.base == ast.ImageBase("logo.png")
+    assert stmt.attributes[0] == ast.NumProperty("width", ast.RelExpr(abs=ast.Num(0.6)))
+
+
+def test_image_can_be_labeled():
+    doc = parse('Logo: image "icons/db.svg" height 0.4in alt "Database"\n')
+    stmt = doc.statements[0]
+    assert stmt.label == "Logo"
+    assert stmt.base == ast.ImageBase("icons/db.svg")
+    assert stmt.attributes[-1] == ast.Alt("Database")
+
+
+# ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
 

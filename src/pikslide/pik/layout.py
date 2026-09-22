@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import difflib
 import math
+import os
 from dataclasses import dataclass, field, replace
 from importlib import resources
 from typing import Protocol
@@ -55,6 +56,32 @@ class FontMetrics(Protocol):
     def line_height(self, flags: list[str] = ()) -> float:
         """Height, in inches, of one line of text at this flags' size."""
         ...
+
+
+class ImageMetrics(Protocol):
+    """Real image-dimension reading, for `image`'s aspect-ratio sizing
+    (docs/spec.md SS3.5) -- pluggable per renderer, the same way
+    FontMetrics is. Unlike text, there is no sensible flat estimate for an
+    image's aspect ratio without reading the file, so unlike
+    `_ApproxMetrics`, the default implementation (`_PILImageMetrics`,
+    below) does read it, with Pillow (already a hard dependency)."""
+
+    def size(self, path: str) -> tuple[float, float]:
+        """The image's natural (width, height) -- any consistent unit,
+        since only their ratio is used. `path` is already resolved
+        (absolute)."""
+        ...
+
+
+class _PILImageMetrics:
+    """Default ImageMetrics: opens the file directly with Pillow."""
+
+    def size(self, path: str) -> tuple[float, float]:
+        from PIL import Image
+
+        with Image.open(path) as img:
+            return float(img.width), float(img.height)
+
 
 N, NE, E, SE, S, SW, W, NW, C, END, START = "n", "ne", "e", "se", "s", "sw", "w", "nw", "c", "end", "start"
 
@@ -281,6 +308,11 @@ class Shape:
     sublist_names: dict[str, "Shape"] = field(default_factory=dict)
     preset: str | None = None
     """The OOXML preset name (docs/spec.md SS3.4), when `kind == "shape"`."""
+    image_path: str | None = None
+    """Resolved (absolute) path to the picture file, when `kind == "image"`
+    (docs/spec.md SS3.5)."""
+    alt_text: str | None = None
+    """An image's accessibility description, from `alt STRING`."""
 
     def offset(self, edge: str | None) -> tuple[float, float]:
         return _edge_offset(self, edge)
@@ -540,12 +572,19 @@ def default_text_sizes() -> dict[str, float]:
 
 
 class _Ctx:
-    def __init__(self, metrics: FontMetrics | None = None) -> None:
+    def __init__(
+        self,
+        metrics: FontMetrics | None = None,
+        image_metrics: ImageMetrics | None = None,
+        base_dir: str = ".",
+    ) -> None:
         self.vars: dict[str, PikValue] = {}
         self.scope_stack: list[dict[str, Shape]] = [{}]
         self.pool_stack: list[list[Shape]] = [[]]
         self.current: Shape | None = None
         self.metrics: FontMetrics = metrics if metrics is not None else _ApproxMetrics(self)
+        self.image_metrics: ImageMetrics = image_metrics if image_metrics is not None else _PILImageMetrics()
+        self.base_dir = base_dir
         _load_prelude(self)
 
     def lookup_name(self, path: list[str]) -> Shape | None:
@@ -662,6 +701,41 @@ def _resolve_preset_name(name: str) -> str:
     suggestions = difflib.get_close_matches(name, PRESET_NAMES.values(), n=3)
     hint = f"; did you mean {', '.join(suggestions)}?" if suggestions else ""
     raise LayoutError(f"unknown preset shape {name!r}{hint}")
+
+
+# Formats implemented so far (docs/spec.md SS3.5 also specifies SVG, for
+# icons -- not implemented yet, see docs/implementation-plan.md: it needs
+# an external rasteriser and hand-written XML, not just python-pptx's own
+# add_picture(), which raises TypeError on an .svg -- as does Pillow, the
+# way _PILImageMetrics.size() and python-pptx's own add_picture() both
+# read a raster image's dimensions, checked, with a confusing
+# PIL.UnidentifiedImageError instead of a clear pikslide one).
+_SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif"}
+
+
+def _resolve_image_path(raw_path: str, base_dir: str) -> str:
+    """Resolve an `image` object's path against `base_dir` (the source
+    file's own directory, docs/spec.md SS3.5), and check it exists and is
+    a format pikslide can read yet.
+
+    Rejects an absolute path or one that escapes `base_dir`, the same
+    containment `include` applies (docs/spec.md SS3.6) and for the same
+    reason: a diagram may be written by an LLM, and must not be able to
+    reach, or reveal the existence of, arbitrary local files."""
+    if os.path.isabs(raw_path) or raw_path.startswith(("~",)):
+        raise LayoutError(f"image path must be relative, not {raw_path!r}")
+    base = os.path.realpath(base_dir)
+    resolved = os.path.realpath(os.path.join(base, raw_path))
+    if os.path.commonpath([base, resolved]) != base:
+        raise LayoutError(f"image path escapes its source directory: {raw_path!r}")
+    if not os.path.isfile(resolved):
+        raise LayoutError(f"image file not found: {raw_path!r}")
+    ext = os.path.splitext(resolved)[1].lower()
+    if ext == ".svg":
+        raise LayoutError(f"SVG images are not supported yet: {raw_path!r}")
+    if ext not in _SUPPORTED_IMAGE_EXTENSIONS:
+        raise LayoutError(f"unsupported image format {ext!r}: {raw_path!r}")
+    return resolved
 
 
 def eval_place(place: ast.Place, ctx: _Ctx) -> tuple[float, float]:
@@ -852,6 +926,30 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     _apply_circle_constraint(shape)
 
 
+def _size_image(shape: Shape, ctx: _Ctx) -> None:
+    """Apply docs/spec.md SS3.5's sizing rule: both `width` and `height`
+    given -> stretched (already done by plain NumProperty application, and
+    needs no image read at all); one given -> the other follows the aspect
+    ratio; neither given -> fit inside boxwid x boxht, aspect preserved."""
+    if shape.w > 0.0 and shape.h > 0.0:
+        return
+    assert shape.image_path is not None
+    nat_w, nat_h = ctx.image_metrics.size(shape.image_path)
+    if nat_w <= 0.0 or nat_h <= 0.0:
+        raise LayoutError(f"image has no size: {shape.image_path}")
+    aspect = nat_w / nat_h
+    if shape.w > 0.0:
+        shape.h = shape.w / aspect
+    elif shape.h > 0.0:
+        shape.w = shape.h * aspect
+    else:
+        box_w, box_h = _var_number(ctx, "boxwid"), _var_number(ctx, "boxht")
+        if aspect > box_w / box_h:
+            shape.w, shape.h = box_w, box_w / aspect
+        else:
+            shape.w, shape.h = box_h * aspect, box_h
+
+
 # ---------------------------------------------------------------------------
 # Attribute application
 # ---------------------------------------------------------------------------
@@ -957,6 +1055,10 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         build.fit = True
     elif isinstance(attr, ast.Behind):
         pass  # z-ordering hint; not yet used by the renderers
+    elif isinstance(attr, ast.Alt):
+        if shape.kind != "image":
+            raise LayoutError("'alt' is only valid on an image")
+        shape.alt_text = attr.text
     elif isinstance(attr, ast.At):
         build.at = eval_position(attr.position, ctx)
         build.with_edge = C
@@ -1117,6 +1219,11 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
                       preset=_resolve_preset_name(base.preset))
         _init_class_defaults(shape, "shape", ctx)
         is_line = False
+    elif isinstance(base, ast.ImageBase):
+        shape = Shape(kind="image", name=None, cx=0.0, cy=0.0, w=0.0, h=0.0,
+                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["color"],
+                      image_path=_resolve_image_path(base.path, ctx.base_dir))
+        is_line = False
     else:
         classname = base.classname
         shape = Shape(kind=classname, name=None, cx=0.0, cy=0.0, w=0.0, h=0.0,
@@ -1151,7 +1258,9 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
     shape.out_dir = build.direction
 
     if not is_line:
-        if (shape.w <= 0.0 or shape.h <= 0.0) and shape.texts:
+        if shape.kind == "image":
+            _size_image(shape, ctx)
+        elif (shape.w <= 0.0 or shape.h <= 0.0) and shape.texts:
             _autosize_text(shape, ctx)
         ofst = shape.offset(with_edge)
         shape.cx = with_pos[0] - ofst[0]
@@ -1244,7 +1353,12 @@ def _flatten(shapes: list[Shape]) -> list[Shape]:
     return out
 
 
-def resolve_layout(doc: ast.Document, metrics: FontMetrics | None = None) -> LayoutResult:
+def resolve_layout(
+    doc: ast.Document,
+    metrics: FontMetrics | None = None,
+    image_metrics: ImageMetrics | None = None,
+    base_dir: str = ".",
+) -> LayoutResult:
     """Resolve a parsed pik :class:`~pikslide.pik.ast.Document` into concrete,
     ready-to-render geometry. See the module docstring for what this
     pragmatic layout engine does and does not faithfully reproduce.
@@ -1252,8 +1366,13 @@ def resolve_layout(doc: ast.Document, metrics: FontMetrics | None = None) -> Lay
     `metrics`, if given, is used to size "fit" objects from their actual
     text content instead of the built-in charwid/charht approximation --
     pass a renderer-specific FontMetrics (e.g. pptx_writer.PilFontMetrics)
-    to get "fit" sizes that track what will actually be drawn."""
-    ctx = _Ctx(metrics)
+    to get "fit" sizes that track what will actually be drawn.
+
+    `base_dir` is the source file's own directory (docs/spec.md SS3.5): an
+    `image` object's path is resolved against it, and rejected if it
+    escapes it. `image_metrics`, if given, overrides how an image's
+    natural size is read (default: Pillow, directly)."""
+    ctx = _Ctx(metrics, image_metrics, base_dir)
     shapes, _direction, _bbox = _layout_statements(doc.statements, DIR_RIGHT, ctx)
     flat = _flatten(shapes)
     if flat:

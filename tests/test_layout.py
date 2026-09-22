@@ -283,3 +283,97 @@ def test_shape_supports_edges_and_same_like_box():
     assert b.w == pytest.approx(a.w)
     assert b.h == pytest.approx(a.h)
     assert b.cx == pytest.approx(a.edge_point("e")[0] + 4)
+
+
+# ---------------------------------------------------------------------------
+# Images: `image` (docs/spec.md SS3.5)
+# ---------------------------------------------------------------------------
+
+
+def _make_image(dir_path: pathlib.Path, name: str = "logo.png", size: tuple[int, int] = (400, 200)) -> None:
+    from PIL import Image
+
+    Image.new("RGB", size, "white").save(dir_path / name)
+
+
+def test_image_with_both_dimensions_is_stretched(tmp_path: pathlib.Path):
+    _make_image(tmp_path)  # 400x200, a 2:1 aspect ratio
+    result = resolve_layout(parse('image "logo.png" width 2 height 2\n'), base_dir=str(tmp_path))
+    img = result.shapes[0]
+    assert img.kind == "image"
+    assert (img.w, img.h) == pytest.approx((2.0, 2.0))
+
+
+def test_image_with_only_width_follows_aspect_ratio(tmp_path: pathlib.Path):
+    _make_image(tmp_path)  # 2:1
+    result = resolve_layout(parse('image "logo.png" width 2\n'), base_dir=str(tmp_path))
+    img = result.shapes[0]
+    assert (img.w, img.h) == pytest.approx((2.0, 1.0))
+
+
+def test_image_with_only_height_follows_aspect_ratio(tmp_path: pathlib.Path):
+    _make_image(tmp_path)  # 2:1
+    result = resolve_layout(parse('image "logo.png" height 1\n'), base_dir=str(tmp_path))
+    img = result.shapes[0]
+    assert (img.w, img.h) == pytest.approx((2.0, 1.0))
+
+
+def test_image_with_neither_dimension_fits_inside_the_default_box(tmp_path: pathlib.Path):
+    _make_image(tmp_path)  # 2:1, wider than boxwid/boxht's 1.5:1
+    result = resolve_layout(parse('image "logo.png"\n'), base_dir=str(tmp_path))
+    img = result.shapes[0]
+    # width-constrained: boxwid=0.75, height = 0.75 / 2.0
+    assert (img.w, img.h) == pytest.approx((0.75, 0.375))
+
+
+def test_image_path_resolves_relative_to_base_dir(tmp_path: pathlib.Path):
+    (tmp_path / "icons").mkdir()
+    _make_image(tmp_path / "icons", "db.png")
+    result = resolve_layout(parse('image "icons/db.png"\n'), base_dir=str(tmp_path))
+    assert result.shapes[0].image_path == str((tmp_path / "icons" / "db.png").resolve())
+
+
+def test_absolute_image_path_is_an_error(tmp_path: pathlib.Path):
+    with pytest.raises(LayoutError):
+        resolve_layout(parse('image "/etc/hostname"\n'), base_dir=str(tmp_path))
+
+
+def test_image_path_escaping_base_dir_is_an_error(tmp_path: pathlib.Path):
+    with pytest.raises(LayoutError):
+        resolve_layout(parse('image "../../../etc/hostname"\n'), base_dir=str(tmp_path))
+
+
+def test_missing_image_file_is_an_error(tmp_path: pathlib.Path):
+    with pytest.raises(LayoutError):
+        resolve_layout(parse('image "nope.png"\n'), base_dir=str(tmp_path))
+
+
+def test_svg_image_is_a_clear_error_not_yet_supported(tmp_path: pathlib.Path):
+    # Not implemented yet (docs/implementation-plan.md); this must fail
+    # cleanly, not with a raw PIL.UnidentifiedImageError (checked).
+    (tmp_path / "icon.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    with pytest.raises(LayoutError, match="SVG"):
+        resolve_layout(parse('image "icon.svg"\n'), base_dir=str(tmp_path))
+    with pytest.raises(LayoutError, match="SVG"):
+        resolve_layout(parse('image "icon.svg" width 1 height 1\n'), base_dir=str(tmp_path))
+
+
+def test_alt_on_a_non_image_is_an_error(tmp_path: pathlib.Path):
+    with pytest.raises(LayoutError):
+        resolve_layout(parse('box "x" alt "nope"\n'), base_dir=str(tmp_path))
+
+
+def test_alt_text_is_captured(tmp_path: pathlib.Path):
+    _make_image(tmp_path)
+    result = resolve_layout(parse('image "logo.png" alt "A logo"\n'), base_dir=str(tmp_path))
+    assert result.shapes[0].alt_text == "A logo"
+
+
+def test_image_participates_in_positioning_like_any_object(tmp_path: pathlib.Path):
+    _make_image(tmp_path)
+    result = resolve_layout(
+        parse('Logo: image "logo.png" width 1\nbox "Caption" at 0.2 below Logo.s\n'),
+        base_dir=str(tmp_path),
+    )
+    logo, caption = result.shapes
+    assert caption.cy == pytest.approx(logo.edge_point("s")[1] - 0.2)

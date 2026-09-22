@@ -344,6 +344,15 @@ class Behind(Attribute):
 
 
 @dataclass
+class Alt(Attribute):
+    """``alt STRING`` (ext, docs/spec.md SS3.5): an image's accessibility
+    description. Valid only on `image`; enforced in the layout stage,
+    since the grammar alone can't express that constraint."""
+
+    text: str
+
+
+@dataclass
 class At(Attribute):
     position: Position
 
@@ -385,6 +394,16 @@ class ShapeBase(Basetype):
     pikslide.pik.layout.PRESET_NAMES for the recognised names."""
 
     preset: str
+
+
+@dataclass
+class ImageBase(Basetype):
+    """``image STRING`` (ext, docs/spec.md SS3.5): a picture, from a path
+    relative to the source file. `path` is the raw string as written;
+    resolving it against the source file's directory (and checking it
+    doesn't escape it) happens in the layout stage, not here."""
+
+    path: str
 
 
 @dataclass

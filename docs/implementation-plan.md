@@ -42,10 +42,10 @@ already-built behaviour.
   then `legend = 5` silently expanded to `fill = 5` with no error at all.
 - **Reserved words**: `shape`, `image`, `include`, `alt`, `major`, `medium`,
   `large`, `theme`, `lighter`, `darker`, `none`, `off`, `connector` are all
-  real keyword tokens (`pik/tokens.py`). `image`, `include`, `connector` are
-  reserved (can't be used as a variable/macro name) but not parsed as real
-  constructs yet (`image "x.png"`, `include "x.pik"` are still syntax
-  errors); `theme`/`none`/`off`/`lighter`/`darker`/`medium`/`large`/`shape`
+  real keyword tokens (`pik/tokens.py`). `include`, `connector` are reserved
+  (can't be used as a variable/macro name) but not parsed as real constructs
+  yet (`include "x.pik"` is still a syntax error);
+  `theme`/`none`/`off`/`lighter`/`darker`/`medium`/`large`/`shape`/`image`
   are fully implemented.
 - **Preset shapes** (`shape preset-name`, `ast.ShapeBase`, `Shape.preset`):
   matched case-insensitively against all 177 OOXML presets python-pptx 1.0.2
@@ -57,6 +57,24 @@ already-built behaviour.
   `MSO_SHAPE.ROUNDED_RECTANGLE` `box rad>0` already uses; a bare
   `shape roundRect`, `rad` unset, keeps python-pptx's own default corner
   rather than flattening it to square, checked).
+- **Images** (`image STRING`, `ast.ImageBase`, `Shape.image_path`/`alt_text`):
+  PNG/JPEG/GIF only (SVG errors clearly -- "not supported yet" -- rather
+  than a confusing raw `PIL.UnidentifiedImageError`, checked). The path
+  resolves against, and is contained under, the source file's own
+  directory (for Markdown, the `.md` file), the same containment `include`
+  will apply; `main()` computes it from the input path and threads it
+  through `resolve_for_pptx(..., base_dir=...)`. Sizing follows
+  docs/spec.md SS3.5 exactly: both `width`/`height` given -> stretched (no
+  file read at all); one given -> the other follows the aspect ratio;
+  neither -> fit inside `boxwid`x`boxht`. Aspect ratio comes from an
+  injected `ImageMetrics` (mirrors `FontMetrics`); the default reads the
+  file directly with Pillow, since unlike text there's no sensible flat
+  estimate. `alt STRING` sets the real saved accessibility description --
+  found the hard way that python-pptx 1.0.2's `Shape.alt_text` isn't a
+  real property at all (silently becomes a plain, never-saved instance
+  attribute); the actual OOXML attribute, `p:cNvPr/@descr`, is set
+  directly. A picture has no `text_frame` (like a connector), so text on
+  an image becomes one centred floating textbox, not per-string labels.
 - **Markdown diagram names** (`markdown.py` `PikBlock`, `extract_pik_blocks`):
   the `pikslide` fence tag is recognised alongside `pik`/`pikchr`; a fence
   may be named (` ```pikslide architecture `); a file with more than one
@@ -65,8 +83,9 @@ already-built behaviour.
   there is no `--into` yet either.
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
   new coverage for colours, text sizes, the macro-shadow guard, Markdown
-  names, and preset shapes (`tests/test_layout.py`, `tests/test_pik_parser.py`,
-  `tests/test_pptx_writer.py`, `tests/test_markdown.py`).
+  names, preset shapes, and images (`tests/test_layout.py`,
+  `tests/test_pik_parser.py`, `tests/test_pptx_writer.py`,
+  `tests/test_markdown.py`).
 
 ## Not yet started
 
@@ -74,7 +93,7 @@ already-built behaviour.
 |---|---|---|
 | `pik/tokens.py` `Token`, `PikSyntaxError` | carry a line number only | carry the source file and column, so errors inside an `include` point at the right file |
 | `pik/macros.py` | no `include` statement | resolve `include "path"` in the same pass as `define` (shared macro table, definitions-only check, path containment, cycle/depth limits) |
-| `pik/parser.py`, `pik/layout.py`, `pptx_writer.py` | `image` is a reserved word only | `image STRING` as a real object class: basetype parsing, `alt`, aspect-ratio sizing (needs a source-file-relative path and an injected image-metrics reader, mirroring how `FontMetrics` already works), `p:pic` output, SVG picture (`svgBlip` + PNG fallback, hand-written XML) |
+| `pik/layout.py`, `pptx_writer.py` | SVG `image`s are a clear "not supported yet" error | SVG picture (`svgBlip` + PNG fallback via an external rasteriser, hand-written XML) |
 | *(new)* theme reader | none; theme colours always render against python-pptx's built-in Office theme | read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base |
 | *(new)* template settings | none | find the settings file beside a template or deck and read it after the prelude; `layout`, `typeface`, accent colours, text sizes, content area |
 | `pptx_writer.py` `FONT_NAME` | hard-coded `"Arial"`; no `typeface` variable | read `typeface` (once settings files exist) or the theme's own font |

@@ -122,13 +122,16 @@ class PilFontMetrics:
         return size_pt / 72.0
 
 
-def resolve_for_pptx(doc: ast.Document, font_name: str = FONT_NAME) -> LayoutResult:
+def resolve_for_pptx(doc: ast.Document, font_name: str = FONT_NAME, base_dir: str = ".") -> LayoutResult:
     """resolve_layout(), using real font metrics so "fit" objects are
     sized to match what write_pptx() will actually draw. Text sizes come
     from the prelude's own small/medium/large (docs/spec.md SS3.7), not a
     caller-supplied constant; write_pptx() then reads the *same* sizes
-    back from the returned LayoutResult, so the two always agree."""
-    return resolve_layout(doc, metrics=PilFontMetrics(font_name))
+    back from the returned LayoutResult, so the two always agree.
+
+    `base_dir` is the source file's own directory, against which an
+    `image` object's path resolves (docs/spec.md SS3.5)."""
+    return resolve_layout(doc, metrics=PilFontMetrics(font_name), base_dir=base_dir)
 
 
 def _font_size(flags: list[str], text_sizes: dict[str, float]) -> Pt:
@@ -270,6 +273,45 @@ def _apply_text(pptx_shape, shape: Shape, font_name: str, text_sizes: dict[str, 
         para.alignment = (
             PP_ALIGN.LEFT if "ljust" in flags else PP_ALIGN.RIGHT if "rjust" in flags else PP_ALIGN.CENTER
         )
+        run = para.add_run()
+        run.text = text
+        run.font.name = font_name
+        run.font.bold = "bold" in flags
+        run.font.italic = "italic" in flags
+        run.font.size = _font_size(flags, text_sizes)
+        _apply_colour(run.font.color, shape.color or Colour(rgb=0))
+
+
+def _add_image_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+    """`image` (docs/spec.md SS3.5). A Picture has no text_frame of its own
+    in python-pptx (checked, like a connector), so any text on it is drawn
+    as a separate textbox, centred over it -- one box, not per-string
+    floating labels the way a line's text is (SS3.5: "a separate text box
+    centred on it", singular)."""
+    assert shape.image_path is not None
+    left, top, w, h = tf.rect(shape)
+    w, h = max(w, 0.01), max(h, 0.01)
+    picture = slide.shapes.add_picture(shape.image_path, Inches(left), Inches(top), width=Inches(w), height=Inches(h))
+    if shape.alt_text:
+        # python-pptx 1.0.2 has no real `alt_text` property (checked: it
+        # silently becomes a plain, never-saved instance attribute --
+        # `pic.alt_text = "..."` raises nothing and even reads back
+        # correctly in memory, but the saved file's `descr` is untouched).
+        # The actual OOXML attribute is `p:cNvPr/@descr`; add_picture()
+        # already sets it to the filename, so this overrides that default.
+        picture._element.nvPicPr.cNvPr.set("descr", shape.alt_text)
+
+    if not shape.texts:
+        return
+    textbox = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(w), Inches(h))
+    text_frame = textbox.text_frame
+    text_frame.word_wrap = True
+    text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+    text_frame.margin_left = text_frame.margin_right = 0
+    text_frame.margin_top = text_frame.margin_bottom = 0
+    for i, (text, flags) in enumerate(shape.texts):
+        para = text_frame.paragraphs[0] if i == 0 else text_frame.add_paragraph()
+        para.alignment = PP_ALIGN.CENTER
         run = para.add_run()
         run.text = text
         run.font.name = font_name
@@ -422,6 +464,8 @@ def write_pptx(
     for shape in result.shapes:
         if shape.kind in ("line", "arrow", "spline", "arc"):
             _add_line_shape(slide, shape, tf, font_name, text_sizes)
+        elif shape.kind == "image":
+            _add_image_shape(slide, shape, tf, font_name, text_sizes)
         else:
             _add_block_shape(slide, shape, tf, font_name, text_sizes)
 

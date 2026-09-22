@@ -19,8 +19,10 @@ EXAMPLE_FILES = sorted(FIXTURES_DIR.glob("*.pik"))
 
 def render(text: str, tmp_path: pathlib.Path, name: str = "out.pptx") -> Presentation:
     # Uses resolve_for_pptx() (real font-metrics-based "fit" sizing), the
-    # same path the CLI takes, so these tests exercise it too.
-    result = resolve_for_pptx(parse(text))
+    # same path the CLI takes, so these tests exercise it too. base_dir
+    # defaults to tmp_path itself, so an `image "x.png"` resolves against
+    # whatever the test already wrote there.
+    result = resolve_for_pptx(parse(text), base_dir=str(tmp_path))
     out = tmp_path / name
     write_pptx(result, str(out))
     return Presentation(str(out))
@@ -150,3 +152,41 @@ def test_explicit_rad_on_a_round_rect_preset_overrides_the_corner(tmp_path: path
     prs = render('shape roundRect "x" rad 0.1 width 1 height 1\n', tmp_path)
     shape = prs.slides[0].shapes[0]
     assert shape.adjustments[0] == pytest.approx(0.1, abs=0.01)
+
+
+def _make_image(tmp_path: pathlib.Path, name: str = "logo.png") -> None:
+    from PIL import Image
+
+    Image.new("RGB", (400, 200), "white").save(tmp_path / name)
+
+
+def test_image_renders_as_a_picture(tmp_path: pathlib.Path):
+    _make_image(tmp_path)
+    prs = render('image "logo.png" width 2\n', tmp_path)
+    picture = prs.slides[0].shapes[0]
+    assert picture.shape_type == MSO_SHAPE_TYPE.PICTURE
+    assert picture.width.inches == pytest.approx(2.0)
+    assert picture.height.inches == pytest.approx(1.0)  # 400x200 source, aspect preserved
+
+
+def test_image_alt_text_is_the_actual_saved_description(tmp_path: pathlib.Path):
+    # python-pptx 1.0.2 has no real alt_text property (checked: a plain
+    # instance attribute, never serialized) -- this must be the real
+    # p:cNvPr/@descr the saved file actually carries.
+    _make_image(tmp_path)
+    prs = render('image "logo.png" alt "A logo"\n', tmp_path)
+    picture = prs.slides[0].shapes[0]
+    descr = picture._element.nvPicPr.cNvPr.get("descr")
+    assert descr == "A logo"
+
+
+def test_image_text_becomes_a_centred_caption_textbox(tmp_path: pathlib.Path):
+    _make_image(tmp_path)
+    prs = render('image "logo.png" width 2 "Caption"\n', tmp_path)
+    picture, caption = prs.slides[0].shapes
+    assert picture.shape_type == MSO_SHAPE_TYPE.PICTURE
+    assert caption.shape_type == MSO_SHAPE_TYPE.TEXT_BOX
+    assert caption.text_frame.text == "Caption"
+    # centred over the picture, not offset above/below like a line's label.
+    assert caption.left == picture.left
+    assert caption.top == picture.top

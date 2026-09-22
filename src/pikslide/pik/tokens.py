@@ -301,6 +301,15 @@ class PikSyntaxError(Exception):
         self.text = text
 
 
+def unescape_string(raw: str) -> str:
+    """Strip the surrounding quotes from a STRING token's raw text and
+    unescape ``\\"``/``\\\\``. Lives here (not in parser.py, where it used
+    to) so macros.py can use it too, for `include "path"` (ext), without a
+    circular import (parser.py already imports from macros.py)."""
+    inner = raw[1:-1]
+    return inner.replace('\\"', '"').replace("\\\\", "\\")
+
+
 def is_hex_number(token_text: str) -> bool:
     """True for a NUMBER token spelled ``0x...``/``0X...`` -- pikslide (ext)
     treats these as colour literals, not plain numbers; see

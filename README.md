@@ -26,11 +26,12 @@ names, pikchr's own defaults, the theme-colour names); three fixed text
 sizes (`small`/`medium`/`large`); preset shapes (`shape roundRect`, any of
 the ~180 OOXML presets, matched case-insensitively); images (`image
 "logo.png"`, PNG/JPEG/GIF, sized explicitly or by aspect ratio, path
-resolved and contained under the source file's own directory); Markdown
-diagram names (the `pikslide` fence tag, naming a diagram when a file has
-more than one).
+resolved and contained under the source file's own directory); `include
+"house.pik"` for shared definitions (contained the same way, with cycle
+detection); Markdown diagram names (the `pikslide` fence tag, naming a
+diagram when a file has more than one).
 
-**Specified, not implemented yet**: SVG images, `include`, reading a
+**Specified, not implemented yet**: SVG images, reading a
 template's own theme (`.potx`/`.pptx`), per-template settings files, and
 insertion into an existing deck. The rules
 marked `(ext)` in [docs/grammar.md](docs/grammar.md) are the ones not

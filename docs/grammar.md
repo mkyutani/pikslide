@@ -145,10 +145,6 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
 
 ### Includes (ext)
 
-The prelude (below) is implemented: it is loaded through this same
-"definitions-only" mechanism. A user-facing `include "path"` statement,
-resolved the same way, is not implemented yet (docs/implementation-plan.md).
-
 `include "path"` is resolved in this same pass, before parsing, so the
 `include` statement never reaches the parser either. Macros defined by the
 included file join the same macro table and are visible from the `include`

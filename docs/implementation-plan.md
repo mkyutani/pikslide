@@ -42,11 +42,23 @@ already-built behaviour.
   then `legend = 5` silently expanded to `fill = 5` with no error at all.
 - **Reserved words**: `shape`, `image`, `include`, `alt`, `major`, `medium`,
   `large`, `theme`, `lighter`, `darker`, `none`, `off`, `connector` are all
-  real keyword tokens (`pik/tokens.py`). `include`, `connector` are reserved
-  (can't be used as a variable/macro name) but not parsed as real constructs
-  yet (`include "x.pik"` is still a syntax error);
-  `theme`/`none`/`off`/`lighter`/`darker`/`medium`/`large`/`shape`/`image`
-  are fully implemented.
+  real keyword tokens (`pik/tokens.py`). Only `connector` is reserved but
+  not parsed as a real construct yet; every other one is fully implemented.
+- **`include "path"`** (`pik/macros.py`): resolved in the macro-expansion
+  pass, before parsing, exactly as docs/grammar.md's Includes section
+  describes -- so it needed no AST node of its own. Macros and variables
+  it brings in are merged into the token stream at the `include` line
+  ("visible from there onward, exactly as if written there", checked,
+  including across nested includes); the definitions-only check
+  (`_validate_definitions_only`) rejects any object/label/etc. in the
+  included file, naming the failing file. Path resolution tries the
+  including file's own directory first, then each `include_paths` entry
+  (ext, for a future `--include-path`, plumbed already but nothing sets
+  it yet); containment (no absolute paths, no escapes) and cycle
+  detection (sharing the same 50-level depth budget as macros) are both
+  checked. The macro-shadow guard (above) already covered names an
+  include brings in, with no changes needed, since they merge into the
+  same token stream the guard already scans.
 - **Preset shapes** (`shape preset-name`, `ast.ShapeBase`, `Shape.preset`):
   matched case-insensitively against all 177 OOXML presets python-pptx 1.0.2
   knows (`pik/layout.py` `PRESET_NAMES`); an unknown name is an error with
@@ -83,7 +95,7 @@ already-built behaviour.
   there is no `--into` yet either.
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
   new coverage for colours, text sizes, the macro-shadow guard, Markdown
-  names, preset shapes, and images (`tests/test_layout.py`,
+  names, preset shapes, images, and `include` (`tests/test_layout.py`,
   `tests/test_pik_parser.py`, `tests/test_pptx_writer.py`,
   `tests/test_markdown.py`).
 
@@ -91,8 +103,8 @@ already-built behaviour.
 
 | Area | Today | Needed |
 |---|---|---|
-| `pik/tokens.py` `Token`, `PikSyntaxError` | carry a line number only | carry the source file and column, so errors inside an `include` point at the right file |
-| `pik/macros.py` | no `include` statement | resolve `include "path"` in the same pass as `define` (shared macro table, definitions-only check, path containment, cycle/depth limits) |
+| `pik/tokens.py` `Token`, `PikSyntaxError` | carry a line number, and (since `include`) the right file named in the *message text* | a proper structured `file`/column field, rather than folding the path into the message string by hand at each `include`-related error site |
+| CLI | no `--include-path` | expose `pik/macros.py`'s already-implemented `include_paths` fallback as a flag |
 | `pik/layout.py`, `pptx_writer.py` | SVG `image`s are a clear "not supported yet" error | SVG picture (`svgBlip` + PNG fallback via an external rasteriser, hand-written XML) |
 | *(new)* theme reader | none; theme colours always render against python-pptx's built-in Office theme | read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base |
 | *(new)* template settings | none | find the settings file beside a template or deck and read it after the prelude; `layout`, `typeface`, accent colours, text sizes, content area |

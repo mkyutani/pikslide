@@ -13,11 +13,12 @@ license. See the NOTICE file at the root of this repository.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from importlib import resources
 
 from .ast import MacroDefinition
-from .tokens import Lexer, PikSyntaxError, Token, TokType
+from .tokens import Lexer, PikSyntaxError, Token, TokType, unescape_string
 
 MAX_MACRO_DEPTH = 50
 TOKEN_LIMIT = 100_000
@@ -56,6 +57,57 @@ def _prelude_variable_names() -> frozenset[str]:
     return _prelude_var_names_cache
 
 
+def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[str], line: int) -> str:
+    """Resolve an `include "path"` (docs/spec.md SS3.6): relative to
+    `current_dir` (the including file's own directory) first, then to
+    each `include_paths` entry in order.
+
+    Rejects an absolute path, and any resolution that escapes its own
+    base directory: a diagram may be written by an LLM, and must not be
+    able to reach, or reveal the existence of, arbitrary local files."""
+    if os.path.isabs(raw_path) or raw_path.startswith("~"):
+        raise PikSyntaxError(f"include path must be relative, not {raw_path!r}", line, raw_path)
+    tried = []
+    for base_dir in (current_dir, *include_paths):
+        base = os.path.realpath(base_dir)
+        resolved = os.path.realpath(os.path.join(base, raw_path))
+        if os.path.commonpath([base, resolved]) != base:
+            tried.append(f"{base_dir} (escapes it)")
+            continue
+        if os.path.isfile(resolved):
+            return resolved
+        tried.append(base_dir)
+    raise PikSyntaxError(f"include file not found: {raw_path!r} (tried: {', '.join(tried)})", line, raw_path)
+
+
+def _validate_definitions_only(tokens: list[Token], source_desc: str) -> None:
+    """Check that `tokens` -- an included file's own already-expanded
+    output -- match the include-file grammar (docs/grammar.md, Includes):
+    each EOL-separated statement must be `lvalue ASSIGN ...`. `define`
+    blocks need no check here: the macro pass above has already consumed
+    them, so none remain in `tokens` by this point.
+
+    Anything else -- an object, a label, a direction, `print`, `assert`
+    -- is an error, so an include can change *definitions* but never
+    place anything."""
+    i, n = 0, len(tokens)
+    while i < n:
+        if tokens[i].type == TokType.EOL:
+            i += 1
+            continue
+        if (tokens[i].type == TokType.ID or tokens[i].type in _LVALUE_KEYWORD_TYPES) \
+                and i + 1 < n and tokens[i + 1].type == TokType.ASSIGN:
+            i += 2
+            while i < n and tokens[i].type != TokType.EOL:
+                i += 1
+            continue
+        raise PikSyntaxError(
+            f"{source_desc}: only definitions are allowed in an included file "
+            "(an assignment, or define) -- not an object, a label, or anything else",
+            tokens[i].line, tokens[i].text,
+        )
+
+
 @dataclass
 class _Macro:
     name: str
@@ -69,11 +121,18 @@ class _State:
     out: list[Token] = field(default_factory=list)
 
 
-def expand_macros(text: str) -> tuple[list[Token], list[MacroDefinition]]:
-    """Tokenize ``text`` and expand all ``#define`` macro invocations."""
+def expand_macros(
+    text: str, base_dir: str = ".", include_paths: list[str] | None = None
+) -> tuple[list[Token], list[MacroDefinition]]:
+    """Tokenize ``text`` and expand all macro invocations and `include`
+    statements (ext; docs/spec.md SS3.6). `base_dir` is the source file's
+    own directory, against which an `include "path"` resolves first;
+    `include_paths` (ext, for a future `--include-path`) are tried next,
+    in order, if it isn't found there."""
     tokens = Lexer(text).tokenize()
     state = _State()
-    _expand(tokens, 0, len(tokens), None, state, depth=0)
+    _expand(tokens, 0, len(tokens), None, state, depth=0,
+            current_dir=base_dir, include_paths=include_paths or [], include_stack=())
     defs = [MacroDefinition(m.name, m.body) for m in state.macros.values()]
     return state.out, defs
 
@@ -85,10 +144,13 @@ def _expand(
     params: list[list[Token]] | None,
     state: _State,
     depth: int,
+    current_dir: str,
+    include_paths: list[str],
+    include_stack: tuple[str, ...],
 ) -> None:
     if depth > MAX_MACRO_DEPTH:
         line = tokens[start].line if start < end else 0
-        raise PikSyntaxError("macros nested too deep", line)
+        raise PikSyntaxError("include/macro nesting too deep", line)
 
     i = start
     while i < end:
@@ -97,8 +159,32 @@ def _expand(
         if tok.type == TokType.PARAMETER:
             if params is not None and tok.code < len(params):
                 sub = params[tok.code]
-                _expand(sub, 0, len(sub), None, state, depth + 1)
+                _expand(sub, 0, len(sub), None, state, depth + 1,
+                        current_dir, include_paths, include_stack)
             i += 1
+            continue
+
+        if tok.type == TokType.INCLUDE and i + 1 < end and tokens[i + 1].type == TokType.STRING:
+            path_tok = tokens[i + 1]
+            raw_path = unescape_string(path_tok.text)
+            resolved = _resolve_include_path(raw_path, current_dir, include_paths, path_tok.line)
+            if resolved in include_stack:
+                chain = " -> ".join((*include_stack, resolved))
+                raise PikSyntaxError(f"include cycle: {chain}", path_tok.line, raw_path)
+            try:
+                included_text = open(resolved, encoding="utf-8").read()
+            except OSError as e:
+                raise PikSyntaxError(f"cannot read included file: {e}", path_tok.line, raw_path) from e
+            included_tokens = Lexer(included_text).tokenize()
+            out_start = len(state.out)
+            _expand(
+                included_tokens, 0, len(included_tokens), None, state, depth + 1,
+                current_dir=os.path.dirname(resolved),
+                include_paths=include_paths,
+                include_stack=(*include_stack, resolved),
+            )
+            _validate_definitions_only(state.out[out_start:], resolved)
+            i += 2
             continue
 
         if (
@@ -142,7 +228,8 @@ def _expand(
             mac.in_use = True
             try:
                 body_tokens = Lexer(mac.body).tokenize()
-                _expand(body_tokens, 0, len(body_tokens), args, state, depth + 1)
+                _expand(body_tokens, 0, len(body_tokens), args, state, depth + 1,
+                        current_dir, include_paths, include_stack)
             finally:
                 mac.in_use = False
             i = j

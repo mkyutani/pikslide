@@ -264,7 +264,7 @@ pikchr has no `include`, so a shared house style would have to be copied
 into every diagram. A deck holds many diagrams, so pikslide adds one.
 
 ```pik
-include "house.pik"                          # (proposed)
+include "house.pik"
 Web: box "Web" fill primary card            # a colour variable, a macro
 ```
 

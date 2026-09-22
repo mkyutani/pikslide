@@ -51,7 +51,7 @@ def _numbered(path: str, i: int, total: int) -> str:
 
 def _process(text: str, out_path: str | None, base_dir: str = ".") -> None:
     try:
-        doc = parse(text)
+        doc = parse(text, base_dir=base_dir)
     except PikSyntaxError as e:
         print(f"error: {e}", file=sys.stderr)
         raise SystemExit(1)

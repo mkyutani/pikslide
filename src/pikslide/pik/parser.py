@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from . import ast
 from .macros import expand_macros
-from .tokens import PikSyntaxError, Token, TokType, is_hex_number, nth_value, numeric_value
+from .tokens import PikSyntaxError, Token, TokType, is_hex_number, nth_value, numeric_value, unescape_string
 
 _DIR_NAME = {
     TokType.UP: "up",
@@ -127,12 +127,6 @@ _EXPR_START = {
 _BASETYPE_START = {TokType.CLASSNAME, TokType.STRING, TokType.LB, TokType.SHAPE, TokType.IMAGE}
 
 _OBJECT_START = {TokType.PLACENAME, TokType.THIS, TokType.NTH, TokType.LAST}
-
-
-def _unescape_string(raw: str) -> str:
-    """Strip the surrounding quotes from a STRING token and unescape ``\\"``/``\\\\``."""
-    inner = raw[1:-1]
-    return inner.replace('\\"', '"').replace("\\\\", "\\")
 
 
 class Parser:
@@ -268,7 +262,7 @@ class Parser:
             return ast.Var(_PSEUDOVAR_NAME[t.type])
         if t is not None and t.type == TokType.STRING:
             self.advance()
-            return _unescape_string(t.text)
+            return unescape_string(t.text)
         return self.parse_expr()
 
     # -- objects ----------------------------------------------------------
@@ -282,7 +276,7 @@ class Parser:
         if self.at(TokType.CLASSNAME):
             return ast.ClassBase(self.advance().text)
         if self.at(TokType.STRING):
-            text = _unescape_string(self.advance().text)
+            text = unescape_string(self.advance().text)
             flags = self.parse_textposition()
             return ast.TextBase(text, flags)
         if self.at(TokType.LB):
@@ -296,7 +290,7 @@ class Parser:
         if self.at(TokType.IMAGE):
             self.advance()
             path_tok = self.expect(TokType.STRING)
-            return ast.ImageBase(_unescape_string(path_tok.text))
+            return ast.ImageBase(unescape_string(path_tok.text))
         self._error("expected an object class, a string, '[', 'shape', or 'image'")
 
     def parse_preset_name(self) -> str:
@@ -411,7 +405,7 @@ class Parser:
             return ast.Same(None)
 
         if tt == TokType.STRING:
-            text = _unescape_string(self.advance().text)
+            text = unescape_string(self.advance().text)
             flags = self.parse_textposition()
             return ast.TextAttribute(text, flags)
 
@@ -426,7 +420,7 @@ class Parser:
         if tt == TokType.ALT:
             self.advance()
             text_tok = self.expect(TokType.STRING)
-            return ast.Alt(_unescape_string(text_tok.text))
+            return ast.Alt(unescape_string(text_tok.text))
 
         return None
 
@@ -582,7 +576,7 @@ class Parser:
         does, since pikslide is not aiming for pikchr compatibility
         (docs/spec.md SS2)."""
         if self.at(TokType.STRING):
-            return ast.StrLit(_unescape_string(self.advance().text))
+            return ast.StrLit(unescape_string(self.advance().text))
         return self.parse_color_value()
 
     def parse_color_value(self) -> ast.Expr:
@@ -605,7 +599,7 @@ class Parser:
         if self.at(TokType.THEME):
             self.advance()
             slot_tok = self.expect(TokType.STRING)
-            return ast.ThemeColor(_unescape_string(slot_tok.text))
+            return ast.ThemeColor(unescape_string(slot_tok.text))
         if self.at(TokType.NOCOLOR):
             self.advance()
             return ast.NoColor()
@@ -805,9 +799,13 @@ class Parser:
         return ast.NameRef(path)
 
 
-def parse(text: str) -> ast.Document:
-    """Parse pikchr source text into a :class:`pikslide.pik.ast.Document` tree."""
-    tokens, macros = expand_macros(text)
+def parse(text: str, base_dir: str = ".", include_paths: list[str] | None = None) -> ast.Document:
+    """Parse pikchr source text into a :class:`pikslide.pik.ast.Document` tree.
+
+    `base_dir` is the source file's own directory (docs/spec.md SS3.6): an
+    `include "path"` resolves against it first, then against each of
+    `include_paths` in order (ext, for a future `--include-path`)."""
+    tokens, macros = expand_macros(text, base_dir, include_paths)
     doc = Parser(tokens).parse_document()
     doc.macros = macros
     return doc

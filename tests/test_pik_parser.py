@@ -456,6 +456,106 @@ def test_image_can_be_labeled():
 
 
 # ---------------------------------------------------------------------------
+# `include` (docs/spec.md SS3.6): resolved in the macro pass, before
+# parsing, so it never appears in the AST -- these tests check parse()'s
+# end result, the same way the file was written by hand.
+# ---------------------------------------------------------------------------
+
+
+def test_include_brings_in_variables_and_macros(tmp_path: Path):
+    (tmp_path / "house.pik").write_text(
+        "boxwid = 1.2\ndefine card { rad 8px }\n", encoding="utf-8"
+    )
+    doc = parse('include "house.pik"\nbox card\n', base_dir=str(tmp_path))
+    # The include's own assignment is a real statement, in place, exactly
+    # as if written there (docs/spec.md SS3.6) -- followed by the object.
+    assert doc.statements[0] == ast.AssignStatement("boxwid", "=", ast.Num(1.2))
+    stmt = doc.statements[1]
+    assert isinstance(stmt.base, ast.ClassBase) and stmt.base.classname == "box"
+    # `card`'s own body (`rad 8px`) expanded in place, as if written there.
+    assert stmt.attributes == [ast.NumProperty("radius", ast.RelExpr(abs=ast.Num(pytest.approx(8 / 96))))]
+
+
+def test_included_file_cannot_draw_an_object(tmp_path: Path):
+    (tmp_path / "bad.pik").write_text('box "oops"\n', encoding="utf-8")
+    with pytest.raises(PikSyntaxError):
+        parse('include "bad.pik"\nbox\n', base_dir=str(tmp_path))
+
+
+def test_included_file_cannot_have_a_label(tmp_path: Path):
+    (tmp_path / "bad.pik").write_text("A: 1,1\n", encoding="utf-8")
+    with pytest.raises(PikSyntaxError):
+        parse('include "bad.pik"\nbox\n', base_dir=str(tmp_path))
+
+
+def test_included_file_can_itself_include(tmp_path: Path):
+    (tmp_path / "base.pik").write_text("charwid = 0.1\n", encoding="utf-8")
+    (tmp_path / "mid.pik").write_text('include "base.pik"\nboxwid = 1.5\n', encoding="utf-8")
+    doc = parse('include "mid.pik"\nbox\n', base_dir=str(tmp_path))
+    assert doc.statements[-1].base.classname == "box"
+    assert ast.AssignStatement("boxwid", "=", ast.Num(1.5)) in doc.statements
+    assert ast.AssignStatement("charwid", "=", ast.Num(0.1)) in doc.statements
+
+
+def test_nested_include_resolves_relative_to_its_own_file(tmp_path: Path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "deep.pik").write_text("boxwid = 2\n", encoding="utf-8")
+    (tmp_path / "sub" / "mid.pik").write_text('include "deep.pik"\n', encoding="utf-8")
+    doc = parse('include "sub/mid.pik"\nbox\n', base_dir=str(tmp_path))
+    assert doc.statements[-1].base.classname == "box"
+    assert ast.AssignStatement("boxwid", "=", ast.Num(2)) in doc.statements
+
+
+def test_absolute_include_path_is_an_error(tmp_path: Path):
+    with pytest.raises(PikSyntaxError):
+        parse('include "/etc/hostname"\nbox\n', base_dir=str(tmp_path))
+
+
+def test_include_path_escaping_base_dir_is_an_error(tmp_path: Path):
+    with pytest.raises(PikSyntaxError):
+        parse('include "../../../../../../etc/hostname"\nbox\n', base_dir=str(tmp_path))
+
+
+def test_missing_include_file_is_an_error(tmp_path: Path):
+    with pytest.raises(PikSyntaxError):
+        parse('include "nope.pik"\nbox\n', base_dir=str(tmp_path))
+
+
+def test_include_cycle_is_an_error(tmp_path: Path):
+    (tmp_path / "a.pik").write_text('include "b.pik"\n', encoding="utf-8")
+    (tmp_path / "b.pik").write_text('include "a.pik"\n', encoding="utf-8")
+    with pytest.raises(PikSyntaxError):
+        parse('include "a.pik"\nbox\n', base_dir=str(tmp_path))
+
+
+def test_include_path_fallback_when_not_found_relative_to_source(tmp_path: Path):
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    shared_dir = tmp_path / "shared"
+    shared_dir.mkdir()
+    (shared_dir / "house.pik").write_text("boxwid = 1.5\n", encoding="utf-8")
+    doc = parse(
+        'include "house.pik"\nbox\n',
+        base_dir=str(src_dir),
+        include_paths=[str(shared_dir)],
+    )
+    assert doc.statements[-1].base.classname == "box"
+    assert ast.AssignStatement("boxwid", "=", ast.Num(1.5)) in doc.statements
+
+
+def test_macro_defined_in_an_included_file_cannot_be_shadowed_by_assignment(tmp_path: Path):
+    (tmp_path / "house.pik").write_text("define legend { fill }\n", encoding="utf-8")
+    with pytest.raises(PikSyntaxError):
+        parse('include "house.pik"\nlegend = 5\nbox\n', base_dir=str(tmp_path))
+
+
+def test_variable_from_an_included_file_cannot_be_shadowed_by_a_later_define(tmp_path: Path):
+    (tmp_path / "house.pik").write_text("myvar = 1\n", encoding="utf-8")
+    with pytest.raises(PikSyntaxError):
+        parse('include "house.pik"\ndefine myvar { 99 }\nbox\n', base_dir=str(tmp_path))
+
+
+# ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
 

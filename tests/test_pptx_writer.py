@@ -9,8 +9,10 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL_TYPE, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
+from pptx.util import Inches
 
 from pikslide.pik import parse
+from pikslide.pik.layout import LayoutError
 from pikslide.pptx_writer import resolve_for_pptx, write_pptx
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "examples"
@@ -190,3 +192,114 @@ def test_image_text_becomes_a_centred_caption_textbox(tmp_path: pathlib.Path):
     # centred over the picture, not offset above/below like a line's label.
     assert caption.left == picture.left
     assert caption.top == picture.top
+
+
+# ---------------------------------------------------------------------------
+# Inserting into an existing deck (docs/spec.md SS4.2)
+# ---------------------------------------------------------------------------
+
+
+def _existing_deck(tmp_path: pathlib.Path, name: str = "deck.pptx") -> pathlib.Path:
+    """A deck with a title-and-content slide: an empty "Content
+    Placeholder 2" (python-pptx's own default name for it) as a stand-in
+    for a real region, plus an ordinary named shape "Figure"."""
+    from pptx import Presentation as _P
+    from pptx.util import Inches as _In
+
+    prs = _P()
+    prs.slide_width, prs.slide_height = _In(10), _In(7.5)
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Deck"
+    fig = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, _In(6), _In(5), _In(2), _In(1))
+    fig.name = "Figure"
+    fig.text_frame.text = "not empty"
+    path = tmp_path / name
+    prs.save(str(path))
+    return path
+
+
+def _insert(text: str, deck: pathlib.Path, **kwargs):
+    from pikslide.pptx_writer import insert_into_pptx
+
+    result = resolve_for_pptx(parse(text))
+    return insert_into_pptx(result, str(deck), **kwargs)
+
+
+def test_insert_into_an_empty_placeholder_region(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    prs = _insert('box "Web"\n', deck, slide_no=1, region="Content Placeholder 2", group_id="arch")
+    names = [s.name for s in prs.slides[0].shapes]
+    assert names == ["Title 1", "Figure", "pikslide:arch"]  # placeholder gone, title/other shapes untouched
+
+
+def test_insert_into_an_ordinary_named_shape_is_not_deleted(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    prs = _insert('box "Web"\n', deck, slide_no=1, region="Figure", group_id="arch")
+    names = [s.name for s in prs.slides[0].shapes]
+    assert names == ["Title 1", "Content Placeholder 2", "Figure", "pikslide:arch"]
+
+
+def test_insert_with_explicit_rect(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    prs = _insert('box "Web"\n', deck, slide_no=1, rect=(0.5, 0.5, 3, 3), group_id="arch")
+    group = prs.slides[0].shapes[-1]
+    assert (group.left.inches, group.top.inches) == pytest.approx((0.5, 0.5))
+
+
+def test_insert_is_idempotent(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    out1 = tmp_path / "out1.pptx"
+    _insert('box "Web"\n', deck, slide_no=1, region="Content Placeholder 2", group_id="arch").save(str(out1))
+    prs = _insert('box "Web2"\n', out1, slide_no=1, region="Content Placeholder 2", group_id="arch")
+    # No duplicate group; the same one was found (by falling back to the
+    # existing pikslide group once the placeholder it replaced is gone)
+    # and replaced with the new content, at the same z-order position.
+    names = [s.name for s in prs.slides[0].shapes]
+    assert names == ["Title 1", "Figure", "pikslide:arch"]
+    inner = prs.slides[0].shapes[-1].shapes[0]
+    assert inner.text_frame.text == "Web2"
+
+
+def test_insert_preserves_z_order_position_on_replace(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    out1 = tmp_path / "out1.pptx"
+    _insert('box "Web"\n', deck, slide_no=1, rect=(0.5, 0.5, 3, 3), group_id="arch").save(str(out1))
+    # Add a shape *after* the diagram group, so the group is no longer last.
+    prs1 = Presentation(str(out1))
+    marker = prs1.slides[0].shapes.add_textbox(Inches(0), Inches(0), Inches(1), Inches(1))
+    marker.name = "AfterMarker"
+    prs1.save(str(out1))
+    prs2 = _insert('box "Web2"\n', out1, slide_no=1, rect=(0.5, 0.5, 3, 3), group_id="arch")
+    names = [s.name for s in prs2.slides[0].shapes]
+    # the replaced group stays *before* AfterMarker, matching where it was.
+    assert names.index("pikslide:arch") < names.index("AfterMarker")
+
+
+def test_diagram_larger_than_region_is_an_error(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    with pytest.raises(LayoutError, match="larger than its region"):
+        _insert('box wid 20 ht 10 "huge"\n', deck, slide_no=1, region="Content Placeholder 2")
+
+
+def test_out_of_range_slide_is_an_error(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    with pytest.raises(LayoutError, match="out of range"):
+        _insert('box\n', deck, slide_no=5, rect=(0, 0, 1, 1))
+
+
+def test_no_region_or_rect_is_an_error(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    with pytest.raises(LayoutError, match="no target region"):
+        _insert('box\n', deck, slide_no=1)
+
+
+def test_region_and_rect_together_is_an_error(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    with pytest.raises(LayoutError, match="mutually exclusive"):
+        _insert('box\n', deck, slide_no=1, region="Figure", rect=(0, 0, 1, 1))
+
+
+def test_unknown_region_name_is_an_error(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    with pytest.raises(LayoutError, match="no shape named"):
+        _insert('box\n', deck, slide_no=1, region="Nope")

@@ -469,6 +469,11 @@ pikslide diagram.pik --into deck.pptx --slide 5 --region "Figure" -o out.pptx
   in edit view); any other shape used as a region is left alone. The theme is
   the deck's own (§3.3), so `--template` is not allowed alongside `--into`.
 - The input deck is never modified in place unless `--in-place` is given.
+  Without `--in-place`, `-o` may be omitted: the output defaults to the
+  deck's own name with `.pikslide` inserted before the extension
+  (`deck.pptx` → `deck.pikslide.pptx`), so a first run needs no `-o`, and a
+  second run overwrites that same derived file rather than silently
+  guessing at a name each time.
 - **No scaling.** A diagram is placed at its natural size and is never
   scaled: the text sizes and line widths are the author's, and an automatic
   reduction could leave text too small to read. A diagram that is larger than

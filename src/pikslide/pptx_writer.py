@@ -24,7 +24,16 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 
 from .pik import ast
-from .pik.layout import Colour, LayoutResult, Shape, _text_size_name, assign_text_slots, default_text_sizes, resolve_layout
+from .pik.layout import (
+    Colour,
+    LayoutError,
+    LayoutResult,
+    Shape,
+    _text_size_name,
+    assign_text_slots,
+    default_text_sizes,
+    resolve_layout,
+)
 
 EMU_PER_INCH = 914400
 
@@ -231,6 +240,18 @@ class _Transform:
         return (pt[0] - self.x0) + self.margin_x, (self.y1 - pt[1]) + self.margin_y
 
 
+class _LocalTransform(_Transform):
+    """`_Transform` for a *group's* own local coordinate space
+    (docs/spec.md SS4.2), not a whole slide: no minimum-size clamp (that's
+    a presentation-wide requirement, not a region's) and no margin (the
+    region-fit check in `insert_into_pptx()` already guarantees the
+    diagram fits with no need for extra room)."""
+
+    def __init__(self, bbox: tuple[float, float, float, float]):
+        self.x0, self.y0, self.x1, self.y1 = bbox
+        self.margin_x = self.margin_y = 0.0
+
+
 def _set_arrowheads(line, larrow: bool, rarrow: bool) -> None:
     """python-pptx has no high-level arrowhead API; add the OOXML elements
     directly. <a:headEnd> is the line's start, <a:tailEnd> its end."""
@@ -282,7 +303,7 @@ def _apply_text(pptx_shape, shape: Shape, font_name: str, text_sizes: dict[str, 
         _apply_colour(run.font.color, shape.color or Colour(rgb=0))
 
 
-def _add_image_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+def _add_image_shape(container, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
     """`image` (docs/spec.md SS3.5). A Picture has no text_frame of its own
     in python-pptx (checked, like a connector), so any text on it is drawn
     as a separate textbox, centred over it -- one box, not per-string
@@ -291,7 +312,7 @@ def _add_image_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_s
     assert shape.image_path is not None
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
-    picture = slide.shapes.add_picture(shape.image_path, Inches(left), Inches(top), width=Inches(w), height=Inches(h))
+    picture = container.shapes.add_picture(shape.image_path, Inches(left), Inches(top), width=Inches(w), height=Inches(h))
     if shape.alt_text:
         # python-pptx 1.0.2 has no real `alt_text` property (checked: it
         # silently becomes a plain, never-saved instance attribute --
@@ -303,7 +324,7 @@ def _add_image_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_s
 
     if not shape.texts:
         return
-    textbox = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(w), Inches(h))
+    textbox = container.shapes.add_textbox(Inches(left), Inches(top), Inches(w), Inches(h))
     text_frame = textbox.text_frame
     text_frame.word_wrap = True
     text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
@@ -321,7 +342,7 @@ def _add_image_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_s
         _apply_colour(run.font.color, shape.color or Colour(rgb=0))
 
 
-def _add_block_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+def _add_block_shape(container, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
     autoshape_type = _AUTOSHAPE.get(shape.kind, MSO_SHAPE.RECTANGLE)
@@ -334,7 +355,7 @@ def _add_block_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_s
         autoshape_type = MSO_SHAPE.from_xml(shape.preset)
     elif shape.kind == "box" and shape.rad > 0:
         autoshape_type = MSO_SHAPE.ROUNDED_RECTANGLE
-    pptx_shape = slide.shapes.add_shape(autoshape_type, Inches(left), Inches(top), Inches(w), Inches(h))
+    pptx_shape = container.shapes.add_shape(autoshape_type, Inches(left), Inches(top), Inches(w), Inches(h))
     if autoshape_type == MSO_SHAPE.ROUNDED_RECTANGLE and shape.rad > 0:
         # `adjustments[0]` is the corner radius as a fraction of min(w, h),
         # not an absolute length. `rad == 0` (no explicit `rad` attribute,
@@ -357,25 +378,25 @@ def _add_block_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_s
     _apply_text(pptx_shape, shape, font_name, text_sizes)
 
 
-def _add_line_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+def _add_line_shape(container, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
     if len(points) == 2:
         (x1, y1), (x2, y2) = points
-        connector = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
+        connector = container.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
         _apply_line_style(connector.line, shape)
         _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
     else:
         x0, y0 = points[0]
-        builder = slide.shapes.build_freeform(Inches(x0), Inches(y0))
+        builder = container.shapes.build_freeform(Inches(x0), Inches(y0))
         builder.add_line_segments([(Inches(x), Inches(y)) for x, y in points[1:]], close=shape.closed)
         freeform = builder.convert_to_shape()
         freeform.fill.background()
         _apply_line_style(freeform.line, shape)
         _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
 
-    _add_line_text(slide, shape, tf, font_name, text_sizes)
+    _add_line_text(container, shape, tf, font_name, text_sizes)
 
 
 def _line_label_rects(
@@ -403,13 +424,13 @@ def _line_label_rects(
     return out
 
 
-def _add_line_text(slide, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+def _add_line_text(container, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
     """A connector/freeform shape has no text_frame in python-pptx, so a
     line's text (e.g. an arrow's label) is rendered as small floating
     textboxes instead, placed above/on/below the line per assign_text_slots()."""
     for (x0, y0, x1, y1), text, flags in _line_label_rects(shape, text_sizes):
         left, top = tf.point((x0, y1))
-        textbox = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(x1 - x0), Inches(y1 - y0))
+        textbox = container.shapes.add_textbox(Inches(left), Inches(top), Inches(x1 - x0), Inches(y1 - y0))
         text_frame = textbox.text_frame
         text_frame.word_wrap = False
         text_frame.margin_left = text_frame.margin_right = 0
@@ -461,12 +482,133 @@ def write_pptx(
     prs.slide_height = Emu(int(tf.slide_height * EMU_PER_INCH))
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank layout
 
+    _add_all_shapes(slide, result, tf, font_name, text_sizes)
+    prs.save(path)
+
+
+def _add_all_shapes(container, result: LayoutResult, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
+    """Draw every shape in `result` into `container` (a Slide, for
+    `write_pptx()`, or a group, for `insert_into_pptx()` -- both expose
+    the same `.shapes.add_X()` API, checked, so this needs no branching
+    on which one it got)."""
     for shape in result.shapes:
         if shape.kind in ("line", "arrow", "spline", "arc"):
-            _add_line_shape(slide, shape, tf, font_name, text_sizes)
+            _add_line_shape(container, shape, tf, font_name, text_sizes)
         elif shape.kind == "image":
-            _add_image_shape(slide, shape, tf, font_name, text_sizes)
+            _add_image_shape(container, shape, tf, font_name, text_sizes)
         else:
-            _add_block_shape(slide, shape, tf, font_name, text_sizes)
+            _add_block_shape(container, shape, tf, font_name, text_sizes)
 
-    prs.save(path)
+
+# ---------------------------------------------------------------------------
+# Inserting into an existing deck (docs/spec.md SS4.2)
+# ---------------------------------------------------------------------------
+
+
+def _find_shape_by_name(slide, name: str):
+    for sh in slide.shapes:
+        if sh.name == name:
+            return sh
+    return None
+
+
+def _is_empty_placeholder(shape) -> bool:
+    return shape.is_placeholder and (not shape.has_text_frame or not shape.text_frame.text.strip())
+
+
+def _shape_rect_inches(shape) -> tuple[float, float, float, float]:
+    return shape.left.inches, shape.top.inches, shape.width.inches, shape.height.inches
+
+
+def _resolve_region(
+    slide,
+    region: str | None,
+    rect: tuple[float, float, float, float] | None,
+    group_name: str,
+):
+    """Return ((left, top, width, height) in inches, the shape to delete
+    afterward if it was an empty placeholder or else None) for
+    `--region`/`--rect` (docs/spec.md SS4.2)."""
+    if region is not None and rect is not None:
+        raise LayoutError("--region and --rect are mutually exclusive")
+    if region is not None:
+        shape = _find_shape_by_name(slide, region)
+        if shape is None:
+            # Idempotent re-runs (SS4.2): the *first* run already deleted
+            # an empty placeholder used as the region, so it can't be
+            # found by name a second time. Fall back to the group this
+            # tool placed there before, if there is one -- its own
+            # position is exactly "where the diagram lives now".
+            existing_group = _find_shape_by_name(slide, group_name)
+            if existing_group is not None:
+                return _shape_rect_inches(existing_group), None
+            raise LayoutError(f"no shape named {region!r} on this slide")
+        to_delete = shape if _is_empty_placeholder(shape) else None
+        return _shape_rect_inches(shape), to_delete
+    if rect is not None:
+        return rect, None
+    raise LayoutError(
+        "no target region: pass --region or --rect (a template's settings "
+        "file content area, docs/spec.md SS3.8, is not implemented yet)"
+    )
+
+
+def insert_into_pptx(
+    result: LayoutResult,
+    deck_path: str,
+    slide_no: int,
+    region: str | None = None,
+    rect: tuple[float, float, float, float] | None = None,
+    group_id: str = "diagram",
+    font_name: str = FONT_NAME,
+) -> Presentation:
+    """Insert `result` into slide `slide_no` (1-based) of the deck at
+    `deck_path`, as one top-level group named `pikslide:<group_id>`
+    (docs/spec.md SS4.2). Returns the modified `Presentation` -- the
+    caller saves it, to a copy or in place; unlike `write_pptx()`, this
+    doesn't save directly, since there's an existing file whose path (a
+    copy, or the same one) is the caller's call, not this function's.
+
+    A diagram is never scaled (SS4.2): one larger than its region is an
+    error, not silently shrunk. Running this again against the same
+    `deck_path`/`slide_no`/`group_id` replaces the group in place, keeping
+    its z-order position, rather than adding a second copy."""
+    prs = Presentation(deck_path)
+    if not 1 <= slide_no <= len(prs.slides):
+        raise LayoutError(f"--slide {slide_no} is out of range: this deck has {len(prs.slides)} slide(s)")
+    slide = prs.slides[slide_no - 1]
+    group_name = f"pikslide:{group_id}"
+
+    (region_left, region_top, region_w, region_h), to_delete = _resolve_region(slide, region, rect, group_name)
+
+    text_sizes = result.text_sizes or default_text_sizes()
+    bbox = _content_bbox(result, text_sizes)
+    diagram_w, diagram_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    if diagram_w > region_w + 1e-6 or diagram_h > region_h + 1e-6:
+        raise LayoutError(
+            f"diagram ({diagram_w:.2f}in x {diagram_h:.2f}in) is larger than its "
+            f"region ({region_w:.2f}in x {region_h:.2f}in); a diagram is never "
+            "scaled (docs/spec.md SS4.2) -- adjust the source instead"
+        )
+
+    spTree = slide.shapes._spTree
+    existing_group = _find_shape_by_name(slide, group_name)
+    insert_index = None
+    if existing_group is not None:
+        insert_index = list(spTree).index(existing_group._element)
+        spTree.remove(existing_group._element)
+
+    group = slide.shapes.add_group_shape()
+    group.name = group_name
+    _add_all_shapes(group, result, _LocalTransform(bbox), font_name, text_sizes)
+    group.left, group.top = Inches(region_left), Inches(region_top)
+    group.width, group.height = Inches(max(diagram_w, 0.01)), Inches(max(diagram_h, 0.01))
+
+    if insert_index is not None:
+        spTree.remove(group._element)
+        spTree.insert(insert_index, group._element)
+
+    if to_delete is not None:
+        spTree.remove(to_delete._element)
+
+    return prs

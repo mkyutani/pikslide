@@ -91,26 +91,49 @@ already-built behaviour.
   the `pikslide` fence tag is recognised alongside `pik`/`pikchr`; a fence
   may be named (` ```pikslide architecture `); a file with more than one
   diagram must name every one, uniquely, or `MarkdownDiagramError`.
-  `--block NAME` (to select one diagram for `--into`) is not implemented —
-  there is no `--into` yet either.
+- **Inserting into an existing deck** (`pptx_writer.py` `insert_into_pptx`,
+  docs/spec.md SS4.2): opens the deck, resolves `--region` (a shape/
+  placeholder found by name) or `--rect` to a target rectangle, errors if
+  the diagram is larger than it (never scaled, checked visually via
+  PowerPoint), draws into a new group (`_LocalTransform`: `_Transform`
+  without the whole-slide minimum-size clamp or margin, since a region
+  can be smaller than 1in and doesn't need either), and positions the
+  group at the region's top-left. An existing same-named group is removed
+  and the new one reinserted at its old position in the slide's shape
+  tree, so z-order survives a re-run (checked, including with another
+  shape added after the group in between runs). Resolving `--region`
+  falls back to an existing `pikslide:<id>` group's own rect if the named
+  shape can't be found -- needed for idempotent re-runs specifically when
+  the region was an *empty placeholder*: the first run deletes it, so a
+  second run naming it again would otherwise fail to find it at all (an
+  addition made once this surfaced in testing, not something docs/spec.md
+  SS4.2 spells out). `write_pptx()`'s draw loop is now shared
+  (`_add_all_shapes`) between a slide and a group, since a python-pptx
+  group's own `.shapes` exposes the identical `add_shape`/`add_connector`/
+  `add_picture`/`add_textbox`/`build_freeform` API (checked) -- no
+  branching needed in the shape-adding functions themselves, just a
+  parameter rename (`slide` -> `container`) for clarity. `--into`/
+  `--slide`/`--region`/`--rect`/`--id`/`--template`/`--settings`/
+  `--block`/`--include-path`/`--align`/`--strict`/`--check`/`--format`
+  are not wired up as CLI flags yet (`__init__.py` is still a bare
+  `sys.argv` reader, not `argparse`) -- `insert_into_pptx()` itself is
+  usable as a library function already.
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
   new coverage for colours, text sizes, the macro-shadow guard, Markdown
-  names, preset shapes, images, and `include` (`tests/test_layout.py`,
-  `tests/test_pik_parser.py`, `tests/test_pptx_writer.py`,
-  `tests/test_markdown.py`).
+  names, preset shapes, images, `include`, and inserting into a deck
+  (`tests/test_layout.py`, `tests/test_pik_parser.py`,
+  `tests/test_pptx_writer.py`, `tests/test_markdown.py`).
 
 ## Not yet started
 
 | Area | Today | Needed |
 |---|---|---|
 | `pik/tokens.py` `Token`, `PikSyntaxError` | carry a line number, and (since `include`) the right file named in the *message text* | a proper structured `file`/column field, rather than folding the path into the message string by hand at each `include`-related error site |
-| CLI | no `--include-path` | expose `pik/macros.py`'s already-implemented `include_paths` fallback as a flag |
 | `pik/layout.py`, `pptx_writer.py` | SVG `image`s are a clear "not supported yet" error | SVG picture (`svgBlip` + PNG fallback via an external rasteriser, hand-written XML) |
 | *(new)* theme reader | none; theme colours always render against python-pptx's built-in Office theme | read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base |
 | *(new)* template settings | none | find the settings file beside a template or deck and read it after the prelude; `layout`, `typeface`, accent colours, text sizes, content area |
 | `pptx_writer.py` `FONT_NAME` | hard-coded `"Arial"`; no `typeface` variable | read `typeface` (once settings files exist) or the theme's own font |
 | `pik/layout.py` `_flatten` | flattens `[ ]` blocks, losing the tree | keep the hierarchy so groups can be written |
 | `pik/layout.py` `behind` | parsed, ignored | affects z-order |
-| `pptx_writer.py` | always a new blank presentation | open an existing deck, insert group, replace by name, check that the diagram fits its region |
-| `__init__.py` | `pikslide <in> [<out>]` only | `--into --slide --region/--rect --id --template --settings --block --include-path --align --strict --check --format` |
+| `__init__.py` | `pikslide <in> [<out>]` only, hand-rolled `sys.argv` | a real argument parser (`argparse`), with `--into --slide --region --rect --id --in-place -o` calling the now-implemented `insert_into_pptx()`; `--template --settings --block --include-path --align --strict --check --format` besides (the last four depend on template settings/theme reading above) |
 | Docs | README's *Status* section | keep it in step with this file as items are implemented |

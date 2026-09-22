@@ -29,11 +29,16 @@ the ~180 OOXML presets, matched case-insensitively); images (`image
 resolved and contained under the source file's own directory); `include
 "house.pik"` for shared definitions (contained the same way, with cycle
 detection); Markdown diagram names (the `pikslide` fence tag, naming a
-diagram when a file has more than one).
+diagram when a file has more than one); inserting a diagram into an
+existing slide as one named, idempotently-replaceable group
+(`pikslide.pptx_writer.insert_into_pptx`) — not wired up to the CLI yet,
+see below.
 
 **Specified, not implemented yet**: SVG images, reading a
 template's own theme (`.potx`/`.pptx`), per-template settings files, and
-insertion into an existing deck. The rules
+CLI flags for `--into` and everything else beyond a bare input/output
+path (`__init__.py` is still a hand-rolled `sys.argv` reader, not
+`argparse`). The rules
 marked `(ext)` in [docs/grammar.md](docs/grammar.md) are the ones not
 implemented yet; [docs/implementation-plan.md](docs/implementation-plan.md)
 lists everything that has to change.

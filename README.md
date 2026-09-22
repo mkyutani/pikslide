@@ -43,19 +43,17 @@ settings file (`<name>.theme.pik`, or `--settings FILE`), for its slide
 layout, font, accent colors, text sizes and content area (`--into`'s
 default target region when neither `--region` nor `--rect` is given); and
 diagnostics — `file:line:column`, the source line and a caret for a syntax
-error (naming the right file even inside a nested `include`), `--strict`,
-`--check`, and `--format json`.
+error (naming the right file even inside a nested `include`), "did you
+mean" suggestions for an unknown color/preset/image/region name,
+`--strict`, `--check`, and `--format json`.
 
-**What's left** (both independent, both minor — see
-[docs/implementation-plan.md](docs/implementation-plan.md) for the full,
-current list): reading a template's actual theme *content* would sharpen
-`fit` sizing for a font this machine doesn't have installed, but isn't
-needed for correctness, since colors and fonts both stay theme-linked
-regardless; and a `LayoutError` (unlike a syntax error) carries no source
-position yet. Deliberately out of v1 (docs/spec.md §7): connectors, SVG
-*output*, auto-layout, tables/charts/SmartArt, animation, multi-slide
-authoring, true Bézier curves, shape adjustment handles, arithmetic on
-colors.
+Deliberately out of v1 (docs/spec.md §7): connectors, SVG *output*,
+auto-layout, tables/charts/SmartArt, animation, multi-slide authoring,
+true Bézier curves, shape adjustment handles, arithmetic on colors.
+
+[docs/implementation-plan.md](docs/implementation-plan.md) has the
+implementation notes behind all of this — what was checked, how, and any
+bugs found along the way — for whoever touches this code next.
 
 ## How it works
 

@@ -195,14 +195,19 @@ is only (a) no theme was supplied → rule 3; (b) a name is not defined, e.g.
 `accent1`?" hint; (c) `theme "accent7"` names no slot → an error that lists
 the slots the tool knows.
 
-Reading the theme needs only the zip (`ppt/theme/*.xml`), not python-pptx.
-Writing is different: python-pptx refuses a `.potx` as-is (it raises
-`ValueError`, checked), so a `.potx` used as a base is first normalized to a
-presentation content type and stripped of its sample slides.
+Colors and fonts are both emitted as symbolic references (`schemeClr`,
+`+mn-lt`/`+mj-lt`, …), never resolved here, so no theme file's *content*
+ever needs reading for either to be correct: PowerPoint itself resolves
+the reference once the diagram sits inside a real deck (rule 1) or a
+`--template`'s own theme (rule 2). Writing is the one place a `.potx`
+needs touching directly: python-pptx refuses one as-is (it raises
+`ValueError`, checked), so a `.potx` used as a `--template` base is first
+normalized to a presentation content type and stripped of its sample
+slides.
 
-The theme yields font *names* only. `fit` sizing still measures with a
-substitute font file on the machine, so widths are approximate for a face
-that is not installed.
+`fit` sizing measures with a fixed substitute font file on the machine,
+independent of the theme (whose actual font *name* is never read), so
+widths are approximate for a face that is not installed.
 
 ### 3.4 Preset shapes: `shape`
 

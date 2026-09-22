@@ -189,8 +189,9 @@ already-built behavior.
   - `--format json` (SS5) emits one JSON object (`{"ok", "errors",
     "warnings", ...}`) to stdout instead of `error:`/`warning:` lines to
     stderr and a plain success line to stdout; a `PikSyntaxError`'s entry
-    carries real `file`/`line`/`column` (see below), a `LayoutError`'s
-    does not (known gap, see Diagnostics below).
+    carries real `file`/`line`/`column` (the Diagnostics bullet below), a
+    `LayoutError`'s carries `null` for all three, since it isn't raised
+    from one token the way a syntax error is.
 
   Combining flags that don't make sense together (`--slide`/`--align`
   without `--into`, `--into` with `--template`, `-o` and `--in-place`
@@ -223,11 +224,9 @@ already-built behavior.
   `text_sizes` note above; unaffected by this). python-pptx's `Font.name`
   only ever touches `<a:latin>` -- `<a:ea>` has no public API, so it's set
   directly on the run's `rPr` (checked: round-trips through a save/reopen).
-  Reading a template's *actual* theme content (real font names, only for
-  more accurate `fit` measurement now that `--template` exists too, below,
-  without needing it) is still not done -- see the table below; staying
-  symbolic sidesteps it entirely for correctness, so this is a pure
-  accuracy nice-to-have, not a gap in what's emitted.
+  This needs no theme-file reading at all, for `--into` or `--template`
+  alike (the latter's own bullet is further below): staying symbolic
+  sidesteps it entirely, correctly.
 - **Object identity: names, groups, z-order** (`pik/layout.py`
   `_layout_statements`, `pptx_writer.py` `_add_all_shapes`, docs/spec.md
   SS3.1, ext -- previously not implemented at all despite being listed as
@@ -337,14 +336,6 @@ already-built behavior.
   main source, since every token already carries whichever file its own
   lexer pass actually stamped it with.
 
-  A `LayoutError` (undefined name, diagram larger than its region, and so
-  on) still carries no position at all -- unlike a `PikSyntaxError`, it
-  isn't raised from one token, and attaching real positions to every
-  layout error would need line/col threaded through the whole `ast`
-  module and most of `layout.py`'s ~1500 lines, not a small addition.
-  Known gap against SS5's "every error carries file:line:column"; `main()`
-  reports a `LayoutError` as a plain message either way.
-
   SS5 also promises "unknown names (color, theme slot, preset, image
   path, region) are errors with suggestions, not silent fallbacks" --
   found, on a re-check prompted directly by "did you actually finish
@@ -373,14 +364,12 @@ already-built behavior.
 
 ## Not yet started
 
-Everything docs/spec.md marks as v1 scope (§1: theme colors and fonts,
-object identity, insertion into an existing slide, preset shapes, images)
-is implemented, along with the output model (§4), diagnostics (§5) and
-Markdown integration (§6) built around it. What's left is smaller, and
-each row is independent of the others:
+Nothing. Everything docs/spec.md marks as v1 scope (§1: theme colors and
+fonts, object identity, insertion into an existing slide, preset shapes,
+images) is implemented, along with the output model (§4), diagnostics
+(§5) and Markdown integration (§6) built around it. §7 lists what v1
+deliberately leaves out; none of it belongs on this list.
 
-| Area | Today | Needed |
-|---|---|---|
-| *(new)* theme reader | not needed for correctness -- colors and fonts both stay symbolic and resolve against whatever theme the target deck (or `--template`) actually has | only a `fit`-measurement accuracy improvement: real font *names* (not just `+mn-lt` symbols) would let `PilFontMetrics` pick a closer installed substitute; read `ppt/theme/*.xml`'s `<a:fontScheme>` (via the already-open `Presentation` for `--into`/`--template`, no raw zip work needed there) |
-| `pik/layout.py` `LayoutError` | no position at all | `file`/`line`/`column`, matching what `PikSyntaxError` now has -- needs it threaded through `ast` and most of `layout.py`, not a small change (see the Diagnostics bullet above) |
-| Docs | README's *Status* section | keep it in step with this file as items are implemented |
+If a future change to spec.md or grammar.md opens a new gap, add a row
+here the same way the old ones were written: today's behavior, and what
+closing it needs.

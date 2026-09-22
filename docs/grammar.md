@@ -24,10 +24,11 @@ The language has two layers:
   difference is listed in [Differences from pikchr](#differences-from-pikchr),
   at the end.
 
-**This document describes the target language, not today's code.** Most
-`(ext)` rules are implemented already; a few are still only a proposal, and
-the parser rejects them. Which is which changes as work continues, so it is
-tracked separately, in
+**This document describes the target language.** Every `(ext)` rule is
+implemented, with one reserved-but-inactive exception: `connector`, a word
+held for a future object class ([spec.md](spec.md) §3.2/§7) that parses as
+a reserved word but nothing more yet. Implementation status against this
+grammar is tracked separately, in
 [docs/implementation-plan.md](implementation-plan.md), rather than marked
 per rule here.
 
@@ -484,9 +485,8 @@ later default; they are defined by the prelude (ext; see [spec.md](spec.md)
 
 pikslide starts from pikchr's grammar and departs from it where its design
 calls for it ([spec.md](spec.md) §2). This is the complete list; the sections
-above describe pikslide only. Rows marked (ext) are pikslide additions, not
-part of pikchr; most are implemented already (docs/implementation-plan.md
-tracks which).
+above describe pikslide only. Every row is implemented, except the last
+(`connector` is reserved, not yet a real construct).
 
 | Topic | pikchr | pikslide |
 |---|---|---|

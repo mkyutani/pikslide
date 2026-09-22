@@ -88,23 +88,39 @@ already-built behaviour.
   `shape roundRect`, `rad` unset, keeps python-pptx's own default corner
   rather than flattening it to square, checked).
 - **Images** (`image STRING`, `ast.ImageBase`, `Shape.image_path`/`alt_text`):
-  PNG/JPEG/GIF only (SVG errors clearly -- "not supported yet" -- rather
-  than a confusing raw `PIL.UnidentifiedImageError`, checked). The path
-  resolves against, and is contained under, the source file's own
-  directory (for Markdown, the `.md` file), the same containment `include`
-  will apply; `main()` computes it from the input path and threads it
-  through `resolve_for_pptx(..., base_dir=...)`. Sizing follows
-  docs/spec.md SS3.5 exactly: both `width`/`height` given -> stretched (no
-  file read at all); one given -> the other follows the aspect ratio;
-  neither -> fit inside `boxwid`x`boxht`. Aspect ratio comes from an
-  injected `ImageMetrics` (mirrors `FontMetrics`); the default reads the
-  file directly with Pillow, since unlike text there's no sensible flat
-  estimate. `alt STRING` sets the real saved accessibility description --
-  found the hard way that python-pptx 1.0.2's `Shape.alt_text` isn't a
-  real property at all (silently becomes a plain, never-saved instance
-  attribute); the actual OOXML attribute, `p:cNvPr/@descr`, is set
-  directly. A picture has no `text_frame` (like a connector), so text on
-  an image becomes one centred floating textbox, not per-string labels.
+  PNG, JPEG, GIF, and SVG. The path resolves against, and is contained
+  under, the source file's own directory (for Markdown, the `.md` file),
+  the same containment `include` applies; `main()` computes it from the
+  input path and threads it through `resolve_for_pptx(..., base_dir=...)`.
+  Sizing follows docs/spec.md SS3.5 exactly: both `width`/`height` given
+  -> stretched (no file read at all); one given -> the other follows the
+  aspect ratio; neither -> fit inside `boxwid`x`boxht`. Aspect ratio comes
+  from an injected `ImageMetrics` (mirrors `FontMetrics`); the default
+  reads the file directly with Pillow, since unlike text there's no
+  sensible flat estimate. `alt STRING` sets the real saved accessibility
+  description -- found the hard way that python-pptx 1.0.2's
+  `Shape.alt_text` isn't a real property at all (silently becomes a
+  plain, never-saved instance attribute); the actual OOXML attribute,
+  `p:cNvPr/@descr`, is set directly. A picture has no `text_frame` (like a
+  connector), so text on an image becomes one centred floating textbox,
+  not per-string labels.
+- **SVG images** (`pik/layout.py` `rasterize_svg`, `pptx_writer.py`
+  `_attach_svg_extension`, docs/spec.md SS3.5): via `rsvg-convert` (from
+  librsvg) on `PATH` -- a clear error naming the missing tool otherwise,
+  checked, not a confusing raw failure. Sizing (when width or height, or
+  neither, is given) rasterizes to PNG and reads *that* with Pillow, since
+  Pillow itself can't read an SVG's dimensions at all. Embedding: since
+  python-pptx cannot add an SVG (`add_picture()` raises `TypeError`,
+  checked -- it reads the image with Pillow internally too), the picture
+  is added from the *rasterized* PNG (python-pptx's normal path, so it
+  becomes the fallback older viewers show), then the real SVG is attached
+  by hand: a raw `ImagePart` (content type `image/svg+xml`, bypassing
+  python-pptx's own `Image` class, also Pillow-based and unable to read
+  SVG) related to the slide, referenced from a hand-written `<a:extLst>`/
+  `asvg:svgBlip` extension on the picture's `<a:blip>` -- checked against
+  real PowerPoint: with the fallback and the real SVG deliberately made to
+  look different (a solid rectangle vs. a vector circle), it renders the
+  *circle*, proving the extension is genuinely read, not just tolerated.
 - **Markdown diagram names** (`markdown.py` `PikBlock`, `extract_pik_blocks`):
   the `pikslide` fence tag is recognised alongside `pik`/`pikchr`; a fence
   may be named (` ```pikslide architecture `); a file with more than one
@@ -132,26 +148,50 @@ already-built behaviour.
   branching needed in the shape-adding functions themselves, just a
   parameter rename (`slide` -> `container`) for clarity.
 - **CLI**: `__init__.py` uses `argparse` now, not a hand-rolled `sys.argv`
-  reader. `--into DECK --slide N (--region NAME | --rect X,Y,W,H) [--id ID]
-  (--in-place | -o OUT)` calls `insert_into_pptx()`; omitting both
-  `--in-place` and `-o` saves to the `deck.pikslide.pptx` default
-  (docs/spec.md SS4.2), checked (including that the original deck is left
-  untouched in that case). `--id` defaults to the Markdown fence name, else
-  the source file's stem (SS4.2/SS6), checked for both a named and an
-  unnamed single-block `.md` file. A Markdown file with more than one
-  diagram and no `--block` (not implemented -- see below) is a clear
-  "--block isn't implemented yet" error under `--into`, rather than picking
-  one arbitrarily; standalone rendering of a multi-block file is
-  unaffected (unchanged from before). Combining flags that don't make
-  sense together (`--slide` without `--into`, `-o` and `--in-place`
-  together, `-o` given both positionally and as `-o`) are `argparse`-level
-  errors (exit 2), same as an unparsable `--rect`. Verified end-to-end via
-  real PowerPoint rendering (WSL -> Windows COM), not just python-pptx
-  introspection: title and the region shape both survive, the diagram
-  lands at the region's top-left, a second run replaces it in place.
-  `--template --settings --block --include-path --align --strict --check
-  --format` are still not wired up (the last four depend on template
-  settings/theme reading, which are separate not-yet-started items).
+  reader, with every flag docs/spec.md §4/§5/§6 names wired up:
+  - `--into DECK --slide N (--region NAME | --rect X,Y,W,H) [--id ID]
+    (--in-place | -o OUT) [--align ALIGN]` calls `insert_into_pptx()`;
+    omitting both `--in-place` and `-o` saves to the `deck.pikslide.pptx`
+    default (SS4.2), checked (including that the original deck is left
+    untouched in that case). `--id` defaults to the Markdown fence name,
+    else the source file's stem (SS4.2/SS6), checked for both a named and
+    an unnamed single-block `.md` file.
+  - `--template FILE` (standalone only -- an error alongside `--into`,
+    SS3.3 rule 2) calls the new `write_pptx_from_template()`; `--block
+    NAME` picks one diagram out of a multi-diagram Markdown file for
+    either (SS6) -- without it, such a file is a clear error naming
+    `--block`, rather than picking one arbitrarily; standalone rendering
+    of a multi-block file with *no* `--into`/`--template` is unaffected
+    (every block still gets its own numbered output, as before).
+  - `--settings FILE` (SS3.8) finds a settings file beside the `--into`
+    deck or `--template` file by default (`<name>.theme.pik`), or reads
+    the named one directly, including with neither `--into` nor
+    `--template` (SS3.8: "also works when no template is given"); a named
+    file that doesn't exist is an error.
+  - `--include-path DIR` (repeatable) is `parse()`'s existing
+    `include_paths` plumbing, finally with a flag that sets it.
+  - `--strict` turns the "no `--template` given" warning (SS3.3 rule 3)
+    into an error instead, before anything is written.
+  - `--check` parses and lays out without writing (SS5) -- literally
+    that: `parse()` + `resolve_for_pptx()` alone, stopping *before*
+    `write_pptx()`/`insert_into_pptx()`/`write_pptx_from_template()`, so
+    it validates the `.pik` source itself, not a specific deck/slide/
+    region target.
+  - `--format json` (SS5) emits one JSON object (`{"ok", "errors",
+    "warnings", ...}`) to stdout instead of `error:`/`warning:` lines to
+    stderr and a plain success line to stdout; a `PikSyntaxError`'s entry
+    carries real `file`/`line`/`column` (see below), a `LayoutError`'s
+    does not (known gap, see Diagnostics below).
+
+  Combining flags that don't make sense together (`--slide`/`--align`
+  without `--into`, `--into` with `--template`, `-o` and `--in-place`
+  together, `-o` given both positionally and as `-o`, an unrecognised
+  `--align`) are `argparse`-level errors (exit 2), same as an unparsable
+  `--rect`. Verified end-to-end via real PowerPoint rendering (WSL ->
+  Windows COM), not just python-pptx introspection: title and the region
+  shape both survive an `--into`, the diagram lands at the region's
+  top-left (or wherever `--align` says), a second run replaces it in
+  place.
 - **Fonts follow the theme, not a hard-coded family** (`pptx_writer.py`
   `_apply_run_font`, docs/spec.md SS3.3): every run's Latin and East Asian
   font slots (`<a:latin>`/`<a:ea>`) get a *symbolic* theme reference by
@@ -174,10 +214,11 @@ already-built behaviour.
   `text_sizes` note above; unaffected by this). python-pptx's `Font.name`
   only ever touches `<a:latin>` -- `<a:ea>` has no public API, so it's set
   directly on the run's `rPr` (checked: round-trips through a save/reopen).
-  Reading a template's *actual* theme content (real font names, for
-  `--template`'s new-deck case and for more accurate `fit` measurement) is
-  still not done -- see the theme reader row below; it was not needed for
-  this, since staying symbolic sidesteps it entirely.
+  Reading a template's *actual* theme content (real font names, only for
+  more accurate `fit` measurement now that `--template` exists too, below,
+  without needing it) is still not done -- see the table below; staying
+  symbolic sidesteps it entirely for correctness, so this is a pure
+  accuracy nice-to-have, not a gap in what's emitted.
 - **Object identity: names, groups, z-order** (`pik/layout.py`
   `_layout_statements`, `pptx_writer.py` `_add_all_shapes`, docs/spec.md
   SS3.1, ext -- previously not implemented at all despite being listed as
@@ -223,21 +264,98 @@ already-built behaviour.
     against real PowerPoint (nested and doubly-nested blocks, positioned
     correctly, `behind` ordering correct, both via direct python-pptx
     introspection and COM rendering).
+- **`--template` and template settings files** (docs/spec.md SS3.3 rule 2,
+  SS3.8, SS4.1): a settings file is a full, independent `parse()` of its
+  own (`pik/layout.py` `_load_settings`) -- unlike an `include`, it is
+  never merged into the *program*'s macro-expansion pass, so it needs no
+  token-shape scan the way `include`'s definitions-only check does; the
+  same "definitions only" rule is still enforced (every resulting
+  statement must be an `AssignStatement`, exactly like the prelude's own
+  assert, but a real diagnostic here since this file is user-authored).
+  Layered prelude -> settings -> program, each overriding the last
+  (`_Ctx.__init__`); `layout` (a new prelude default, `""`) can be
+  assigned only while loading the prelude or a settings file, never a
+  program (`_eval_assignment`'s `_layout_assignment_allowed` flag) --
+  "a `.pik` never chooses the deck's structure". `content_left`/`_top`/
+  `_right`/`_bottom` become `LayoutResult.content_area` (a `(left, top,
+  width, height)` tuple) only when a settings file defines all four; it's
+  `--into`'s default target when neither `--region` nor `--rect` is given.
+  `primary`/`emphasis` (standard accent-colour names) and `layout`/
+  `typeface` are now real prelude defaults too (docs/spec.md SS3.7's own
+  excerpt already specified them; they just hadn't been added to
+  `prelude.pik` yet).
+
+  `write_pptx_from_template()` (`pptx_writer.py`) builds the actual new
+  deck: strips every existing slide (SS3.3: "stripped of its sample
+  slides" -- generalised to any `--template`, not just a `.potx`, since
+  standalone output is one new slide, not the template's own N plus one),
+  resolves `layout` to a slide layout (named, found in any master, first
+  match wins; empty, the first `blank`-type layout of the first master,
+  or that master's own first layout if it has none -- checked: a
+  real-world template's layouts commonly don't set the `type` attribute
+  at all, so this fallback is the *common* case in practice, not a rare
+  corner), and adds one new diagram-sized slide from it, so the new
+  slide's theme (and, if `layout` was named explicitly, its placeholder
+  shapes) come from the *right* master. A `.potx` is normalised first
+  (`_normalize_potx`): python-pptx refuses one as-is (`ValueError`,
+  checked) since the only actual difference from a `.pptx` is the content
+  type declared for `/ppt/presentation.xml`, rewritten in a temp copy.
+  Since colours and fonts are both emitted symbolically regardless (see
+  their own bullets above), `--template` needed no theme-*content*
+  reading at all to be correct -- the new slide's own theme reference
+  resolves once the file is reopened, exactly like `--into`'s does against
+  its target deck.
+
+  Checked: a real multi-master `.potx` (Japanese layout names, no `type`
+  attributes on any layout) opens, strips (already empty here), resolves
+  its fallback layout correctly, and renders with correct symbolic
+  colours/fonts; a synthetic `.potx` (an ordinary `.pptx` with its content
+  type rewritten to simulate one, so tests don't depend on a real `.potx`
+  file existing anywhere) round-trips the same way.
+- **Diagnostics** (docs/spec.md SS5): `Token`/`PikSyntaxError` now carry
+  `pos` (a character offset) and `file` (`pik/tokens.py`) -- `None` means
+  the main source; an included file's resolved path otherwise, set once
+  per `Lexer.tokenize()` call (the same for every token from one lex
+  pass), not per-token, and threaded through every `include`-related
+  `PikSyntaxError` site in `macros.py` (previously folded the path into
+  the message *text* by hand only for a couple of them; the rest had no
+  file information at all). `column_at(text, pos)` and
+  `format_syntax_error(err, main_path, main_text)` (new) produce the
+  `file:line:col: message`, the source line, and a caret docs/spec.md SS5
+  asks for -- reading `err.file` again from disk for its own line when set
+  (not cached: a diagnostic is the rare path). Checked: an error inside a
+  *nested* `include` names the innermost file, not the outer one or the
+  main source, since every token already carries whichever file its own
+  lexer pass actually stamped it with.
+
+  A `LayoutError` (undefined name, diagram larger than its region, and so
+  on) still carries no position at all -- unlike a `PikSyntaxError`, it
+  isn't raised from one token, and attaching real positions to every
+  layout error would need line/col threaded through the whole `ast`
+  module and most of `layout.py`'s ~1500 lines, not a small addition.
+  Known gap against SS5's "every error carries file:line:column"; `main()`
+  reports a `LayoutError` as a plain message either way.
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
-  new coverage for colours, text sizes, the macro-shadow guard, Markdown
-  names, preset shapes, images, `include`, inserting into a deck, fonts,
-  and object identity (names/groups/z-order)
+  coverage for colours, text sizes, the macro-shadow guard, Markdown
+  names, preset shapes, images (including SVG), `include`, inserting into
+  a deck, fonts, object identity (names/groups/z-order), templates and
+  settings files, and diagnostics
   (`tests/test_layout.py`, `tests/test_pik_parser.py`,
   `tests/test_pptx_writer.py`, `tests/test_markdown.py`,
   `tests/test_cli.py`).
 
 ## Not yet started
 
+Everything docs/spec.md marks as v1 scope (§1: theme colours and fonts,
+object identity, insertion into an existing slide, preset shapes, images)
+is implemented, along with the output model (§4), diagnostics (§5) and
+Markdown integration (§6) built around it. What's left is smaller, and
+each row is independent of the others:
+
 | Area | Today | Needed |
 |---|---|---|
-| `pik/tokens.py` `Token`, `PikSyntaxError` | carry a line number, and (since `include`) the right file named in the *message text* | a proper structured `file`/column field, rather than folding the path into the message string by hand at each `include`-related error site |
-| `pik/layout.py`, `pptx_writer.py` | SVG `image`s are a clear "not supported yet" error | SVG picture (`svgBlip` + PNG fallback via an external rasteriser, hand-written XML) |
-| *(new)* theme reader | not needed for colours or fonts any more -- both stay symbolic and resolve against whatever theme the target deck actually has (see the Fonts bullet above) | only still needed for (a) `--template`'s new standalone deck, to copy an arbitrary file's theme into it, and (b) real font *names* (not just symbols) for more accurate `fit` measurement; read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base for (a) |
-| *(new)* template settings | none | find the settings file beside a template or deck and read it after the prelude; `layout`, `typeface`, accent colours, text sizes, content area |
-| `__init__.py` | `argparse`, with `--into --slide --region --rect --id --in-place -o` all working | `--template --settings --block --include-path --align --strict --check --format` besides (the last four depend on template settings/theme reading above) |
+| *(new)* theme reader | not needed for correctness -- colours and fonts both stay symbolic and resolve against whatever theme the target deck (or `--template`) actually has | only a `fit`-measurement accuracy improvement: real font *names* (not just `+mn-lt` symbols) would let `PilFontMetrics` pick a closer installed substitute; read `ppt/theme/*.xml`'s `<a:fontScheme>` (via the already-open `Presentation` for `--into`/`--template`, no raw zip work needed there) |
+| `pik/layout.py` `LayoutError` | no position at all | `file`/`line`/`column`, matching what `PikSyntaxError` now has -- needs it threaded through `ast` and most of `layout.py`, not a small change (see the Diagnostics bullet above) |
+| `pik/layout.py`, `pptx_writer.py` | text size (`small`/`medium`/`large`) and `typeface` resolve once for the *whole* document (the value in effect at the end, not at each object's own position); `fit` measurement never tracks a program override at all | resolve both per-statement, during layout, not once before or after it (see the text-sizes bullet above for exactly what's stale today) |
+| `pik/layout.py` `_ApproxMetrics`/`ImageMetrics` sizing | pluggable, but no caching -- an SVG `image` used many times in one document rasterizes with `rsvg-convert` again each time `_size_image()` needs its aspect ratio | memoize `rasterize_svg()` (or `ImageMetrics.size()` generally) per path within one `resolve_layout()` call, if this shows up as a real cost |
 | Docs | README's *Status* section | keep it in step with this file as items are implemented |

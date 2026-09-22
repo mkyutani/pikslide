@@ -1,11 +1,20 @@
 import argparse
+import json
 import os
 import sys
 
-from .markdown import MarkdownDiagramError, extract_pik_blocks
-from .pik import PikSyntaxError, dump, parse
+from .markdown import MarkdownDiagramError, PikBlock, extract_pik_blocks
+from .pik import PikSyntaxError, dump, format_syntax_error, parse
 from .pik.layout import LayoutError
-from .pptx_writer import insert_into_pptx, resolve_for_pptx, write_pptx
+from .pik.tokens import column_at
+from .pptx_writer import (
+    ALIGN_CHOICES,
+    find_settings_file,
+    insert_into_pptx,
+    resolve_for_pptx,
+    write_pptx,
+    write_pptx_from_template,
+)
 
 
 def main() -> None:
@@ -26,41 +35,43 @@ def main() -> None:
         try:
             blocks = extract_pik_blocks(text)
         except MarkdownDiagramError as e:
-            print(f"error: {e}", file=sys.stderr)
-            raise SystemExit(1)
+            _fail(args, str(e))
         if not blocks:
-            print("no ```pik```/```pikchr```/```pikslide``` code blocks found", file=sys.stderr)
-            raise SystemExit(1)
-        if args.into is not None:
-            if len(blocks) > 1:
-                # docs/spec.md SS6: `--block NAME` is how a multi-diagram
-                # file picks one for `--into`, but it isn't implemented
-                # yet (docs/implementation-plan.md) -- so, for now, only a
-                # single-diagram file can be used this way.
-                print(
-                    "error: this file has more than one diagram; --into places one "
-                    "at a time and --block (to choose which) isn't implemented yet",
-                    file=sys.stderr,
-                )
-                raise SystemExit(1)
-            block = blocks[0]
+            _fail(args, "no ```pik```/```pikchr```/```pikslide``` code blocks found")
+        if args.block is not None or args.into is not None or args.template is not None:
+            block = _select_block(args, blocks)
             default_id = block.name or os.path.splitext(os.path.basename(args.input))[0]
-            _process_into(block.text, args, base_dir, default_id)
+            _run(args, block.text, base_dir, args.output, default_id)
             return
         for i, block in enumerate(blocks, start=1):
             block_out = _numbered(args.output, i, len(blocks)) if args.output else None
             if len(blocks) > 1 and block_out is None:
                 label = f'"{block.name}"' if block.name else f"{i} of {len(blocks)}"
                 print(f"--- block {label} ---")
-            _process(block.text, block_out, base_dir)
+            default_id = block.name or os.path.splitext(os.path.basename(args.input))[0]
+            _run(args, block.text, base_dir, block_out, default_id)
         return
 
-    if args.into is not None:
-        default_id = os.path.splitext(os.path.basename(args.input))[0]
-        _process_into(text, args, base_dir, default_id)
-        return
+    if args.block is not None:
+        _fail(args, "--block only applies to a Markdown input file")
+    default_id = os.path.splitext(os.path.basename(args.input))[0]
+    _run(args, text, base_dir, args.output, default_id)
 
-    _process(text, args.output, base_dir)
+
+def _select_block(args: argparse.Namespace, blocks: list[PikBlock]) -> PikBlock:
+    """`--block NAME` (docs/spec.md SS6): required to pick one diagram out
+    of a multi-diagram Markdown file for `--into`/`--template`, which each
+    place exactly one. A single-diagram file needs no `--block` at all."""
+    if args.block is None:
+        if len(blocks) > 1:
+            names = ", ".join(repr(b.name) for b in blocks)
+            _fail(args, f"this file has more than one diagram; --block NAME selects one ({names})")
+        return blocks[0]
+    for block in blocks:
+        if block.name == args.block:
+            return block
+    names = ", ".join(repr(b.name) for b in blocks if b.name)
+    _fail(args, f"no diagram named {args.block!r} in this file" + (f"; it has: {names}" if names else ""))
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -93,12 +104,41 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--in-place", action="store_true", help="overwrite the --into deck itself instead of writing a separate file"
     )
+    parser.add_argument(
+        "--align", metavar="ALIGN", default="top-left",
+        help=f"where a smaller-than-its-region diagram sits (--into only); one of {', '.join(sorted(ALIGN_CHOICES))} (default: top-left)",
+    )
+    parser.add_argument(
+        "--template", metavar="FILE", default=None,
+        help="start a new standalone deck from this .pptx/.potx's theme instead of the built-in Office one",
+    )
+    parser.add_argument(
+        "--settings", metavar="FILE", default=None,
+        help="a template's settings file (docs/spec.md SS3.8); default: <template/deck name>.theme.pik beside it, if any",
+    )
+    parser.add_argument(
+        "--include-path", metavar="DIR", action="append", default=None,
+        help="an extra directory to search for `include \"path\"` (may be given more than once)",
+    )
+    parser.add_argument(
+        "--block", metavar="NAME", default=None, help="select one diagram from a Markdown file with more than one (docs/spec.md SS6)"
+    )
+    parser.add_argument("--strict", action="store_true", help="turn warnings into errors")
+    parser.add_argument("--check", action="store_true", help="parse and lay out the source without writing any output")
+    parser.add_argument(
+        "--format", choices=("text", "json"), default="text", help="diagnostics format (default: text)"
+    )
     args = parser.parse_args(argv)
 
     if args.output is not None and args.output_opt is not None:
         parser.error("output given twice: as a positional argument and with -o")
     if args.output_opt is not None:
         args.output = args.output_opt
+    args.include_paths = args.include_path or []
+
+    if args.into is not None and args.template is not None:
+        # docs/spec.md SS3.3 rule 2: "the deck is already the template".
+        parser.error("--into and --template are mutually exclusive")
 
     if args.into is None:
         for flag, value in (
@@ -111,6 +151,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
                 parser.error(f"{flag} requires --into")
         if args.in_place:
             parser.error("--in-place requires --into")
+        if args.align != "top-left":
+            parser.error("--align requires --into")
     else:
         if args.slide is None:
             parser.error("--into requires --slide")
@@ -118,6 +160,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
             parser.error("--in-place and -o/OUTPUT are mutually exclusive")
         if args.rect is not None:
             args.rect = _parse_rect(args.rect, parser)
+        if args.align not in ALIGN_CHOICES:
+            parser.error(f"--align must be one of {', '.join(sorted(ALIGN_CHOICES))} (got {args.align!r})")
 
     return args
 
@@ -148,51 +192,134 @@ def _default_into_output(deck_path: str) -> str:
     return f"{stem}.pikslide.{ext}" if dot else f"{deck_path}.pikslide"
 
 
-def _process(text: str, out_path: str | None, base_dir: str = ".") -> None:
+# ---------------------------------------------------------------------------
+# Diagnostics (docs/spec.md SS5): plain text (default) or --format json.
+# ---------------------------------------------------------------------------
+
+
+def _syntax_error_detail(err: PikSyntaxError, main_path: str, main_text: str) -> dict:
+    file = err.file or main_path
+    text = main_text if err.file is None else _try_read(err.file)
+    column = column_at(text, err.pos) if text else None
+    return {"file": file, "line": err.line, "column": column, "message": err.message}
+
+
+def _try_read(path: str) -> str | None:
     try:
-        doc = parse(text, base_dir=base_dir)
-    except PikSyntaxError as e:
-        print(f"error: {e}", file=sys.stderr)
-        raise SystemExit(1)
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return None
 
-    if out_path is None:
-        print(dump(doc))
-        return
 
-    if out_path.endswith(".pptx"):
-        try:
-            write_pptx(resolve_for_pptx(doc, base_dir=base_dir), out_path)
-        except LayoutError as e:
-            print(f"error: {e}", file=sys.stderr)
-            raise SystemExit(1)
-        print(f"wrote {out_path}")
-        return
-
-    print(f"error: unsupported output format: {out_path}", file=sys.stderr)
+def _fail(args: argparse.Namespace, message: str) -> None:
+    """A plain diagnostic with no file position (a Markdown-block-naming
+    problem, an unsupported combination, and the like)."""
+    if args.format == "json":
+        print(json.dumps({"ok": False, "errors": [{"file": None, "line": None, "column": None, "message": message}]}))
+    else:
+        print(f"error: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
-def _process_into(text: str, args: argparse.Namespace, base_dir: str, default_id: str) -> None:
+def _fail_syntax(args: argparse.Namespace, err: PikSyntaxError, main_path: str, main_text: str) -> None:
+    if args.format == "json":
+        print(json.dumps({"ok": False, "errors": [_syntax_error_detail(err, main_path, main_text)]}))
+    else:
+        print(f"error: {format_syntax_error(err, main_path, main_text)}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def _fail_layout(args: argparse.Namespace, err: LayoutError) -> None:
+    """A LayoutError (docs/spec.md SS5: undefined names, a diagram larger
+    than its region, and so on) carries no file position -- unlike a
+    PikSyntaxError, it isn't tied to one token (docs/implementation-plan.md
+    notes this as a known gap against SS5's "every error")."""
+    if args.format == "json":
+        print(json.dumps({"ok": False, "errors": [{"file": None, "line": None, "column": None, "message": str(err)}]}))
+    else:
+        print(f"error: {err}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def _succeed(args: argparse.Namespace, message: str, warnings: list[str] = (), **extra) -> None:
+    if args.format == "json":
+        print(json.dumps({"ok": True, "errors": [], "warnings": list(warnings), **extra}))
+    else:
+        for w in warnings:
+            print(f"warning: {w}", file=sys.stderr)
+        print(message)
+
+
+# ---------------------------------------------------------------------------
+
+
+def _run(args: argparse.Namespace, text: str, base_dir: str, out_path: str | None, default_id: str) -> None:
     try:
-        doc = parse(text, base_dir=base_dir)
+        doc = parse(text, base_dir=base_dir, include_paths=args.include_paths)
     except PikSyntaxError as e:
-        print(f"error: {e}", file=sys.stderr)
-        raise SystemExit(1)
+        _fail_syntax(args, e, args.input, text)
+        return
 
+    if args.into is None and args.template is None and out_path is None and not args.check:
+        print(dump(doc))
+        return
+
+    settings_target = args.into or args.template
+    settings_text = None
+    settings_base_dir = "."
     try:
-        result = resolve_for_pptx(doc, base_dir=base_dir)
-        prs = insert_into_pptx(
-            result,
-            args.into,
-            args.slide,
-            region=args.region,
-            rect=args.rect,
-            group_id=args.id or default_id,
-        )
+        if settings_target is not None or args.settings is not None:
+            settings_path = find_settings_file(settings_target or args.input, explicit=args.settings)
+            if settings_path is not None:
+                settings_text = _try_read(settings_path)
+                if settings_text is None:
+                    _fail(args, f"could not read settings file: {settings_path}")
+                settings_base_dir = os.path.dirname(os.path.abspath(settings_path))
+        result = resolve_for_pptx(doc, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir)
     except LayoutError as e:
-        print(f"error: {e}", file=sys.stderr)
-        raise SystemExit(1)
+        _fail_layout(args, e)
+        return
 
-    out_path = args.into if args.in_place else (args.output or _default_into_output(args.into))
-    prs.save(out_path)
-    print(f"wrote {out_path}")
+    if args.check:
+        _succeed(args, f"ok: {args.input} parses and lays out cleanly (--check, nothing written)")
+        return
+
+    if args.into is not None:
+        try:
+            prs = insert_into_pptx(
+                result, args.into, args.slide, region=args.region, rect=args.rect,
+                group_id=args.id or default_id, align=args.align,
+            )
+        except LayoutError as e:
+            _fail_layout(args, e)
+            return
+        final_out = args.into if args.in_place else (out_path or _default_into_output(args.into))
+        prs.save(final_out)
+        _succeed(args, f"wrote {final_out}", output=final_out)
+        return
+
+    if args.template is not None:
+        if out_path is None:
+            _fail(args, "an output path is required with --template")
+        try:
+            write_pptx_from_template(result, args.template, out_path, layout_name=result.layout_name)
+        except LayoutError as e:
+            _fail_layout(args, e)
+            return
+        _succeed(args, f"wrote {out_path}", output=out_path)
+        return
+
+    # Standalone, no --template (docs/spec.md SS3.3 rule 3): the built-in
+    # Office theme stands in for a real one, which --strict makes fatal
+    # rather than just noted.
+    warning = "no --template given: colours and fonts are stand-ins from the built-in Office theme (docs/spec.md SS3.3)"
+    if args.strict:
+        _fail(args, warning)
+        return
+    if out_path.endswith(".pptx"):
+        write_pptx(result, out_path)
+        _succeed(args, f"wrote {out_path}", warnings=[warning], output=out_path)
+        return
+
+    _fail(args, f"unsupported output format: {out_path}")

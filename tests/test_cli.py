@@ -5,6 +5,7 @@ both standalone rendering (unchanged from before this file existed) and
 
 from __future__ import annotations
 
+import json
 import pathlib
 
 import pytest
@@ -214,3 +215,202 @@ def test_into_markdown_multiple_blocks_without_block_flag_is_an_error(monkeypatc
         _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure"])
     assert exc.value.code == 1
     assert "--block" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# --template / --settings (docs/spec.md SS3.3 rule 2/3, SS3.8, SS4.1)
+# ---------------------------------------------------------------------------
+
+
+def _template_deck(tmp_path: pathlib.Path, name: str = "tmpl.pptx") -> pathlib.Path:
+    prs = Presentation()
+    prs.slides.add_slide(prs.slide_layouts[1]).shapes.title.text = "Sample"
+    path = tmp_path / name
+    prs.save(str(path))
+    return path
+
+
+def test_standalone_without_template_warns_and_still_writes(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out)])
+    captured = capsys.readouterr()
+    assert out.exists()
+    assert "warning:" in captured.err and "stand-ins" in captured.err
+    assert "wrote" in captured.out
+
+
+def test_strict_turns_the_no_template_warning_into_an_error(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    out = tmp_path / "d.pptx"
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [str(src), str(out), "--strict"])
+    assert exc.value.code == 1
+    assert not out.exists()
+    assert "stand-ins" in capsys.readouterr().err
+
+
+def test_template_flag_starts_a_new_deck_from_that_theme(monkeypatch, capsys, tmp_path):
+    tmpl = _template_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--template", str(tmpl)])
+    captured = capsys.readouterr()
+    assert out.exists()
+    assert "warning:" not in captured.err  # a real template given -- no stand-in warning
+    prs = Presentation(str(out))
+    assert len(prs.slides) == 1
+    assert [s.name for s in prs.slides[0].shapes] == ["box 1"]  # sample slide stripped
+
+
+def test_template_and_into_are_mutually_exclusive(monkeypatch, tmp_path):
+    deck = _existing_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [str(src), "--into", str(deck), "--template", str(deck), "--slide", "1"])
+    assert exc.value.code == 2
+
+
+def test_settings_file_beside_template_is_found_automatically(monkeypatch, tmp_path):
+    tmpl = _template_deck(tmp_path)
+    _write(tmp_path, "tmpl.theme.pik", 'typeface = "Verdana"\n')
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--template", str(tmpl)])
+    run = Presentation(str(out)).slides[0].shapes[0].text_frame.paragraphs[0].runs[0]
+    assert run.font.name == "Verdana"
+
+
+def test_explicit_settings_flag_overrides_the_beside_file(monkeypatch, tmp_path):
+    tmpl = _template_deck(tmp_path)
+    _write(tmp_path, "tmpl.theme.pik", 'typeface = "Verdana"\n')
+    _write(tmp_path, "elsewhere.pik", 'typeface = "Georgia"\n')
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--template", str(tmpl), "--settings", str(tmp_path / "elsewhere.pik")])
+    run = Presentation(str(out)).slides[0].shapes[0].text_frame.paragraphs[0].runs[0]
+    assert run.font.name == "Georgia"
+
+
+def test_missing_explicit_settings_file_is_an_error(monkeypatch, tmp_path):
+    tmpl = _template_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [str(src), str(tmp_path / "out.pptx"), "--template", str(tmpl), "--settings", str(tmp_path / "nope.pik")])
+    assert exc.value.code == 1
+
+
+def test_settings_content_area_becomes_intos_default_region(monkeypatch, tmp_path):
+    deck = _existing_deck(tmp_path)
+    _write(tmp_path, "deck.theme.pik", "content_left = 2in\ncontent_top = 2in\ncontent_right = 6in\ncontent_bottom = 6in\n")
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1"])  # no --region/--rect at all
+    out = tmp_path / "deck.pikslide.pptx"
+    group = Presentation(str(out)).slides[0].shapes[-1]
+    assert (group.left.inches, group.top.inches) == pytest.approx((2.0, 2.0))
+
+
+# ---------------------------------------------------------------------------
+# --include-path, --align, --check, --format json (ext)
+# ---------------------------------------------------------------------------
+
+
+def test_include_path_flag_is_searched_when_not_found_beside_the_source(monkeypatch, tmp_path):
+    lib_dir = tmp_path / "lib"
+    lib_dir.mkdir()
+    (lib_dir / "house.pik").write_text("primary = accent3\n", encoding="utf-8")
+    src = _write(tmp_path, "d.pik", 'include "house.pik"\nbox fill primary\n')
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--include-path", str(lib_dir)])
+    assert out.exists()
+
+
+def test_align_center_with_into(monkeypatch, tmp_path):
+    deck = _existing_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure", "--align", "center"])
+    out = tmp_path / "deck.pikslide.pptx"
+    group = Presentation(str(out)).slides[0].shapes[-1]
+    # Figure is (1,1,4,3); a bare box (0.75x0.5) centred within it:
+    assert group.left.inches == pytest.approx(1 + (4 - group.width.inches) / 2, abs=0.01)
+    assert group.top.inches == pytest.approx(1 + (3 - group.height.inches) / 2, abs=0.01)
+
+
+def test_align_without_into_is_an_error(monkeypatch, tmp_path):
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [str(src), str(tmp_path / "d.pptx"), "--align", "center"])
+    assert exc.value.code == 2
+
+
+def test_check_parses_and_lays_out_without_writing(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--check"])
+    assert not out.exists()
+    assert "ok" in capsys.readouterr().out
+
+
+def test_check_still_catches_a_layout_error(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", "box fill nosuchcolour\n")
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [str(src), str(tmp_path / "d.pptx"), "--check"])
+    assert exc.value.code == 1
+
+
+def test_format_json_success(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["output"] == str(out)
+    assert any("stand-ins" in w for w in payload["warnings"])
+
+
+def test_format_json_syntax_error_has_file_line_column(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", '"unterminated\n')
+    with pytest.raises(SystemExit):
+        _run(monkeypatch, [str(src), "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    err = payload["errors"][0]
+    assert err["file"] == str(src)
+    assert err["line"] == 1
+    assert isinstance(err["column"], int)
+
+
+def test_format_json_layout_error_has_no_position(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", "box fill nosuchcolour\n")
+    out = tmp_path / "d.pptx"
+    with pytest.raises(SystemExit):
+        _run(monkeypatch, [str(src), str(out), "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    err = payload["errors"][0]
+    assert err["line"] is None
+    assert "nosuchcolour" in err["message"]
+
+
+def test_block_selects_the_named_diagram(monkeypatch, tmp_path):
+    src = _write(
+        tmp_path, "doc.md", '# doc\n\n```pikslide one\nbox "A"\n```\n\n```pikslide two\nbox "B"\n```\n'
+    )
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--block", "two"])
+    text = Presentation(str(out)).slides[0].shapes[0].text_frame.text
+    assert text == "B"
+
+
+def test_block_unknown_name_lists_the_known_ones(monkeypatch, capsys, tmp_path):
+    src = _write(
+        tmp_path, "doc.md", '# doc\n\n```pikslide one\nbox "A"\n```\n\n```pikslide two\nbox "B"\n```\n'
+    )
+    with pytest.raises(SystemExit):
+        _run(monkeypatch, [str(src), str(tmp_path / "d.pptx"), "--block", "nope"])
+    assert "'one'" in capsys.readouterr().err
+
+
+def test_block_on_a_non_markdown_file_is_an_error(monkeypatch, tmp_path):
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    with pytest.raises(SystemExit):
+        _run(monkeypatch, [str(src), str(tmp_path / "d.pptx"), "--block", "x"])

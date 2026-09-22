@@ -326,6 +326,73 @@ def test_typeface_must_be_a_string_not_a_number():
 
 
 # ---------------------------------------------------------------------------
+# Template settings files (docs/spec.md SS3.8, ext)
+# ---------------------------------------------------------------------------
+
+
+def test_settings_file_overrides_the_prelude_and_the_program_overrides_it_in_turn():
+    settings = 'medium = 12pt\nprimary = accent3\n'
+    # settings > prelude...
+    result = resolve_layout(parse('box "a"\n'), settings_text=settings)
+    assert result.text_sizes["medium"] == pytest.approx(12 / 72)
+    # ...and the program > settings.
+    result2 = resolve_layout(parse('medium = 16pt\nbox "a"\n'), settings_text=settings)
+    assert result2.text_sizes["medium"] == pytest.approx(16 / 72)
+
+
+def test_settings_file_can_define_new_names_not_in_the_prelude():
+    settings = 'warning = accent5\n'
+    result = resolve_layout(parse('box fill warning\n'), settings_text=settings)
+    assert result.shapes[0].fill == Colour(theme_slot="accent5")
+
+
+def test_settings_file_must_be_definitions_only():
+    with pytest.raises(LayoutError):
+        resolve_layout(parse('box\n'), settings_text='box "not allowed here"\n')
+
+
+def test_settings_file_content_area_becomes_content_area():
+    settings = (
+        "content_left = 1in\ncontent_top = 2in\ncontent_right = 9in\ncontent_bottom = 7in\n"
+    )
+    result = resolve_layout(parse('box\n'), settings_text=settings)
+    assert result.content_area == pytest.approx((1.0, 2.0, 8.0, 5.0))
+
+
+def test_no_settings_file_means_no_content_area():
+    result = layout('box\n')
+    assert result.content_area is None
+
+
+def test_partial_content_area_is_not_enough():
+    # All four sides are required (docs/spec.md SS3.8) -- three don't
+    # define a rectangle.
+    settings = "content_left = 1in\ncontent_top = 2in\ncontent_right = 9in\n"
+    result = resolve_layout(parse('box\n'), settings_text=settings)
+    assert result.content_area is None
+
+
+def test_layout_can_be_set_in_a_settings_file():
+    result = resolve_layout(parse('box\n'), settings_text='layout = "Title Slide"\n')
+    assert result.layout_name == "Title Slide"
+
+
+def test_default_layout_name_is_empty():
+    result = layout('box\n')
+    assert result.layout_name == ""
+
+
+def test_layout_cannot_be_set_in_a_program():
+    with pytest.raises(LayoutError, match="settings file"):
+        layout('layout = "Title Slide"\nbox\n')
+
+
+def test_layout_cannot_be_set_by_a_program_even_with_a_settings_file_present():
+    with pytest.raises(LayoutError, match="settings file"):
+        resolve_layout(parse('layout = "Other"\nbox\n'), settings_text='layout = "Title Slide"\n')
+
+
+# ---------------------------------------------------------------------------
 # Preset shapes: `shape` (docs/spec.md SS3.4)
 # ---------------------------------------------------------------------------
 
@@ -422,14 +489,36 @@ def test_missing_image_file_is_an_error(tmp_path: pathlib.Path):
         resolve_layout(parse('image "nope.png"\n'), base_dir=str(tmp_path))
 
 
-def test_svg_image_is_a_clear_error_not_yet_supported(tmp_path: pathlib.Path):
-    # Not implemented yet (docs/implementation-plan.md); this must fail
-    # cleanly, not with a raw PIL.UnidentifiedImageError (checked).
-    (tmp_path / "icon.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
-    with pytest.raises(LayoutError, match="SVG"):
+def _make_svg(tmp_path: pathlib.Path, name: str = "icon.svg", w: int = 400, h: int = 200) -> None:
+    (tmp_path / name).write_text(
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+        f'viewBox="0 0 {w} {h}"><rect width="{w}" height="{h}" fill="blue"/></svg>',
+        encoding="utf-8",
+    )
+
+
+def test_svg_with_both_dimensions_given_needs_no_rasterization(tmp_path: pathlib.Path, monkeypatch):
+    # docs/spec.md SS3.5: both width and height given -> stretched, no
+    # file read at all -- checked by making rsvg-convert unfindable and
+    # confirming this still succeeds (an SVG with neither/one dimension
+    # given, below, does need it, and is skipped if the tool isn't there).
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    _make_svg(tmp_path)
+    result = resolve_layout(parse('image "icon.svg" width 1 height 2\n'), base_dir=str(tmp_path))
+    assert (result.shapes[0].w, result.shapes[0].h) == pytest.approx((1.0, 2.0))
+
+
+def test_svg_image_sizes_by_aspect_ratio_via_rasterization(tmp_path: pathlib.Path):
+    _make_svg(tmp_path, w=400, h=200)  # 2:1 aspect ratio
+    result = resolve_layout(parse('image "icon.svg" width 2\n'), base_dir=str(tmp_path))
+    assert (result.shapes[0].w, result.shapes[0].h) == pytest.approx((2.0, 1.0))
+
+
+def test_svg_image_without_rsvg_convert_is_a_clear_error(tmp_path: pathlib.Path, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    _make_svg(tmp_path)
+    with pytest.raises(LayoutError, match="rsvg-convert"):
         resolve_layout(parse('image "icon.svg"\n'), base_dir=str(tmp_path))
-    with pytest.raises(LayoutError, match="SVG"):
-        resolve_layout(parse('image "icon.svg" width 1 height 1\n'), base_dir=str(tmp_path))
 
 
 def test_alt_on_a_non_image_is_an_error(tmp_path: pathlib.Path):

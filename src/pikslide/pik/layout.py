@@ -16,7 +16,6 @@ ported, in line with a "good enough for common diagrams" scope:
 - chopping against diamond/cylinder/file uses their rectangle-like
   xOffset via the same 8-direction dispatch as pikchr's own boxChop,
   rather than each shape's true outline,
-- "behind" only affects nothing yet (parsed, not yet used for z-order),
 - name resolution is a simplified version of pikchr's scope-chain search.
 
 All coordinates are inches, with y pointing *up* (matching pikchr) --
@@ -74,11 +73,18 @@ class ImageMetrics(Protocol):
 
 
 class _PILImageMetrics:
-    """Default ImageMetrics: opens the file directly with Pillow."""
+    """Default ImageMetrics: opens the file directly with Pillow -- or,
+    for an SVG (docs/spec.md SS3.5), rasterizes it first (`rasterize_svg`),
+    since Pillow itself can't read an SVG's dimensions."""
 
     def size(self, path: str) -> tuple[float, float]:
+        from io import BytesIO
+
         from PIL import Image
 
+        if path.lower().endswith(".svg"):
+            with Image.open(BytesIO(rasterize_svg(path))) as img:
+                return float(img.width), float(img.height)
         with Image.open(path) as img:
             return float(img.width), float(img.height)
 
@@ -356,14 +362,28 @@ class LayoutResult:
     text_sizes: dict[str, float] = field(default_factory=dict)
     """The resolved `small`/`medium`/`large` text sizes (ext, inches), so a
     renderer draws text at the sizes this document actually used -- which
-    may differ from the prelude's own 9/10.5/12pt if the program (or a
-    template's settings file, once that exists) overrode them."""
+    may differ from the prelude's own 9/10.5/12pt if the program or a
+    template's settings file (SS3.8) overrode them."""
     typeface: str = ""
     """The resolved `typeface` variable (docs/spec.md SS3.3, ext): empty
     means "the theme's own font" (a renderer should emit a symbolic
     `+mn-lt`/`+mj-lt` reference, not a literal name); non-empty is a literal
-    family the program (or a template's settings file, once that exists)
-    asked for explicitly, overriding the theme."""
+    family the program or a template's settings file (SS3.8) asked for
+    explicitly, overriding the theme."""
+    layout_name: str = ""
+    """The resolved `layout` variable (docs/spec.md SS3.8, ext): empty
+    means "the first blank-type layout of the template's first master, or
+    that master's own first layout if it has none"; settable only by the
+    prelude or a settings file, never a program (`_eval_assignment()`
+    enforces this) -- used only when making a *new* slide from a
+    `--template` (with `--into` the slide already has its layout)."""
+    content_area: tuple[float, float, float, float] | None = None
+    """(left, top, width, height) in inches, from a settings file's
+    `content_left`/`content_top`/`content_right`/`content_bottom` (docs/
+    spec.md SS3.8) -- `--into`'s default target region (SS4.2) when
+    neither `--region` nor `--rect` is given. `None` unless a settings
+    file defines all four (there is no prelude default for them: without
+    a template, there is no "the slide" to place a default region on)."""
 
 
 # ---------------------------------------------------------------------------
@@ -556,10 +576,19 @@ def _prelude_document() -> ast.Document:
 
 def _eval_assignment(stmt: ast.AssignStatement, ctx: "_Ctx") -> None:
     """Evaluate one `name = expr`/`+=`/`-=`/`*=`/`/=` statement into
-    `ctx.vars` -- shared by the prelude, an included file (once `include`
-    is implemented), and a program's own top-level assignments, so all
-    three follow the same rules (docs/spec.md SS2: "arithmetic on a colour
-    is an error"; fill/color are always coerced to a Colour or None)."""
+    `ctx.vars` -- shared by the prelude, a settings file, an included
+    file, and a program's own top-level assignments, so all four follow
+    the same rules (docs/spec.md SS2: "arithmetic on a colour is an
+    error"; fill/color are always coerced to a Colour or None).
+
+    `layout` (docs/spec.md SS3.8, ext) can be set only while loading the
+    prelude or a settings file, never by a program (or anything a program
+    brings in via `include`): "a .pik never chooses the deck's structure"."""
+    if stmt.name == "layout" and not ctx._layout_assignment_allowed:
+        raise LayoutError(
+            "'layout' can only be set in a template's settings file, not in a "
+            "program (docs/spec.md SS3.8): a .pik never chooses the deck's structure"
+        )
     current = ctx.vars.get(stmt.name, 0.0)
     rhs = eval_expr(stmt.value, ctx)
     if stmt.op == "=":
@@ -589,6 +618,26 @@ def _load_prelude(ctx: "_Ctx") -> None:
         _eval_assignment(stmt, ctx)
 
 
+def _load_settings(ctx: "_Ctx", settings_text: str, settings_base_dir: str) -> None:
+    """Run a template's settings file's own assignments into `ctx.vars`,
+    after the prelude and before the program (docs/spec.md SS3.8): the
+    same "definitions only" format as an included file (SS3.6). This is a
+    full, independent `parse()` of its own -- a settings file is never
+    merged into the *program*'s own macro-expansion pass the way an
+    `include` inside the program is, so there's no circular-import
+    constraint here forcing a token-shape scan the way `include`'s
+    `_validate_definitions_only()` needs; `define` and `include` both work
+    inside it, resolved against `settings_base_dir` (its own directory)."""
+    doc = parse(settings_text, base_dir=settings_base_dir)
+    for stmt in doc.statements:
+        if not isinstance(stmt, ast.AssignStatement):
+            raise LayoutError(
+                "a settings file must contain definitions only (docs/spec.md SS3.8): "
+                f"found a {type(stmt).__name__}"
+            )
+        _eval_assignment(stmt, ctx)
+
+
 def default_text_sizes() -> dict[str, float]:
     """The prelude's own `small`/`medium`/`large` sizes, in inches -- for a
     renderer that needs a FontMetrics *before* calling `resolve_layout()`
@@ -606,6 +655,8 @@ class _Ctx:
         metrics: FontMetrics | None = None,
         image_metrics: ImageMetrics | None = None,
         base_dir: str = ".",
+        settings_text: str | None = None,
+        settings_base_dir: str = ".",
     ) -> None:
         self.vars: dict[str, PikValue] = {}
         self.scope_stack: list[dict[str, Shape]] = [{}]
@@ -614,7 +665,14 @@ class _Ctx:
         self.metrics: FontMetrics = metrics if metrics is not None else _ApproxMetrics(self)
         self.image_metrics: ImageMetrics = image_metrics if image_metrics is not None else _PILImageMetrics()
         self.base_dir = base_dir
+        # `layout` (docs/spec.md SS3.8) may be assigned while loading the
+        # prelude or a settings file, below, but not once the actual
+        # program starts (_eval_assignment() checks this).
+        self._layout_assignment_allowed = True
         _load_prelude(self)
+        if settings_text is not None:
+            _load_settings(self, settings_text, settings_base_dir)
+        self._layout_assignment_allowed = False
 
     def lookup_name(self, path: list[str]) -> Shape | None:
         """Port of pik_find_byname(): a name resolves against the *current*
@@ -732,20 +790,19 @@ def _resolve_preset_name(name: str) -> str:
     raise LayoutError(f"unknown preset shape {name!r}{hint}")
 
 
-# Formats implemented so far (docs/spec.md SS3.5 also specifies SVG, for
-# icons -- not implemented yet, see docs/implementation-plan.md: it needs
-# an external rasteriser and hand-written XML, not just python-pptx's own
-# add_picture(), which raises TypeError on an .svg -- as does Pillow, the
-# way _PILImageMetrics.size() and python-pptx's own add_picture() both
-# read a raster image's dimensions, checked, with a confusing
-# PIL.UnidentifiedImageError instead of a clear pikslide one).
-_SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif"}
+# PNG/JPEG/GIF are handled entirely by Pillow and python-pptx's own
+# add_picture(). SVG (docs/spec.md SS3.5, for icons that stay sharp at any
+# size) is neither: Pillow can't read its dimensions (raises
+# UnidentifiedImageError, checked) and add_picture() can't embed it
+# (raises TypeError, checked) -- both need a real SVG renderer instead,
+# see rasterize_svg() and pptx_writer.py's _add_image_shape().
+_SUPPORTED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".svg"}
 
 
 def _resolve_image_path(raw_path: str, base_dir: str) -> str:
     """Resolve an `image` object's path against `base_dir` (the source
     file's own directory, docs/spec.md SS3.5), and check it exists and is
-    a format pikslide can read yet.
+    a format pikslide can read.
 
     Rejects an absolute path or one that escapes `base_dir`, the same
     containment `include` applies (docs/spec.md SS3.6) and for the same
@@ -760,11 +817,40 @@ def _resolve_image_path(raw_path: str, base_dir: str) -> str:
     if not os.path.isfile(resolved):
         raise LayoutError(f"image file not found: {raw_path!r}")
     ext = os.path.splitext(resolved)[1].lower()
-    if ext == ".svg":
-        raise LayoutError(f"SVG images are not supported yet: {raw_path!r}")
     if ext not in _SUPPORTED_IMAGE_EXTENSIONS:
         raise LayoutError(f"unsupported image format {ext!r}: {raw_path!r}")
     return resolved
+
+
+def _rsvg_convert_path() -> str:
+    """The `rsvg-convert` (librsvg) executable SVG handling needs (docs/
+    spec.md SS3.5), or a clear error naming it -- "without it, an .svg is
+    an error that names the missing tool" -- rather than a confusing
+    failure once it turns out to be missing partway through."""
+    import shutil
+
+    path = shutil.which("rsvg-convert")
+    if path is None:
+        raise LayoutError(
+            "SVG images need rsvg-convert (from librsvg) on PATH, to produce the "
+            "PNG fallback older PowerPoint versions show (docs/spec.md SS3.5); it was not found"
+        )
+    return path
+
+
+def rasterize_svg(svg_path: str) -> bytes:
+    """PNG bytes for `svg_path`, via `rsvg-convert` (docs/spec.md SS3.5) --
+    used both for `image`'s own aspect-ratio sizing (`_PILImageMetrics`,
+    below: Pillow itself can't read an SVG's dimensions) and, by
+    `pptx_writer.py`, for the actual embedded fallback bitmap."""
+    import subprocess
+
+    exe = _rsvg_convert_path()
+    result = subprocess.run([exe, "--format=png", svg_path], capture_output=True, check=False)
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", "replace").strip()
+        raise LayoutError(f"rsvg-convert failed on {svg_path!r}: {stderr}")
+    return result.stdout
 
 
 def eval_place(place: ast.Place, ctx: _Ctx) -> tuple[float, float]:
@@ -1425,11 +1511,16 @@ def flatten_shapes(shapes: list[Shape]) -> list[Shape]:
     return out
 
 
+_CONTENT_AREA_VARS = ("content_left", "content_top", "content_right", "content_bottom")
+
+
 def resolve_layout(
     doc: ast.Document,
     metrics: FontMetrics | None = None,
     image_metrics: ImageMetrics | None = None,
     base_dir: str = ".",
+    settings_text: str | None = None,
+    settings_base_dir: str = ".",
 ) -> LayoutResult:
     """Resolve a parsed pik :class:`~pikslide.pik.ast.Document` into concrete,
     ready-to-render geometry. See the module docstring for what this
@@ -1443,8 +1534,14 @@ def resolve_layout(
     `base_dir` is the source file's own directory (docs/spec.md SS3.5): an
     `image` object's path is resolved against it, and rejected if it
     escapes it. `image_metrics`, if given, overrides how an image's
-    natural size is read (default: Pillow, directly)."""
-    ctx = _Ctx(metrics, image_metrics, base_dir)
+    natural size is read (default: Pillow, directly).
+
+    `settings_text`, if given, is a template's settings file (docs/spec.md
+    SS3.8), read after the prelude and before `doc` itself, so its
+    definitions override the prelude's and the program's override its in
+    turn; `settings_base_dir` is the directory its own `include`s (if any)
+    resolve against."""
+    ctx = _Ctx(metrics, image_metrics, base_dir, settings_text, settings_base_dir)
     shapes, _direction, _bbox = _layout_statements(doc.statements, DIR_RIGHT, ctx)
     flat = flatten_shapes(shapes)
     if flat:
@@ -1457,4 +1554,11 @@ def resolve_layout(
         bbox = (0.0, 0.0, 0.0, 0.0)
     text_sizes = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
     typeface = _as_string(ctx.vars.get("typeface", ""), "typeface")
-    return LayoutResult(shapes=shapes, bbox=bbox, text_sizes=text_sizes, typeface=typeface)
+    layout_name = _as_string(ctx.vars.get("layout", ""), "layout")
+    content_area = None
+    if all(name in ctx.vars for name in _CONTENT_AREA_VARS):
+        left, top, right, bottom = (_as_number(ctx.vars[name], name) for name in _CONTENT_AREA_VARS)
+        content_area = (left, top, right - left, bottom - top)
+    return LayoutResult(
+        shapes=shapes, bbox=bbox, text_sizes=text_sizes, typeface=typeface, layout_name=layout_name, content_area=content_area
+    )

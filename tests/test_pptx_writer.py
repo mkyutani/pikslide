@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pathlib
+import zipfile
 
 import pytest
 from pptx import Presentation
@@ -316,6 +317,63 @@ def test_image_text_becomes_a_centred_caption_textbox(tmp_path: pathlib.Path):
 
 
 # ---------------------------------------------------------------------------
+# SVG images (docs/spec.md SS3.5, ext): a PNG fallback plus the real SVG,
+# via the OOXML SVG-picture extension -- checked against real PowerPoint
+# separately (it renders the SVG, not the fallback, when they differ).
+# ---------------------------------------------------------------------------
+
+
+def _make_svg(tmp_path: pathlib.Path, name: str = "icon.svg", w: int = 200, h: int = 200) -> pathlib.Path:
+    path = tmp_path / name
+    path.write_text(
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+        f'viewBox="0 0 {w} {h}"><circle cx="{w / 2}" cy="{h / 2}" r="{min(w, h) / 2}" fill="green"/></svg>',
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_svg_renders_as_a_picture_sized_by_aspect_ratio(tmp_path: pathlib.Path):
+    _make_svg(tmp_path, w=400, h=200)
+    prs = render('image "icon.svg" width 2\n', tmp_path)
+    picture = prs.slides[0].shapes[0]
+    assert picture.shape_type == MSO_SHAPE_TYPE.PICTURE
+    assert picture.width.inches == pytest.approx(2.0)
+    assert picture.height.inches == pytest.approx(1.0)  # 400x200, aspect preserved
+
+
+def test_svg_has_a_real_blip_and_the_svg_extension(tmp_path: pathlib.Path):
+    _make_svg(tmp_path)
+    prs = render('image "icon.svg" width 1\n', tmp_path)
+    picture = prs.slides[0].shapes[0]
+    blip = picture._element.blipFill.blip
+    assert blip.get(qn("r:embed"))  # the PNG fallback -- add_picture()'s normal blip
+    ext = blip.find(qn("a:extLst") + "/" + qn("a:ext"))
+    assert ext is not None
+    assert ext.get("uri") == "{96DAC541-7B7A-43D3-8B79-37D633B846F1}"
+    svg_blip = ext[0]
+    assert svg_blip.tag.endswith("}svgBlip")
+    svg_rId = svg_blip.get(qn("r:embed"))
+    svg_part = picture.part.related_part(svg_rId)
+    assert svg_part.content_type == "image/svg+xml"
+    assert svg_part.blob.startswith(b"<svg") or b"<svg" in svg_part.blob[:100]
+
+
+def test_svg_alt_text_is_the_actual_saved_description(tmp_path: pathlib.Path):
+    _make_svg(tmp_path)
+    prs = render('image "icon.svg" alt "A circle"\n', tmp_path)
+    picture = prs.slides[0].shapes[0]
+    assert picture._element.nvPicPr.cNvPr.get("descr") == "A circle"
+
+
+def test_svg_without_rsvg_convert_is_a_clear_error(tmp_path: pathlib.Path, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    _make_svg(tmp_path)
+    with pytest.raises(LayoutError, match="rsvg-convert"):
+        render('image "icon.svg"\n', tmp_path)
+
+
+# ---------------------------------------------------------------------------
 # Inserting into an existing deck (docs/spec.md SS4.2)
 # ---------------------------------------------------------------------------
 
@@ -365,6 +423,53 @@ def test_insert_with_explicit_rect(tmp_path: pathlib.Path):
     prs = _insert('box "Web"\n', deck, slide_no=1, rect=(0.5, 0.5, 3, 3), group_id="arch")
     group = prs.slides[0].shapes[-1]
     assert (group.left.inches, group.top.inches) == pytest.approx((0.5, 0.5))
+
+
+def _insert_with_settings(text: str, deck: pathlib.Path, settings_text: str, **kwargs):
+    from pikslide.pik.layout import resolve_layout
+    from pikslide.pptx_writer import PilFontMetrics, insert_into_pptx
+
+    result = resolve_layout(parse(text), metrics=PilFontMetrics(), settings_text=settings_text)
+    return insert_into_pptx(result, str(deck), **kwargs)
+
+
+def test_content_area_is_the_default_region(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    settings = "content_left = 1in\ncontent_top = 1in\ncontent_right = 4in\ncontent_bottom = 4in\n"
+    prs = _insert_with_settings('box "Web"\n', deck, settings, slide_no=1, group_id="arch")
+    group = prs.slides[0].shapes[-1]
+    assert (group.left.inches, group.top.inches) == pytest.approx((1.0, 1.0))
+
+
+def test_explicit_region_overrides_the_content_area(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    settings = "content_left = 1in\ncontent_top = 1in\ncontent_right = 4in\ncontent_bottom = 4in\n"
+    prs = _insert_with_settings('box "Web"\n', deck, settings, slide_no=1, region="Figure", group_id="arch")
+    group = prs.slides[0].shapes[-1]
+    assert (group.left.inches, group.top.inches) == pytest.approx((6.0, 5.0))  # Figure's own position
+
+
+def test_align_center_places_a_smaller_diagram_in_the_middle_of_its_region(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    prs = _insert('box "Web"\n', deck, slide_no=1, rect=(0.0, 0.0, 4.0, 4.0), group_id="arch", align="center")
+    group = prs.slides[0].shapes[-1]
+    expected_left = (4.0 - group.width.inches) / 2
+    expected_top = (4.0 - group.height.inches) / 2
+    assert (group.left.inches, group.top.inches) == pytest.approx((expected_left, expected_top), abs=0.01)
+
+
+def test_align_bottom_right(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    prs = _insert('box "Web"\n', deck, slide_no=1, rect=(0.0, 0.0, 4.0, 4.0), group_id="arch", align="bottom-right")
+    group = prs.slides[0].shapes[-1]
+    assert group.left.inches == pytest.approx(4.0 - group.width.inches, abs=0.01)
+    assert group.top.inches == pytest.approx(4.0 - group.height.inches, abs=0.01)
+
+
+def test_unknown_align_is_an_error(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    with pytest.raises(LayoutError, match="unknown --align"):
+        _insert('box "Web"\n', deck, slide_no=1, rect=(0, 0, 4, 4), align="upper-middle")
 
 
 def test_insert_is_idempotent(tmp_path: pathlib.Path):
@@ -424,3 +529,111 @@ def test_unknown_region_name_is_an_error(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     with pytest.raises(LayoutError, match="no shape named"):
         _insert('box\n', deck, slide_no=1, region="Nope")
+
+
+# ---------------------------------------------------------------------------
+# --template: a new standalone deck from another file's theme
+# (docs/spec.md SS3.3 rule 2, SS4.1, ext)
+# ---------------------------------------------------------------------------
+
+
+def _template_deck(tmp_path: pathlib.Path, name: str = "tmpl.pptx") -> pathlib.Path:
+    """A deck with one sample slide (to be stripped) whose default theme
+    has the built-in Office layouts, so both the blank-default and a
+    named-layout case are reachable."""
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Sample (should not survive --template)"
+    path = tmp_path / name
+    prs.save(str(path))
+    return path
+
+
+def _as_potx(pptx_path: pathlib.Path, potx_path: pathlib.Path) -> None:
+    """Build a `.potx` by rewriting `pptx_path`'s own content types --
+    the reverse of `_normalize_potx()`, so tests don't depend on a real
+    `.potx` file existing anywhere on the machine."""
+    with zipfile.ZipFile(str(pptx_path)) as zin:
+        content_types = zin.read("[Content_Types].xml").decode("utf-8")
+    content_types = content_types.replace(
+        "presentationml.presentation.main+xml", "presentationml.template.main+xml"
+    )
+    with zipfile.ZipFile(str(pptx_path)) as zin, zipfile.ZipFile(str(potx_path), "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "[Content_Types].xml":
+                data = content_types.encode("utf-8")
+            zout.writestr(item, data)
+
+
+def _from_template(text: str, template: pathlib.Path, tmp_path: pathlib.Path, name: str = "out.pptx", **kwargs):
+    from pikslide.pptx_writer import write_pptx_from_template
+
+    result = resolve_for_pptx(parse(text))
+    out = tmp_path / name
+    write_pptx_from_template(result, str(template), str(out), **kwargs)
+    return Presentation(str(out))
+
+
+def test_template_strips_the_sample_slide_and_sizes_to_the_diagram(tmp_path: pathlib.Path):
+    tmpl = _template_deck(tmp_path)
+    prs = _from_template('box "Web"\n', tmpl, tmp_path)
+    assert len(prs.slides) == 1
+    assert "Sample" not in (prs.slides[0].shapes.title.text if prs.slides[0].shapes.title else "")
+    assert prs.slide_width.inches < 2  # sized to the tiny diagram, not the template's own 10x7.5in
+
+
+def test_template_uses_a_blank_layout_by_default(tmp_path: pathlib.Path):
+    tmpl = _template_deck(tmp_path)
+    prs = _from_template('box "Web"\n', tmpl, tmp_path)
+    names = [s.name for s in prs.slides[0].shapes]
+    assert names == ["box 1"]  # no placeholders brought in
+
+
+def test_template_named_layout_brings_its_placeholders(tmp_path: pathlib.Path):
+    tmpl = _template_deck(tmp_path)
+    prs = _from_template('box "Web"\n', tmpl, tmp_path, layout_name="Title and Content")
+    names = [s.name for s in prs.slides[0].shapes]
+    assert "box 1" in names
+    assert len(names) > 1  # the layout's own placeholders came along too
+
+
+def test_template_unknown_layout_name_lists_the_known_ones(tmp_path: pathlib.Path):
+    tmpl = _template_deck(tmp_path)
+    with pytest.raises(LayoutError, match="Blank"):  # one of the built-in layout names
+        _from_template('box "Web"\n', tmpl, tmp_path, layout_name="Nope")
+
+
+def test_template_colours_and_fonts_stay_symbolic(tmp_path: pathlib.Path):
+    tmpl = _template_deck(tmp_path)
+    prs = _from_template('box "Web" fill accent1\n', tmpl, tmp_path)
+    shape = prs.slides[0].shapes[0]
+    assert shape.fill.fore_color.theme_color == MSO_THEME_COLOR.ACCENT_1
+    run = shape.text_frame.paragraphs[0].runs[0]
+    assert run.font.name == "+mn-lt"
+
+
+def test_potx_template_is_normalized_and_used(tmp_path: pathlib.Path):
+    pptx_path = _template_deck(tmp_path, "tmpl.pptx")
+    potx_path = tmp_path / "tmpl.potx"
+    _as_potx(pptx_path, potx_path)
+    prs = _from_template('box "Web"\n', potx_path, tmp_path)
+    assert len(prs.slides) == 1
+    assert [s.name for s in prs.slides[0].shapes] == ["box 1"]
+
+
+def test_template_file_not_found_is_a_clear_error(tmp_path: pathlib.Path):
+    with pytest.raises(LayoutError, match="not found"):
+        _from_template('box "Web"\n', tmp_path / "nope.pptx", tmp_path)
+
+
+def test_pptx_misnamed_as_potx_is_a_clear_error(tmp_path: pathlib.Path):
+    # A real .pptx (presentation content type already, not template) saved
+    # under a .potx name: _normalize_potx()'s replace() is a no-op, so
+    # this must be caught rather than silently "succeeding" on an
+    # unmodified file that just happens to already open fine.
+    pptx_path = _template_deck(tmp_path, "tmpl.pptx")
+    fake_potx = tmp_path / "fake.potx"
+    fake_potx.write_bytes(pptx_path.read_bytes())
+    with pytest.raises(LayoutError, match="potx"):
+        _from_template('box "Web"\n', fake_potx, tmp_path)

@@ -237,7 +237,7 @@ shape wedgeRectCallout "Note" fit
 
 ```pik
 Logo: image "logo.png" width 0.6in
-      image "icons/db.svg" height 0.4in alt "Database"   # (proposed) SVG icon
+      image "icons/db.svg" height 0.4in alt "Database"   # an SVG icon
 ```
 
 - A new class. The string is a **path relative to the
@@ -256,7 +256,8 @@ Logo: image "logo.png" width 0.6in
   `rsvg-convert`, from librsvg) on `PATH`; without it, an `.svg` is an error
   that names the missing tool. PNG, JPEG and GIF never need the tool.
   python-pptx cannot add an SVG (`add_picture` raises `TypeError`, checked),
-  so the SVG picture is hand-written XML, **not yet checked in PowerPoint**.
+  so the SVG picture is hand-written XML (checked against real PowerPoint:
+  it renders the SVG itself, not the fallback, when they're made to differ).
 
 ### 3.6 Shared definitions: `include`
 

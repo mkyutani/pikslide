@@ -236,7 +236,24 @@ large = 12pt
 # flag is used) rather than a literal family, so the diagram's text follows
 # whatever theme the deck actually uses -- this is the point that matters
 # for Japanese, since the deck's theme decides the CJK face. Set this
-# (typically in a template's settings file, once that exists) to override
-# with one specific family for both the Latin and East Asian slots.
+# (typically in a template's settings file) to override with one specific
+# family for both the Latin and East Asian slots.
 
 typeface = ""
+
+# --- Slide layout (docs/spec.md SS3.8) --------------------------------------
+# Empty means "the first `blank`-type layout of the template's first
+# master, or that master's first layout if it has none" -- used only when
+# pikslide makes a *new* slide from a `--template` (with `--into` the
+# slide already has its layout). Settings-file only: a program assigning
+# this is an error, since a .pik never chooses the deck's structure.
+
+layout = ""
+
+# --- Standard accent-colour names (docs/spec.md SS3.7/SS3.8) ---------------
+# Ordinary colour variables, not reserved words, so a template's settings
+# file can repoint them at whichever theme colours suit it, and a diagram
+# written against `primary`/`emphasis` runs unchanged under any template.
+
+primary = text2
+emphasis = accent1

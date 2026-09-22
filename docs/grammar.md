@@ -373,7 +373,8 @@ Semantic constraints the grammar cannot express (each is an error):
 - arithmetic on a colour (`primary + 1`);
 - a `preset-name` that is not a known OOXML preset geometry;
 - a `theme` string that names no known slot;
-- an unknown colour name.
+- an unknown colour name;
+- assigning to `layout` outside a settings file ([spec.md](spec.md) §3.8).
 
 A name that merely looks like a theme slot but is not one (`accent7`) is an
 ordinary name and fails as an undefined variable.

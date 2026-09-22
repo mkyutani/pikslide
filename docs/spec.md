@@ -539,4 +539,4 @@ a large piece of work of its own.
 | `pptx_writer.py` | `_AUTOSHAPE` fixed map; no pictures | preset map, `p:pic`, SVG picture (`svgBlip` + PNG fallback, hand-written XML), `schemeClr` |
 | `__init__.py` | `pikslide <in> [<out>]` only | `--into --slide --region/--rect --id --template --settings --block --include-path --align --strict --check --format` |
 | `markdown.py` | `pik`, `pikchr` fences; blocks are numbered | add `pikslide`; read the name after the tag; require names when a file has several diagrams |
-| Docs | README states "pikslide doesn't define its own diagram language"; `pyproject.toml` mentions SVG | rewrite Scope; extend `docs/grammar.md` with an extensions section |
+| Docs | README and `pyproject.toml` describe the target language (done) | keep the README's *Status* section in step with this table as items are implemented |

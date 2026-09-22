@@ -112,12 +112,28 @@ already-built behaviour.
   group's own `.shapes` exposes the identical `add_shape`/`add_connector`/
   `add_picture`/`add_textbox`/`build_freeform` API (checked) -- no
   branching needed in the shape-adding functions themselves, just a
-  parameter rename (`slide` -> `container`) for clarity. `--into`/
-  `--slide`/`--region`/`--rect`/`--id`/`--template`/`--settings`/
-  `--block`/`--include-path`/`--align`/`--strict`/`--check`/`--format`
-  are not wired up as CLI flags yet (`__init__.py` is still a bare
-  `sys.argv` reader, not `argparse`) -- `insert_into_pptx()` itself is
-  usable as a library function already.
+  parameter rename (`slide` -> `container`) for clarity.
+- **CLI**: `__init__.py` uses `argparse` now, not a hand-rolled `sys.argv`
+  reader. `--into DECK --slide N (--region NAME | --rect X,Y,W,H) [--id ID]
+  (--in-place | -o OUT)` calls `insert_into_pptx()`; omitting both
+  `--in-place` and `-o` saves to the `deck.pikslide.pptx` default
+  (docs/spec.md SS4.2), checked (including that the original deck is left
+  untouched in that case). `--id` defaults to the Markdown fence name, else
+  the source file's stem (SS4.2/SS6), checked for both a named and an
+  unnamed single-block `.md` file. A Markdown file with more than one
+  diagram and no `--block` (not implemented -- see below) is a clear
+  "--block isn't implemented yet" error under `--into`, rather than picking
+  one arbitrarily; standalone rendering of a multi-block file is
+  unaffected (unchanged from before). Combining flags that don't make
+  sense together (`--slide` without `--into`, `-o` and `--in-place`
+  together, `-o` given both positionally and as `-o`) are `argparse`-level
+  errors (exit 2), same as an unparsable `--rect`. Verified end-to-end via
+  real PowerPoint rendering (WSL -> Windows COM), not just python-pptx
+  introspection: title and the region shape both survive, the diagram
+  lands at the region's top-left, a second run replaces it in place.
+  `--template --settings --block --include-path --align --strict --check
+  --format` are still not wired up (the last four depend on template
+  settings/theme reading, which are separate not-yet-started items).
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
   new coverage for colours, text sizes, the macro-shadow guard, Markdown
   names, preset shapes, images, `include`, and inserting into a deck
@@ -135,5 +151,5 @@ already-built behaviour.
 | `pptx_writer.py` `FONT_NAME` | hard-coded `"Arial"`; no `typeface` variable | read `typeface` (once settings files exist) or the theme's own font |
 | `pik/layout.py` `_flatten` | flattens `[ ]` blocks, losing the tree | keep the hierarchy so groups can be written |
 | `pik/layout.py` `behind` | parsed, ignored | affects z-order |
-| `__init__.py` | `pikslide <in> [<out>]` only, hand-rolled `sys.argv` | a real argument parser (`argparse`), with `--into --slide --region --rect --id --in-place -o` calling the now-implemented `insert_into_pptx()`; `--template --settings --block --include-path --align --strict --check --format` besides (the last four depend on template settings/theme reading above) |
+| `__init__.py` | `argparse`, with `--into --slide --region --rect --id --in-place -o` all working | `--template --settings --block --include-path --align --strict --check --format` besides (the last four depend on template settings/theme reading above) |
 | Docs | README's *Status* section | keep it in step with this file as items are implemented |

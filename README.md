@@ -30,15 +30,13 @@ resolved and contained under the source file's own directory); `include
 "house.pik"` for shared definitions (contained the same way, with cycle
 detection); Markdown diagram names (the `pikslide` fence tag, naming a
 diagram when a file has more than one); inserting a diagram into an
-existing slide as one named, idempotently-replaceable group
-(`pikslide.pptx_writer.insert_into_pptx`) — not wired up to the CLI yet,
-see below.
+existing slide as one named, idempotently-replaceable group, via the CLI's
+`--into` (see below) or `pikslide.pptx_writer.insert_into_pptx` directly.
 
 **Specified, not implemented yet**: SVG images, reading a
 template's own theme (`.potx`/`.pptx`), per-template settings files, and
-CLI flags for `--into` and everything else beyond a bare input/output
-path (`__init__.py` is still a hand-rolled `sys.argv` reader, not
-`argparse`). The rules
+the remaining CLI flags (`--template --settings --block --include-path
+--align --strict --check --format`). The rules
 marked `(ext)` in [docs/grammar.md](docs/grammar.md) are the ones not
 implemented yet; [docs/implementation-plan.md](docs/implementation-plan.md)
 lists everything that has to change.
@@ -77,6 +75,18 @@ accepted directly — every block in the file is processed in order:
 ```sh
 uv run pikslide doc.md doc.pptx
 ```
+
+Insert a diagram into an existing deck instead of creating a new one
+(docs/spec.md §4.2) — into a named shape or placeholder's rectangle
+(`--region`), or an explicit one (`--rect x,y,w,h`, inches):
+
+```sh
+uv run pikslide diagram.pik --into deck.pptx --slide 5 --region "Figure" -o out.pptx
+```
+
+Omit `-o` to write `deck.pikslide.pptx` alongside the input deck, or pass
+`--in-place` to overwrite `deck.pptx` itself. Running the same command again
+replaces the diagram in place rather than adding a second copy.
 
 With no arguments, `pikslide` just prints a hello-world message.
 

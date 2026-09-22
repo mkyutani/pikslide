@@ -37,6 +37,7 @@ from .pik.layout import (
     LayoutError,
     LayoutResult,
     Shape,
+    _did_you_mean,
     _text_size_name,
     assign_text_slots,
     default_text_sizes,
@@ -842,7 +843,8 @@ def _resolve_region(
             existing_group = _find_shape_by_name(slide, group_name)
             if existing_group is not None:
                 return _shape_rect_inches(existing_group), None
-            raise LayoutError(f"no shape named {region!r} on this slide")
+            names = [sh.name for sh in slide.shapes if sh.name]
+            raise LayoutError(f"no shape named {region!r} on this slide{_did_you_mean(region, names)}")
         to_delete = shape if _is_empty_placeholder(shape) else None
         return _shape_rect_inches(shape), to_delete
     if rect is not None:

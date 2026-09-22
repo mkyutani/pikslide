@@ -559,6 +559,14 @@ def test_unknown_region_name_is_an_error(tmp_path: pathlib.Path):
         _insert('box\n', deck, slide_no=1, region="Nope")
 
 
+def test_unknown_region_name_suggests_a_close_match(tmp_path: pathlib.Path):
+    # docs/spec.md SS5: "unknown names (..., region) are errors with
+    # suggestions, not silent fallbacks".
+    deck = _existing_deck(tmp_path)
+    with pytest.raises(LayoutError, match="did you mean Figure"):
+        _insert('box\n', deck, slide_no=1, region="Figur")
+
+
 # ---------------------------------------------------------------------------
 # --template: a new standalone deck from another file's theme
 # (docs/spec.md SS3.3 rule 2, SS4.1, ext)

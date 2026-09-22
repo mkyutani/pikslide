@@ -764,9 +764,10 @@ def eval_expr(e: ast.Expr, ctx: _Ctx) -> PikValue | None:
     if isinstance(e, ast.Var):
         # Matches real pikchr (checked: `box width undefinedvar` -> "ERROR:
         # no such variable"), not the silent-0.0 default a variable lookup
-        # used to fall back to here.
+        # used to fall back to here. "did you mean accent1?" for a typo'd
+        # `accent7` is docs/spec.md SS3.3's own example of this.
         if e.name not in ctx.vars:
-            raise LayoutError(f"no such variable: {e.name}")
+            raise LayoutError(f"no such variable: {e.name}{_did_you_mean(e.name, ctx.vars.keys())}")
         return ctx.vars[e.name]
     if isinstance(e, ast.BinOp):
         left = _as_number(eval_expr(e.left, ctx))
@@ -796,6 +797,17 @@ def eval_expr(e: ast.Expr, ctx: _Ctx) -> PikValue | None:
     raise LayoutError(f"cannot evaluate expression node: {type(e).__name__}")
 
 
+def _did_you_mean(name: str, candidates) -> str:
+    """"; did you mean X, Y, Z?" for the closest matches to `name` among
+    `candidates`, or "" if nothing is close enough (docs/spec.md SS5:
+    "unknown names ... are errors with suggestions, not silent
+    fallbacks") -- shared so every "unknown name" error (an undefined
+    variable, an image file, a region) gives one the same way, not just
+    `_resolve_preset_name()`, which is where this pattern started."""
+    suggestions = difflib.get_close_matches(name, candidates, n=3)
+    return f"; did you mean {', '.join(suggestions)}?" if suggestions else ""
+
+
 def _resolve_theme_slot(slot: str) -> str:
     """Validate and canonicalize a `theme "slot"` name (docs/spec.md
     SS3.3): matched case-insensitively, an unknown name is an error that
@@ -814,9 +826,7 @@ def _resolve_preset_name(name: str) -> str:
     canonical = PRESET_NAMES.get(name.lower())
     if canonical is not None:
         return canonical
-    suggestions = difflib.get_close_matches(name, PRESET_NAMES.values(), n=3)
-    hint = f"; did you mean {', '.join(suggestions)}?" if suggestions else ""
-    raise LayoutError(f"unknown preset shape {name!r}{hint}")
+    raise LayoutError(f"unknown preset shape {name!r}{_did_you_mean(name, PRESET_NAMES.values())}")
 
 
 # PNG/JPEG/GIF are handled entirely by Pillow and python-pptx's own
@@ -844,7 +854,11 @@ def _resolve_image_path(raw_path: str, base_dir: str) -> str:
     if os.path.commonpath([base, resolved]) != base:
         raise LayoutError(f"image path escapes its source directory: {raw_path!r}")
     if not os.path.isfile(resolved):
-        raise LayoutError(f"image file not found: {raw_path!r}")
+        try:
+            siblings = os.listdir(os.path.dirname(resolved))
+        except OSError:
+            siblings = []
+        raise LayoutError(f"image file not found: {raw_path!r}{_did_you_mean(os.path.basename(raw_path), siblings)}")
     ext = os.path.splitext(resolved)[1].lower()
     if ext not in _SUPPORTED_IMAGE_EXTENSIONS:
         raise LayoutError(f"unsupported image format {ext!r}: {raw_path!r}")

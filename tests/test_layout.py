@@ -250,6 +250,26 @@ def test_undefined_name_raises_layout_error():
         layout("arrow from Nope.e to Nope.w\n")
 
 
+def test_undefined_variable_suggests_a_close_match():
+    # docs/spec.md SS3.3's own example: "accent7 -> an ordinary
+    # undefined-variable error, with a 'did you mean accent1?' hint"
+    # (SS5: "unknown names ... are errors with suggestions").
+    with pytest.raises(LayoutError, match="did you mean"):
+        layout("box fill accent7\n")
+
+
+def test_undefined_variable_with_nothing_close_has_no_hint():
+    with pytest.raises(LayoutError) as exc:
+        layout("box fill zzzzzzzzzzzzzzzzzzzz\n")
+    assert "did you mean" not in str(exc.value)
+
+
+def test_missing_image_file_suggests_a_close_match(tmp_path: pathlib.Path):
+    _make_image(tmp_path, "logo.png")
+    with pytest.raises(LayoutError, match="did you mean logo.png"):
+        resolve_layout(parse('image "logoo.png"\n'), base_dir=str(tmp_path))
+
+
 def test_expr_evaluates_functions_and_variables():
     result = layout("scale = 2\nbox width sqrt(4)*scale\n")
     box = result.shapes[0]

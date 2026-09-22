@@ -344,6 +344,24 @@ already-built behavior.
   module and most of `layout.py`'s ~1500 lines, not a small addition.
   Known gap against SS5's "every error carries file:line:column"; `main()`
   reports a `LayoutError` as a plain message either way.
+
+  SS5 also promises "unknown names (color, theme slot, preset, image
+  path, region) are errors with suggestions, not silent fallbacks" --
+  found, on a re-check prompted directly by "did you actually finish
+  this", not true for three of the five: only the preset-shape error
+  (`_resolve_preset_name`, already had `difflib`-based suggestions) and
+  the theme-slot error (`_resolve_theme_slot`, which lists *all* known
+  slots rather than the closest ones -- correct as-is, since SS3.3's own
+  text asks for exactly that for this one case, not a "did you mean")
+  matched the promise. An undefined variable -- SS3.3's own example,
+  `accent7` should get "did you mean `accent1`?" -- an unfound `image`
+  path, and an unknown `--region` name all just raised a bare "not
+  found"/"no such" error, no hint at all. Fixed with one shared helper
+  (`_did_you_mean(name, candidates)`, `pik/layout.py`, the same
+  `difflib.get_close_matches` the preset-shape error already used, now
+  shared instead of inlined there only); `image`'s candidates are the
+  filenames actually in the resolved directory, `--region`'s are the
+  other named shapes on that slide.
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
   coverage for colors, text sizes, the macro-shadow guard, Markdown
   names, preset shapes, images (including SVG), `include`, inserting into

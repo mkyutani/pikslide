@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from . import ast
 from .macros import expand_macros
-from .tokens import PikSyntaxError, Token, TokType, nth_value, numeric_value
+from .tokens import PikSyntaxError, Token, TokType, is_hex_number, nth_value, numeric_value
 
 _DIR_NAME = {
     TokType.UP: "up",
@@ -64,6 +64,10 @@ _TEXTFLAG_NAME = {
     TokType.ALIGNED: "aligned",
     TokType.BIG: "big",
     TokType.SMALL: "small",
+    # pikslide ext: docs/grammar.md, Objects (text-flag)
+    TokType.MAJOR: "major",
+    TokType.MEDIUM: "medium",
+    TokType.LARGE: "large",
 }
 
 _DOTL_PROP_NAME = {
@@ -194,10 +198,11 @@ class Parser:
             self.advance()
             return ast.DirectionStatement(_DIR_NAME[t.type])
 
-        if t.type in (TokType.ID, TokType.FILL, TokType.COLOR, TokType.THICKNESS):
+        if t.type in (TokType.ID, TokType.FILL, TokType.COLOR, TokType.THICKNESS,
+                      TokType.SMALL, TokType.MEDIUM, TokType.LARGE):
             name_tok = self.advance()
             op_tok = self.expect(TokType.ASSIGN)
-            value = self.parse_rvalue()
+            value = self.parse_value()
             return ast.AssignStatement(name_tok.text, _ASSIGN_OP[op_tok.code], value)
 
         if t.type == TokType.PLACENAME:
@@ -260,7 +265,7 @@ class Parser:
         if t is not None and t.type == TokType.STRING:
             self.advance()
             return _unescape_string(t.text)
-        return self.parse_rvalue()
+        return self.parse_expr()
 
     # -- objects ----------------------------------------------------------
 
@@ -321,7 +326,7 @@ class Parser:
 
         if tt in _COLORPROP_NAME:
             self.advance()
-            return ast.ColorProperty(_COLORPROP_NAME[tt], self.parse_rvalue())
+            return ast.ColorProperty(_COLORPROP_NAME[tt], self.parse_color_value())
 
         if tt == TokType.GO:
             self.advance()
@@ -460,6 +465,8 @@ class Parser:
 
         if t.type == TokType.NUMBER:
             self.advance()
+            if is_hex_number(t.text):
+                return ast.HexColor(int(numeric_value(t.text)))
             return ast.Num(numeric_value(t.text))
 
         if t.type == TokType.ID:
@@ -537,14 +544,42 @@ class Parser:
             return self.parse_relexpr()
         return ast.RelExpr()
 
-    def parse_rvalue(self) -> ast.Expr:
-        # A bare PLACENAME is a color name (e.g. "color DarkBlue"), *unless*
-        # it is followed by a '.' -- then it starts an object reference
-        # ("color A.color", "A.Sub...") that must go through parse_expr().
-        if self.at(TokType.PLACENAME):
-            nxt = self.peek(1)
-            if nxt is None or nxt.type not in (TokType.DOT_U, TokType.DOT_E, TokType.DOT_L, TokType.DOT_XY):
-                return ast.ColorName(self.advance().text)
+    def parse_value(self) -> ast.Expr:
+        """``value`` (ext): the right-hand side of an assignment -- a
+        string, or a colour value. A colour name (e.g. ``fill red``) is an
+        ordinary lowercase `ID`/`Var`, resolved against the prelude at
+        evaluation time (docs/grammar.md, Colours); pikslide does not
+        special-case a bare `PLACENAME` as a colour name the way pikchr
+        does, since pikslide is not aiming for pikchr compatibility
+        (docs/spec.md SS2)."""
+        if self.at(TokType.STRING):
+            return ast.StrLit(_unescape_string(self.advance().text))
+        return self.parse_color_value()
+
+    def parse_color_value(self) -> ast.Expr:
+        """``color-value`` (ext): a colour base, with an optional
+        ``lighter``/``darker`` adjustment. Also used directly wherever a
+        plain number is just as valid a result (``boxwid = 1.2``) -- the
+        distinction between "this holds a number" and "this holds a
+        colour" is made by what the expression evaluates to (a bare hex
+        literal is a colour, a decimal literal is a number), not by which
+        grammar rule parsed it; see ast.HexColor."""
+        base = self._parse_color_base()
+        if self.at(TokType.LIGHTER, TokType.DARKER):
+            op = "lighter" if self.advance().type == TokType.LIGHTER else "darker"
+            amount = self.parse_expr()
+            self.expect(TokType.PERCENT)
+            return ast.ColorMod(base, op, amount)
+        return base
+
+    def _parse_color_base(self) -> ast.Expr:
+        if self.at(TokType.THEME):
+            self.advance()
+            slot_tok = self.expect(TokType.STRING)
+            return ast.ThemeColor(_unescape_string(slot_tok.text))
+        if self.at(TokType.NOCOLOR):
+            self.advance()
+            return ast.NoColor()
         return self.parse_expr()
 
     # -- positions / places / objects ---------------------------------------

@@ -17,13 +17,19 @@ The language has two layers:
   out below. For the authoritative upstream grammar see pikchr's
   [grammar documentation](https://pikchr.org/home/doc/trunk/doc/grammar.md)
   and [`pikchr.y`](https://pikchr.org/home/doc/tip/pikchr.y).
-- **pikslide additions.** Rules and alternatives marked `(* ext *)` are
-  pikslide's own additions. **They are a proposal and are not implemented
-  yet**; the current parser rejects them. Prose marked `(ext)` likewise
-  describes an addition that is not implemented yet. pikslide is its own
-  language ([spec.md](spec.md) §2): it starts from pikchr's grammar and
-  departs from it where its design calls for it. Every difference is listed
-  in [Differences from pikchr](#differences-from-pikchr), at the end.
+- **pikslide additions.** Rules and alternatives marked `(* ext *)` (prose:
+  `(ext)`) are pikslide's own additions, not part of pikchr's grammar.
+  pikslide is its own language ([spec.md](spec.md) §2): it starts from
+  pikchr's grammar and departs from it where its design calls for it. Every
+  difference is listed in [Differences from pikchr](#differences-from-pikchr),
+  at the end.
+
+**This document describes the target language, not today's code.** Most
+`(ext)` rules are implemented already; a few are still only a proposal, and
+the parser rejects them. Which is which changes as work continues, so it is
+tracked separately, in
+[docs/implementation-plan.md](implementation-plan.md), rather than marked
+per rule here.
 
 ## Notation
 
@@ -138,6 +144,10 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
   program — instead of only surfacing, unreliably, at each later use.
 
 ### Includes (ext)
+
+The prelude (below) is implemented: it is loaded through this same
+"definitions-only" mechanism. A user-facing `include "path"` statement,
+resolved the same way, is not implemented yet (docs/implementation-plan.md).
 
 `include "path"` is resolved in this same pass, before parsing, so the
 `include` statement never reaches the parser either. Macros defined by the
@@ -478,7 +488,9 @@ later default; they are defined by the prelude (ext; see [spec.md](spec.md)
 
 pikslide starts from pikchr's grammar and departs from it where its design
 calls for it ([spec.md](spec.md) §2). This is the complete list; the sections
-above describe pikslide only. Rows marked (ext) are not implemented yet.
+above describe pikslide only. Rows marked (ext) are pikslide additions, not
+part of pikchr; most are implemented already (docs/implementation-plan.md
+tracks which).
 
 | Topic | pikchr | pikslide |
 |---|---|---|

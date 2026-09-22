@@ -17,14 +17,14 @@ import os
 from PIL import ImageFont
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.enum.dml import MSO_LINE_DASH_STYLE
+from pptx.enum.dml import MSO_LINE_DASH_STYLE, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 
 from .pik import ast
-from .pik.layout import LayoutResult, Shape, _font_scale, assign_text_slots, resolve_layout
+from .pik.layout import Colour, LayoutResult, Shape, _text_size_name, assign_text_slots, default_text_sizes, resolve_layout
 
 EMU_PER_INCH = 914400
 
@@ -59,8 +59,7 @@ _MEASURE_FONT_CANDIDATES = [
     "C:\\Windows\\Fonts\\arial.ttf",
 ]
 
-_BASE_FONT_PT = 9
-_LABEL_STEP_IN = 0.10  # how far a label shifts per above/below slot step at _BASE_FONT_PT -- see _SLOT_STEP
+_LABEL_STEP_IN = 0.10  # how far a label shifts per above/below slot step at the medium size -- see _SLOT_STEP
 
 
 def _find_measure_font() -> str | None:
@@ -84,14 +83,25 @@ class PilFontMetrics:
     correctly across different text content, unlike a flat estimate.
     """
 
-    def __init__(self, font_name: str = FONT_NAME, base_size_pt: float = _BASE_FONT_PT, font_path: str | None = None):
+    def __init__(
+        self,
+        font_name: str = FONT_NAME,
+        text_sizes: dict[str, float] | None = None,
+        font_path: str | None = None,
+    ):
         self.font_name = font_name
-        self._base_size_pt = base_size_pt
+        # inches, keyed "small"/"medium"/"large" -- docs/spec.md SS3.3/SS3.7.
+        self._text_sizes = text_sizes if text_sizes is not None else default_text_sizes()
         self._font_path = font_path if font_path is not None else _find_measure_font()
         self._cache: dict[int, ImageFont.FreeTypeFont] = {}
 
+    def _size_pt(self, flags: list[str]) -> float:
+        medium = self._text_sizes.get("medium", 10.5 / 72.0)
+        inches = self._text_sizes.get(_text_size_name(flags), medium)
+        return inches * 72.0
+
     def _font(self, flags: list[str]) -> tuple[ImageFont.FreeTypeFont | None, float]:
-        size_pt = self._base_size_pt * _font_scale(flags)
+        size_pt = self._size_pt(flags)
         size_px = max(1, round(size_pt))
         if size_px not in self._cache:
             self._cache[size_px] = ImageFont.truetype(self._font_path, size_px) if self._font_path else None
@@ -112,14 +122,19 @@ class PilFontMetrics:
         return size_pt / 72.0
 
 
-def resolve_for_pptx(doc: ast.Document, font_name: str = FONT_NAME, base_size_pt: float = _BASE_FONT_PT) -> LayoutResult:
+def resolve_for_pptx(doc: ast.Document, font_name: str = FONT_NAME) -> LayoutResult:
     """resolve_layout(), using real font metrics so "fit" objects are
-    sized to match what write_pptx() will actually draw."""
-    return resolve_layout(doc, metrics=PilFontMetrics(font_name, base_size_pt))
+    sized to match what write_pptx() will actually draw. Text sizes come
+    from the prelude's own small/medium/large (docs/spec.md SS3.7), not a
+    caller-supplied constant; write_pptx() then reads the *same* sizes
+    back from the returned LayoutResult, so the two always agree."""
+    return resolve_layout(doc, metrics=PilFontMetrics(font_name))
 
 
-def _font_size(flags: list[str], base_size_pt: float = _BASE_FONT_PT) -> Pt:
-    return Pt(base_size_pt * _font_scale(flags))
+def _font_size(flags: list[str], text_sizes: dict[str, float]) -> Pt:
+    medium = text_sizes.get("medium", 10.5 / 72.0)
+    inches = text_sizes.get(_text_size_name(flags), medium)
+    return Pt(inches * 72.0)
 
 
 _AUTOSHAPE = {
@@ -135,9 +150,49 @@ _AUTOSHAPE = {
 }
 
 
-def _rgb(value: float) -> RGBColor:
-    v = int(value) & 0xFFFFFF
+def _rgb(value: int) -> RGBColor:
+    v = value & 0xFFFFFF
     return RGBColor((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
+
+
+# docs/spec.md SS3.3: a Colour's theme_slot is one of these OOXML schemeClr
+# reference names (see pik.layout.THEME_SLOTS for the full explanation of
+# why these, and not dk1/lt1/dk2/lt2, are the ones a shape can reference).
+_MSO_THEME_COLOR = {
+    "tx1": MSO_THEME_COLOR.TEXT_1, "bg1": MSO_THEME_COLOR.BACKGROUND_1,
+    "tx2": MSO_THEME_COLOR.TEXT_2, "bg2": MSO_THEME_COLOR.BACKGROUND_2,
+    "accent1": MSO_THEME_COLOR.ACCENT_1, "accent2": MSO_THEME_COLOR.ACCENT_2,
+    "accent3": MSO_THEME_COLOR.ACCENT_3, "accent4": MSO_THEME_COLOR.ACCENT_4,
+    "accent5": MSO_THEME_COLOR.ACCENT_5, "accent6": MSO_THEME_COLOR.ACCENT_6,
+    "hlink": MSO_THEME_COLOR.HYPERLINK, "folHlink": MSO_THEME_COLOR.FOLLOWED_HYPERLINK,
+}
+
+
+def _brightness(colour: Colour) -> float:
+    """The python-pptx `ColorFormat.brightness` (-1..1) that reproduces a
+    Colour's lum_mod/lum_off (checked: brightness > 0 writes lumMod=
+    (1-b)*100000/lumOff=b*100000, matching "Lighter N%"; brightness < 0
+    writes lumMod=(1+b)*100000 alone, matching "Darker N%")."""
+    if colour.lum_off > 0:
+        return colour.lum_off
+    if colour.lum_mod < 1.0:
+        return colour.lum_mod - 1.0
+    return 0.0
+
+
+def _apply_colour(color_format, colour: Colour) -> None:
+    """Set a python-pptx ColorFormat (`fill.fore_color`, `line.color`, or
+    `font.color` -- the same API for all three, checked) from a Colour: a
+    theme colour is written as `schemeClr` (never resolved to RGB, so it
+    stays linked to whatever theme the diagram lands in), an RGB colour as
+    `srgbClr`; `lighter`/`darker` apply to either the same way."""
+    if colour.theme_slot is not None:
+        color_format.theme_color = _MSO_THEME_COLOR[colour.theme_slot]
+    else:
+        color_format.rgb = _rgb(colour.rgb or 0)
+    b = _brightness(colour)
+    if b != 0.0:
+        color_format.brightness = b
 
 
 _MIN_SLIDE_SIDE_IN = 1.0  # PowerPoint refuses a slide smaller than 1in on either side
@@ -189,7 +244,7 @@ def _apply_line_style(line, shape: Shape) -> None:
     if shape.sw < 0:
         line.fill.background()
         return
-    line.color.rgb = _rgb(shape.color)
+    _apply_colour(line.color, shape.color or Colour(rgb=0))
     line.width = Pt(max(shape.sw, 0.001) * 72)
     if shape.dashed > 0:
         line.dash_style = MSO_LINE_DASH_STYLE.DASH
@@ -197,7 +252,7 @@ def _apply_line_style(line, shape: Shape) -> None:
         line.dash_style = MSO_LINE_DASH_STYLE.ROUND_DOT
 
 
-def _apply_text(pptx_shape, shape: Shape, font_name: str, base_size_pt: float) -> None:
+def _apply_text(pptx_shape, shape: Shape, font_name: str, text_sizes: dict[str, float]) -> None:
     if not shape.texts:
         return
     tf = pptx_shape.text_frame
@@ -220,11 +275,11 @@ def _apply_text(pptx_shape, shape: Shape, font_name: str, base_size_pt: float) -
         run.font.name = font_name
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
-        run.font.size = _font_size(flags, base_size_pt)
-        run.font.color.rgb = _rgb(shape.color)
+        run.font.size = _font_size(flags, text_sizes)
+        _apply_colour(run.font.color, shape.color or Colour(rgb=0))
 
 
-def _add_block_shape(slide, shape: Shape, tf: _Transform, font_name: str, base_size_pt: float) -> None:
+def _add_block_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
     autoshape_type = _AUTOSHAPE.get(shape.kind, MSO_SHAPE.RECTANGLE)
@@ -240,17 +295,17 @@ def _add_block_shape(slide, shape: Shape, tf: _Transform, font_name: str, base_s
         pptx_shape.fill.background()
         pptx_shape.line.fill.background()
     else:
-        if shape.fill < 0:
+        if shape.fill is None:
             pptx_shape.fill.background()
         else:
             pptx_shape.fill.solid()
-            pptx_shape.fill.fore_color.rgb = _rgb(shape.fill)
+            _apply_colour(pptx_shape.fill.fore_color, shape.fill)
         _apply_line_style(pptx_shape.line, shape)
 
-    _apply_text(pptx_shape, shape, font_name, base_size_pt)
+    _apply_text(pptx_shape, shape, font_name, text_sizes)
 
 
-def _add_line_shape(slide, shape: Shape, tf: _Transform, font_name: str, base_size_pt: float) -> None:
+def _add_line_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
@@ -268,11 +323,11 @@ def _add_line_shape(slide, shape: Shape, tf: _Transform, font_name: str, base_si
         _apply_line_style(freeform.line, shape)
         _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
 
-    _add_line_text(slide, shape, tf, font_name, base_size_pt)
+    _add_line_text(slide, shape, tf, font_name, text_sizes)
 
 
 def _line_label_rects(
-    shape: Shape, base_size_pt: float
+    shape: Shape, text_sizes: dict[str, float]
 ) -> list[tuple[tuple[float, float, float, float], str, list[str]]]:
     """Compute each text label's (x0, y0, x1, y1) rect in pik space (y-up,
     unmargined), alongside its text/flags -- shared by _add_line_text()
@@ -281,6 +336,7 @@ def _line_label_rects(
     path -- doesn't account for labels floating above/below it)."""
     if not shape.texts:
         return []
+    base_size_pt = text_sizes.get("medium", 10.5 / 72.0) * 72.0
     label_box_h = base_size_pt * 1.15 / 72.0  # a touch taller than line_height(), just for rendering safety
     label_step = base_size_pt / 9.0 * _LABEL_STEP_IN
     bx0, by0, bx1, by1 = shape.bbox
@@ -295,11 +351,11 @@ def _line_label_rects(
     return out
 
 
-def _add_line_text(slide, shape: Shape, tf: _Transform, font_name: str, base_size_pt: float) -> None:
+def _add_line_text(slide, shape: Shape, tf: _Transform, font_name: str, text_sizes: dict[str, float]) -> None:
     """A connector/freeform shape has no text_frame in python-pptx, so a
     line's text (e.g. an arrow's label) is rendered as small floating
     textboxes instead, placed above/on/below the line per assign_text_slots()."""
-    for (x0, y0, x1, y1), text, flags in _line_label_rects(shape, base_size_pt):
+    for (x0, y0, x1, y1), text, flags in _line_label_rects(shape, text_sizes):
         left, top = tf.point((x0, y1))
         textbox = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(x1 - x0), Inches(y1 - y0))
         text_frame = textbox.text_frame
@@ -313,11 +369,11 @@ def _add_line_text(slide, shape: Shape, tf: _Transform, font_name: str, base_siz
         run.font.name = font_name
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
-        run.font.size = _font_size(flags, base_size_pt)
-        run.font.color.rgb = _rgb(shape.color)
+        run.font.size = _font_size(flags, text_sizes)
+        _apply_colour(run.font.color, shape.color or Colour(rgb=0))
 
 
-def _content_bbox(result: LayoutResult, base_size_pt: float) -> tuple[float, float, float, float]:
+def _content_bbox(result: LayoutResult, text_sizes: dict[str, float]) -> tuple[float, float, float, float]:
     """result.bbox, expanded to also cover line labels -- a line's own
     bbox is just its path, so a label floating above/below it (see
     _line_label_rects()) can stick out past result.bbox on its own."""
@@ -325,7 +381,7 @@ def _content_bbox(result: LayoutResult, base_size_pt: float) -> tuple[float, flo
     for shape in result.shapes:
         if shape.kind not in ("line", "arrow", "spline", "arc"):
             continue
-        for (lx0, ly0, lx1, ly1), _text, _flags in _line_label_rects(shape, base_size_pt):
+        for (lx0, ly0, lx1, ly1), _text, _flags in _line_label_rects(shape, text_sizes):
             x0, y0 = min(x0, lx0), min(y0, ly0)
             x1, y1 = max(x1, lx1), max(y1, ly1)
     return x0, y0, x1, y1
@@ -336,18 +392,18 @@ def write_pptx(
     path: str,
     margin: float = 0.15,
     font_name: str = FONT_NAME,
-    base_size_pt: float = _BASE_FONT_PT,
 ) -> None:
     """Render `result` (from :func:`pikslide.pik.layout.resolve_layout`, or
     `resolve_for_pptx`) to a single-slide PowerPoint file at `path`, sized
-    to fit the diagram. `font_name`/`base_size_pt` should match whatever
-    was passed to `resolve_for_pptx()` for that result, if it was used, so
-    rendering and "fit" sizing agree.
+    to fit the diagram. Text sizes come from `result.text_sizes` -- the
+    same small/medium/large this document's own layout used (docs/spec.md
+    SS3.7) -- rather than a separate parameter that could disagree with it.
 
     `margin` only needs to cover the diagram's own edge (e.g. a thick
     stroke's outer half, or PowerPoint's arrowhead overshoot) -- line
     labels are already accounted for by _content_bbox(), not by margin."""
-    tf = _Transform(_content_bbox(result, base_size_pt), margin)
+    text_sizes = result.text_sizes or default_text_sizes()
+    tf = _Transform(_content_bbox(result, text_sizes), margin)
     prs = Presentation()
     prs.slide_width = Emu(int(tf.slide_width * EMU_PER_INCH))
     prs.slide_height = Emu(int(tf.slide_height * EMU_PER_INCH))
@@ -355,8 +411,8 @@ def write_pptx(
 
     for shape in result.shapes:
         if shape.kind in ("line", "arrow", "spline", "arc"):
-            _add_line_shape(slide, shape, tf, font_name, base_size_pt)
+            _add_line_shape(slide, shape, tf, font_name, text_sizes)
         else:
-            _add_block_shape(slide, shape, tf, font_name, base_size_pt)
+            _add_block_shape(slide, shape, tf, font_name, text_sizes)
 
     prs.save(path)

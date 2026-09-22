@@ -125,6 +125,20 @@ class TokType(Enum):
     X = auto()
     Y = auto()
 
+    # pikslide extensions (not in pikchr) -- see docs/grammar.md, "Reserved words"
+    SHAPE = auto()
+    IMAGE = auto()
+    INCLUDE = auto()
+    ALT = auto()
+    MAJOR = auto()
+    MEDIUM = auto()
+    LARGE = auto()
+    THEME = auto()
+    LIGHTER = auto()
+    DARKER = auto()
+    NOCOLOR = auto()  # "none" / "off"
+    CONNECTOR = auto()  # reserved for a future object class; not used yet
+
     ERROR = auto()
     WHITESPACE = auto()
     PARAMETER = auto()
@@ -236,6 +250,22 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "with": (TokType.WITH, None, None),
     "x": (TokType.X, None, None),
     "y": (TokType.Y, None, None),
+
+    # pikslide extensions (not in pikchr's own pik_keywords[]) -- reserved
+    # words the language adds; see docs/grammar.md, "Reserved words".
+    "shape": (TokType.SHAPE, None, None),
+    "image": (TokType.IMAGE, None, None),
+    "include": (TokType.INCLUDE, None, None),
+    "alt": (TokType.ALT, None, None),
+    "major": (TokType.MAJOR, None, None),
+    "medium": (TokType.MEDIUM, None, None),
+    "large": (TokType.LARGE, None, None),
+    "theme": (TokType.THEME, None, None),
+    "lighter": (TokType.LIGHTER, None, None),
+    "darker": (TokType.DARKER, None, None),
+    "none": (TokType.NOCOLOR, None, None),
+    "off": (TokType.NOCOLOR, None, None),
+    "connector": (TokType.CONNECTOR, None, None),  # reserved; not used yet
 }
 
 ENTITIES = [
@@ -271,9 +301,16 @@ class PikSyntaxError(Exception):
         self.text = text
 
 
+def is_hex_number(token_text: str) -> bool:
+    """True for a NUMBER token spelled ``0x...``/``0X...`` -- pikslide (ext)
+    treats these as colour literals, not plain numbers; see
+    docs/spec.md SS2 and docs/grammar.md, Colours."""
+    return len(token_text) >= 3 and token_text[0] == "0" and token_text[1] in "xX"
+
+
 def numeric_value(token_text: str) -> float:
     """Port of pik_atof(): parse a NUMBER token's text into inches."""
-    if len(token_text) >= 3 and token_text[0] == "0" and token_text[1] in "xX":
+    if is_hex_number(token_text):
         return float(int(token_text[2:], 16))
     suffix = token_text[-2:] if len(token_text) >= 2 else ""
     if suffix in _UNIT_DIVISORS:

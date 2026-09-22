@@ -79,11 +79,58 @@ class ObjectProp(Expr):
     prop: str
 
 
-@dataclass
-class ColorName(Expr):
-    """A bare capitalized name used where a color is expected (rvalue)."""
+# ---------------------------------------------------------------------------
+# Value literals (pikslide ext: colours and strings, see docs/spec.md SS2)
+#
+# pikslide's colour and string handling departs from pikchr's (a colour is a
+# value of its own type, not a 24-bit number; pikchr's capitalized
+# colour-name shorthand is dropped -- see docs/grammar.md, "Differences
+# from pikchr"). These nodes are reused as `Expr` for the same reason
+# `ColorName` used to be: `AssignStatement.value`/`ColorProperty.value` are
+# typed `Expr` and a colour or string is exactly as much "not really
+# arithmetic" as a bare colour name was.
+# ---------------------------------------------------------------------------
 
-    name: str
+
+@dataclass
+class HexColor(Expr):
+    """A ``0xRRGGBB`` literal -- a colour value, not a number (ext)."""
+
+    rgb: int
+
+
+@dataclass
+class ThemeColor(Expr):
+    """``theme "slot"`` (ext) -- an OOXML schemeClr reference by slot name,
+    e.g. ``theme "accent1"``."""
+
+    slot: str
+
+
+@dataclass
+class NoColor(Expr):
+    """``none`` or ``off`` used as a colour value (ext): no colour."""
+
+
+@dataclass
+class ColorMod(Expr):
+    """``base lighter|darker expr%`` (ext): PowerPoint's own colour-swatch
+    adjustment, applicable to any colour (a theme colour, an RGB colour, or
+    a variable holding one) -- not only theme colours as in pikchr's
+    absence of the concept entirely."""
+
+    base: Expr
+    op: str  # 'lighter' or 'darker'
+    amount: Expr
+
+
+@dataclass
+class StrLit(Expr):
+    """A STRING literal used as a whole value (ext), e.g.
+    ``typeface = "BIZ UDPゴシック"``. Not arithmetic; valid only as an
+    assignment's right-hand side (docs/grammar.md: ``value ::= STRING | ...``)."""
+
+    value: str
 
 
 # ---------------------------------------------------------------------------

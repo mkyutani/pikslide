@@ -14,6 +14,7 @@ license. See the NOTICE file at the root of this repository.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from importlib import resources
 
 from .ast import MacroDefinition
 from .tokens import Lexer, PikSyntaxError, Token, TokType
@@ -21,6 +22,38 @@ from .tokens import Lexer, PikSyntaxError, Token, TokType
 MAX_MACRO_DEPTH = 50
 TOKEN_LIMIT = 100_000
 MAX_MACRO_ARGS = 9
+
+# lvalue keyword tokens (docs/grammar.md: `lvalue`) besides a plain ID --
+# pikchr's own fill/color/thickness, and pikslide's small/medium/large ext.
+_LVALUE_KEYWORD_TYPES = {
+    TokType.FILL, TokType.COLOR, TokType.THICKNESS,
+    TokType.SMALL, TokType.MEDIUM, TokType.LARGE,
+}
+
+_prelude_var_names_cache: frozenset[str] | None = None
+
+
+def _scan_assigned_names(tokens: list[Token]) -> set[str]:
+    """Names assigned via `name = ...`/`+=`/`-=`/`*=`/`/=` anywhere in
+    `tokens` -- a flat scan, since pikslide variables are never scoped to a
+    `[...]` block (docs/grammar.md, Variables)."""
+    return {
+        tokens[i].text
+        for i in range(len(tokens) - 1)
+        if (tokens[i].type == TokType.ID or tokens[i].type in _LVALUE_KEYWORD_TYPES)
+        and tokens[i + 1].type == TokType.ASSIGN
+    }
+
+
+def _prelude_variable_names() -> frozenset[str]:
+    """Names the prelude (docs/spec.md SS3.7) assigns -- cached, and read
+    directly with `Lexer` (not `expand_macros`/`parse`, which would recurse
+    back into this module) since prelude.pik itself never uses `define`."""
+    global _prelude_var_names_cache
+    if _prelude_var_names_cache is None:
+        text = resources.files("pikslide").joinpath("prelude.pik").read_text(encoding="utf-8")
+        _prelude_var_names_cache = frozenset(_scan_assigned_names(Lexer(text).tokenize()))
+    return _prelude_var_names_cache
 
 
 @dataclass
@@ -75,12 +108,30 @@ def _expand(
             and tokens[i + 2].type == TokType.CODEBLOCK
         ):
             name = tokens[i + 1].text
+            # A macro name must not already be a variable (docs/spec.md
+            # SS3.6, docs/grammar.md Macros): otherwise it would silently
+            # shadow every later use of that name, including as an
+            # assignment target -- checked: `define legend { fill }` then
+            # `legend = 5` expands to `fill = 5` with no error at all.
+            if name in _prelude_variable_names() or name in _scan_assigned_names(state.out):
+                raise PikSyntaxError(
+                    f"'{name}' is already a variable; a macro cannot shadow it", tokens[i + 1].line, name
+                )
             body = tokens[i + 2].text[1:-1]  # strip the outer { }
             state.macros[name] = _Macro(name, body)
             i += 3
             continue
 
         if tok.type == TokType.ID and tok.text in state.macros:
+            # The reverse direction of the same guard: `define legend {...}`
+            # *then* `legend = 5` -- without this, `legend` here would
+            # macro-expand before the parser ever sees it as an assignment
+            # target (checked: it silently becomes e.g. `fill = 5`).
+            nxt = tokens[i + 1] if i + 1 < end else None
+            if nxt is not None and nxt.type == TokType.ASSIGN:
+                raise PikSyntaxError(
+                    f"'{tok.text}' is already a macro; it cannot be used as a variable", tok.line, tok.text
+                )
             mac = state.macros[tok.text]
             if mac.in_use:
                 raise PikSyntaxError(f"recursive macro definition: {tok.text}", tok.line)

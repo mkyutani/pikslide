@@ -30,11 +30,12 @@ license. See the NOTICE file at the root of this repository.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from importlib import resources
 from typing import Protocol
 
 from . import ast
-from .colors import COLOR_NAMES
+from .parser import parse
 
 
 class FontMetrics(Protocol):
@@ -61,24 +62,78 @@ _DIR_CODE = {"right": DIR_RIGHT, "down": DIR_DOWN, "left": DIR_LEFT, "up": DIR_U
 _OPPOSITE_EDGE = {DIR_RIGHT: W, DIR_LEFT: E, DIR_UP: S, DIR_DOWN: N}
 _HEADING_ANGLE = {N: 0.0, NE: 45.0, E: 90.0, SE: 135.0, S: 180.0, SW: 225.0, W: 270.0, NW: 315.0, C: 0.0}
 
-# Transcribed from pikchr's aBuiltin[] default-variable table.
-DEFAULTS = {
-    "arcrad": 0.25, "arrowhead": 2.0, "arrowht": 0.08, "arrowwid": 0.06,
-    "boxht": 0.5, "boxrad": 0.0, "boxwid": 0.75,
-    "charht": 0.14, "charwid": 0.08,
-    "circlerad": 0.25, "color": 0.0,
-    "cylht": 0.5, "cylrad": 0.075, "cylwid": 0.75,
-    "dashwid": 0.05, "diamondht": 0.75, "diamondwid": 1.0, "dotrad": 0.015,
-    "ellipseht": 0.5, "ellipsewid": 0.75,
-    "fileht": 0.75, "filerad": 0.15, "filewid": 0.5, "fill": -1.0,
-    "lineht": 0.5, "linewid": 0.5, "movewid": 0.5,
-    "ovalht": 0.5, "ovalwid": 1.0,
-    "scale": 1.0, "textht": 0.5, "textwid": 0.75, "thickness": 0.015,
-}
-
 ELLIPSE_LIKE = {"circle", "ellipse", "oval"}
 LINE_LIKE = {"line", "arrow", "spline", "arc", "move"}
 _NOT_RENDERED = {"move", "point"}
+
+
+# ---------------------------------------------------------------------------
+# Values: pikslide's colour type (docs/spec.md SS2, SS3.3)
+#
+# A pikslide value is a plain float (a length or other number), a Colour
+# (below), or a str (docs/grammar.md, Colours: "A variable can also hold a
+# string"). Unlike pikchr, where every value -- including a colour -- is a
+# 24-bit number, a colour here is a value of its own type: never produced
+# by arithmetic, and never itself usable in arithmetic (see _as_number()).
+# ---------------------------------------------------------------------------
+
+# The OOXML `schemeClr val="..."` values a shape can reference (checked
+# against a real theme part; see docs/spec.md SS3.3). Note these are the
+# *reference* names, not the `<a:clrScheme>` element names a theme is
+# *defined* with (`dk1`/`lt1`/`dk2`/`lt2`): the default `<a:clrMap>` maps
+# `tx1`->`dk1`, `bg1`->`lt1`, `tx2`->`dk2`, `bg2`->`lt2`, so a fill uses
+# `tx1`/`bg1`/`tx2`/`bg2`, never `dk1`/`lt1`/`dk2`/`lt2` directly. Matched
+# case-insensitively.
+THEME_SLOTS = {
+    "tx1": "tx1", "bg1": "bg1", "tx2": "tx2", "bg2": "bg2",
+    "accent1": "accent1", "accent2": "accent2", "accent3": "accent3",
+    "accent4": "accent4", "accent5": "accent5", "accent6": "accent6",
+    "hlink": "hlink", "folhlink": "folHlink",
+}
+
+
+@dataclass(frozen=True)
+class Colour:
+    """A colour value: either a literal RGB, or a reference to a theme
+    slot (docs/spec.md SS3.3) -- kept symbolic, never resolved to RGB here,
+    so a renderer can emit `schemeClr` and the colour stays linked to
+    whatever theme the diagram lands in. Exactly one of `rgb`/`theme_slot`
+    is set. `lum_mod`/`lum_off` (0..1, 1.0/0.0 = no change) are PowerPoint's
+    own "Lighter N%"/"Darker N%" transform, from a `lighter`/`darker`
+    modifier (docs/grammar.md, Colours) -- applicable to either kind of
+    colour. A later `lighter`/`darker` on the same base *replaces* these
+    rather than compounding them, matching PowerPoint's own colour-swatch
+    picker (one adjustment level, not a stack of them)."""
+
+    rgb: int | None = None
+    theme_slot: str | None = None
+    lum_mod: float = 1.0
+    lum_off: float = 0.0
+
+
+PikValue = float | Colour | str
+
+
+def _as_number(value: PikValue, what: str = "a numeric value") -> float:
+    """Unwrap a value expected to be a plain number, e.g. for arithmetic or
+    a size (docs/spec.md SS3.3: "arithmetic on a colour is an error")."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    kind = "colour" if isinstance(value, Colour) else "string"
+    raise LayoutError(f"expected {what}, got a {kind}")
+
+
+def _as_colour(value: PikValue | None) -> Colour | None:
+    """Coerce a value to what `fill`/`color` hold: a Colour, or None for
+    "no colour". A bare number is accepted as a legacy RGB colour (pikchr
+    itself lets any expression stand for a fill/color, e.g. `fill -1` for
+    "invisible"); a string cannot be a colour."""
+    if value is None or isinstance(value, Colour):
+        return value
+    if isinstance(value, str):
+        raise LayoutError("a string cannot be used as a colour")
+    n = int(value)
+    return None if n < 0 else Colour(rgb=n)
 
 
 def assign_text_slots(texts: list[tuple[str, list[str]]]) -> list[str]:
@@ -164,8 +219,8 @@ class Shape:
     sw: float = 0.015
     dashed: float = 0.0
     dotted: float = 0.0
-    fill: float = -1.0
-    color: float = 0.0
+    fill: Colour | None = None
+    color: Colour | None = None
     larrow: bool = False
     rarrow: bool = False
     cw: bool = True
@@ -204,6 +259,11 @@ class Shape:
 class LayoutResult:
     shapes: list[Shape]
     bbox: tuple[float, float, float, float]
+    text_sizes: dict[str, float] = field(default_factory=dict)
+    """The resolved `small`/`medium`/`large` text sizes (ext, inches), so a
+    renderer draws text at the sizes this document actually used -- which
+    may differ from the prelude's own 9/10.5/12pt if the program (or a
+    template's settings file, once that exists) overrode them."""
 
 
 # ---------------------------------------------------------------------------
@@ -334,29 +394,111 @@ class _ApproxMetrics:
         self._ctx = ctx
 
     def text_width(self, text: str, flags: list[str] = ()) -> float:
-        charw = self._ctx.vars["charwid"] * _font_scale(flags)
+        charw = self._ctx.vars["charwid"] * _font_scale(flags, self._ctx)
         return charw * len(text) + charw
 
     def line_height(self, flags: list[str] = ()) -> float:
-        return self._ctx.vars["charht"] * _font_scale(flags)
+        return self._ctx.vars["charht"] * _font_scale(flags, self._ctx)
 
 
-def _font_scale(flags: list[str]) -> float:
-    """Port of pik_font_scale()."""
-    if "big" in flags:
-        return 1.25
-    if "small" in flags:
-        return 0.8
-    return 1.0
+def _text_size_name(flags: list[str]) -> str:
+    """Which of small/medium/large a text item's flags select (ext);
+    pikslide's own three fixed sizes, not pikchr's big/small percentage
+    scaling -- see docs/spec.md SS3.3. `big` is a synonym for `large`; the
+    *last* size flag on the string wins."""
+    name = "medium"
+    for f in flags:
+        if f in ("small", "medium", "large"):
+            name = f
+        elif f == "big":
+            name = "large"
+    return name
+
+
+def _font_scale(flags: list[str], ctx: "_Ctx") -> float:
+    """A text item's size, relative to `medium` (the default) -- the ratio
+    the approximate metrics scale pikchr's own charht/charwid by. Reads
+    `ctx.vars["small"/"medium"/"large"]` (ext), so a program's own override
+    of those (`medium = 11pt`) is honoured, not just the prelude default."""
+    medium = _as_number(ctx.vars.get("medium", 10.5 / 72.0), "a text size")
+    if medium <= 0:
+        return 1.0
+    size = _as_number(ctx.vars.get(_text_size_name(flags), medium), "a text size")
+    return size / medium
+
+
+# ---------------------------------------------------------------------------
+# The prelude (docs/spec.md SS3.7): read once, before every program.
+# ---------------------------------------------------------------------------
+
+_prelude_document_cache: ast.Document | None = None
+
+
+def _prelude_document() -> ast.Document:
+    """Parse `prelude.pik` (cached: the prelude is fixed at install time,
+    packaged beside this module -- see the wheel layout check in
+    docs/implementation-plan.md)."""
+    global _prelude_document_cache
+    if _prelude_document_cache is None:
+        text = resources.files("pikslide").joinpath("prelude.pik").read_text(encoding="utf-8")
+        _prelude_document_cache = parse(text)
+    return _prelude_document_cache
+
+
+def _eval_assignment(stmt: ast.AssignStatement, ctx: "_Ctx") -> None:
+    """Evaluate one `name = expr`/`+=`/`-=`/`*=`/`/=` statement into
+    `ctx.vars` -- shared by the prelude, an included file (once `include`
+    is implemented), and a program's own top-level assignments, so all
+    three follow the same rules (docs/spec.md SS2: "arithmetic on a colour
+    is an error"; fill/color are always coerced to a Colour or None)."""
+    current = ctx.vars.get(stmt.name, 0.0)
+    rhs = eval_expr(stmt.value, ctx)
+    if stmt.op == "=":
+        result: PikValue = rhs
+    else:
+        if current is None or rhs is None or isinstance(current, (Colour, str)) or isinstance(rhs, (Colour, str)):
+            raise LayoutError(f"'{stmt.name} {stmt.op}' requires a number, not a colour or string")
+        result = {
+            "+=": current + rhs, "-=": current - rhs,
+            "*=": current * rhs, "/=": current / rhs if rhs != 0 else current,
+        }[stmt.op]
+    if stmt.name in ("fill", "color"):
+        result = _as_colour(result)
+    ctx.vars[stmt.name] = result
+
+
+def _load_prelude(ctx: "_Ctx") -> None:
+    """Run the prelude's own assignments into `ctx.vars`, in order. Its
+    grammar is "definitions only" (docs/spec.md SS3.6/SS3.7: `define` and
+    assignment); anything else appearing here would be a bug in
+    `prelude.pik` itself, not user input, so it is asserted rather than
+    reported as a normal diagnostic."""
+    for stmt in _prelude_document().statements:
+        assert isinstance(stmt, ast.AssignStatement), (
+            f"prelude.pik: only assignments are allowed, found {type(stmt).__name__}"
+        )
+        _eval_assignment(stmt, ctx)
+
+
+def default_text_sizes() -> dict[str, float]:
+    """The prelude's own `small`/`medium`/`large` sizes, in inches -- for a
+    renderer that needs a FontMetrics *before* calling `resolve_layout()`
+    itself (docs/spec.md SS3.7; see `PilFontMetrics` in pptx_writer.py).
+    Fixed to the prelude's own defaults: it does not reflect a later
+    `medium = ...` override inside the document being rendered, since
+    that override isn't known until layout is already under way."""
+    ctx = _Ctx()
+    return {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
 
 
 class _Ctx:
     def __init__(self, metrics: FontMetrics | None = None) -> None:
-        self.vars: dict[str, float] = dict(DEFAULTS)
+        self.vars: dict[str, PikValue] = {}
         self.scope_stack: list[dict[str, Shape]] = [{}]
         self.pool_stack: list[list[Shape]] = [[]]
         self.current: Shape | None = None
         self.metrics: FontMetrics = metrics if metrics is not None else _ApproxMetrics(self)
+        _load_prelude(self)
 
     def lookup_name(self, path: list[str]) -> Shape | None:
         """Port of pik_find_byname(): a name resolves against the *current*
@@ -390,13 +532,42 @@ _PROP_GETTERS = {
 }
 
 
-def eval_expr(e: ast.Expr, ctx: _Ctx) -> float:
+def eval_expr(e: ast.Expr, ctx: _Ctx) -> PikValue | None:
+    """Evaluate any value expression -- a number, a colour, `None` (the
+    `none`/`off` "no colour" value), or a string (ext) -- to whatever it
+    denotes. Arithmetic nodes (`BinOp` etc.) require numeric operands; see
+    `_as_number()`. This also serves as `color-value`/`value` evaluation
+    (docs/grammar.md): pikslide has no separate rvalue-only evaluator the
+    way pikchr's colour-name special case used to need."""
     if isinstance(e, ast.Num):
         return e.value
+    if isinstance(e, ast.HexColor):
+        return Colour(rgb=e.rgb)
+    if isinstance(e, ast.ThemeColor):
+        return Colour(theme_slot=_resolve_theme_slot(e.slot))
+    if isinstance(e, ast.NoColor):
+        return None
+    if isinstance(e, ast.ColorMod):
+        base = eval_expr(e.base, ctx)
+        if not isinstance(base, Colour):
+            kind = "no colour" if base is None else "a number" if isinstance(base, (int, float)) else "a string"
+            raise LayoutError(f"'{e.op}' requires a colour, not {kind}")
+        amount = _as_number(eval_expr(e.amount, ctx), "a lighter/darker percentage") / 100.0
+        if e.op == "lighter":
+            return replace(base, lum_mod=1.0 - amount, lum_off=amount)
+        return replace(base, lum_mod=1.0 - amount, lum_off=0.0)  # 'darker'
+    if isinstance(e, ast.StrLit):
+        return e.value
     if isinstance(e, ast.Var):
-        return ctx.vars.get(e.name, 0.0)
+        # Matches real pikchr (checked: `box width undefinedvar` -> "ERROR:
+        # no such variable"), not the silent-0.0 default a variable lookup
+        # used to fall back to here.
+        if e.name not in ctx.vars:
+            raise LayoutError(f"no such variable: {e.name}")
+        return ctx.vars[e.name]
     if isinstance(e, ast.BinOp):
-        left, right = eval_expr(e.left, ctx), eval_expr(e.right, ctx)
+        left = _as_number(eval_expr(e.left, ctx))
+        right = _as_number(eval_expr(e.right, ctx))
         if e.op == "+":
             return left + right
         if e.op == "-":
@@ -405,10 +576,10 @@ def eval_expr(e: ast.Expr, ctx: _Ctx) -> float:
             return left * right
         return left / right if right != 0 else 0.0
     if isinstance(e, ast.UnaryOp):
-        v = eval_expr(e.operand, ctx)
+        v = _as_number(eval_expr(e.operand, ctx))
         return -v if e.op == "-" else v
     if isinstance(e, ast.FuncCall):
-        args = [eval_expr(a, ctx) for a in e.args]
+        args = [_as_number(eval_expr(a, ctx)) for a in e.args]
         return float(_FUNCS[e.name](*args))
     if isinstance(e, ast.Dist):
         p1, p2 = eval_position(e.p1, ctx), eval_position(e.p2, ctx)
@@ -419,9 +590,18 @@ def eval_expr(e: ast.Expr, ctx: _Ctx) -> float:
     if isinstance(e, ast.ObjectProp):
         shape = resolve_object(e.obj, ctx)
         return _PROP_GETTERS.get(e.prop, lambda s: 0.0)(shape)
-    if isinstance(e, ast.ColorName):
-        return float(COLOR_NAMES.get(e.name.lower(), 0))
     raise LayoutError(f"cannot evaluate expression node: {type(e).__name__}")
+
+
+def _resolve_theme_slot(slot: str) -> str:
+    """Validate and canonicalise a `theme "slot"` name (docs/spec.md
+    SS3.3): matched case-insensitively, an unknown name is an error that
+    lists the ones this tool knows."""
+    canonical = THEME_SLOTS.get(slot.lower())
+    if canonical is None:
+        known = ", ".join(sorted(THEME_SLOTS.values()))
+        raise LayoutError(f"unknown theme slot {slot!r}; known slots are: {known}")
+    return canonical
 
 
 def eval_place(place: ast.Place, ctx: _Ctx) -> tuple[float, float]:
@@ -443,24 +623,24 @@ def _rect_corners(shape: Shape) -> list[tuple[float, float]]:
 
 def eval_position(pos: ast.Position, ctx: _Ctx) -> tuple[float, float]:
     if isinstance(pos, ast.Coord):
-        return (eval_expr(pos.x, ctx), eval_expr(pos.y, ctx))
+        return (_as_number(eval_expr(pos.x, ctx)), _as_number(eval_expr(pos.y, ctx)))
     if isinstance(pos, ast.PlacePosition):
         return eval_place(pos.place, ctx)
     if isinstance(pos, ast.OffsetPosition):
         bx, by = eval_place(pos.base, ctx)
-        dx, dy = eval_expr(pos.dx, ctx), eval_expr(pos.dy, ctx)
+        dx, dy = _as_number(eval_expr(pos.dx, ctx)), _as_number(eval_expr(pos.dy, ctx))
         return (bx + dx, by + dy) if pos.op == "+" else (bx - dx, by - dy)
     if isinstance(pos, ast.XYFromPositions):
         x, _ = eval_position(pos.x_from, ctx)
         _, y = eval_position(pos.y_from, ctx)
         return (x, y)
     if isinstance(pos, ast.Between):
-        f = eval_expr(pos.fraction, ctx)
+        f = _as_number(eval_expr(pos.fraction, ctx))
         x1, y1 = eval_position(pos.p1, ctx)
         x2, y2 = eval_position(pos.p2, ctx)
         return (x1 + f * (x2 - x1), y1 + f * (y2 - y1))
     if isinstance(pos, ast.DirectionOffset):
-        d = eval_expr(pos.distance, ctx)
+        d = _as_number(eval_expr(pos.distance, ctx))
         bx, by = eval_position(pos.base, ctx)
         if pos.direction == "above":
             return (bx, by + d)
@@ -470,9 +650,9 @@ def eval_position(pos: ast.Position, ctx: _Ctx) -> tuple[float, float]:
             return (bx - d, by)
         return (bx + d, by)  # "right of"
     if isinstance(pos, ast.HeadingOffset):
-        d = eval_expr(pos.distance, ctx)
+        d = _as_number(eval_expr(pos.distance, ctx))
         bx, by = eval_position(pos.base, ctx)
-        angle = _HEADING_ANGLE.get(pos.edge, 0.0) if pos.edge is not None else eval_expr(pos.angle, ctx)
+        angle = _HEADING_ANGLE.get(pos.edge, 0.0) if pos.edge is not None else _as_number(eval_expr(pos.angle, ctx))
         rad = math.radians(angle)
         return (bx + d * math.sin(rad), by + d * math.cos(rad))
     raise LayoutError(f"cannot evaluate position node: {type(pos).__name__}")
@@ -517,33 +697,18 @@ def resolve_object(ref: ast.ObjectRef, ctx: _Ctx) -> Shape:
 
 def _resolve_rel(rel: ast.RelExpr, default: float, ctx: _Ctx) -> float:
     if rel.abs is not None:
-        return eval_expr(rel.abs, ctx)
+        return _as_number(eval_expr(rel.abs, ctx))
     if rel.percent is not None:
-        return default * (eval_expr(rel.percent, ctx) / 100.0)
+        return default * (_as_number(eval_expr(rel.percent, ctx)) / 100.0)
     return default
 
 
 def _resolve_rel_current(rel: ast.RelExpr, current: float, ctx: _Ctx) -> float:
     if rel.abs is not None:
-        return eval_expr(rel.abs, ctx)
+        return _as_number(eval_expr(rel.abs, ctx))
     if rel.percent is not None:
-        return current * (eval_expr(rel.percent, ctx) / 100.0)
+        return current * (_as_number(eval_expr(rel.percent, ctx)) / 100.0)
     return current
-
-
-def eval_rvalue(value: ast.Expr, ctx: _Ctx) -> float:
-    if isinstance(value, ast.ColorName):
-        return float(COLOR_NAMES.get(value.name.lower(), 0))
-    if isinstance(value, ast.Var):
-        # A lowercase-starting color name (e.g. "fill white") parses as a
-        # plain Var, not ast.ColorName, since only capitalized PLACENAMEs
-        # take that path (see Parser.parse_rvalue). Real pikchr scripts
-        # overwhelmingly use lowercase color names, so check the color
-        # table before falling back to a variable lookup.
-        color = COLOR_NAMES.get(value.name.lower())
-        if color is not None:
-            return float(color)
-    return eval_expr(value, ctx)
 
 
 # ---------------------------------------------------------------------------
@@ -694,7 +859,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         else:
             shape.dotted, shape.dashed = value, 0.0
     elif isinstance(attr, ast.ColorProperty):
-        value = eval_rvalue(attr.value, ctx)
+        value = _as_colour(eval_expr(attr.value, ctx))
         if attr.name == "fill":
             shape.fill = value
         else:
@@ -957,12 +1122,7 @@ def _layout_statements(
                 _set_exit(prev, direction)
             continue
         if isinstance(stmt, ast.AssignStatement):
-            current = ctx.vars.get(stmt.name, 0.0)
-            rhs = eval_rvalue(stmt.value, ctx)
-            ctx.vars[stmt.name] = {
-                "=": rhs, "+=": current + rhs, "-=": current - rhs,
-                "*=": current * rhs, "/=": current / rhs if rhs != 0 else current,
-            }[stmt.op]
+            _eval_assignment(stmt, ctx)
             continue
         if isinstance(stmt, (ast.PrintStatement, ast.AssertExprStatement, ast.AssertPositionStatement)):
             continue
@@ -1028,4 +1188,5 @@ def resolve_layout(doc: ast.Document, metrics: FontMetrics | None = None) -> Lay
         bbox = (x0, y0, x1, y1)
     else:
         bbox = (0.0, 0.0, 0.0, 0.0)
-    return LayoutResult(shapes=flat, bbox=bbox)
+    text_sizes = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
+    return LayoutResult(shapes=flat, bbox=bbox, text_sizes=text_sizes)

@@ -50,10 +50,15 @@ def test_simple_box():
     assert stmt.attributes[3] == ast.ColorProperty("fill", ast.Var("lightblue"))
 
 
-def test_color_name_rvalue():
-    doc = parse("box color DarkBlue\n")
+def test_lowercase_color_name_is_an_ordinary_variable():
+    # Unlike pikchr, a colour name is not special in the grammar: pikslide
+    # is not aiming for pikchr compatibility (docs/spec.md SS2), and a
+    # capitalized PLACENAME is always an object reference, never a colour
+    # -- "darkblue" is an ordinary Var, resolved against the prelude
+    # (docs/spec.md SS3.7) at evaluation time, not parse time.
+    doc = parse("box color darkblue\n")
     attr = doc.statements[0].attributes[0]
-    assert attr == ast.ColorProperty("color", ast.ColorName("DarkBlue"))
+    assert attr == ast.ColorProperty("color", ast.Var("darkblue"))
 
 
 def test_dashed_with_and_without_value():
@@ -98,13 +103,20 @@ def test_string_escapes():
         ("72pt", 1.0),
         ("96px", 1.0),
         ("6pc", 1.0),
-        ("0x10", 16.0),
     ],
 )
 def test_numeric_units(text: str, expected: float):
     doc = parse(f"box width {text}\n")
     value = doc.statements[0].attributes[0].value.abs
     assert value == ast.Num(expected)
+
+
+def test_hex_literal_is_a_colour_not_a_number():
+    # A hex literal is a colour value (ext), not a number -- unlike a
+    # decimal literal, regardless of where it's used (docs/spec.md SS2).
+    doc = parse('box fill 0x10\n')
+    value = doc.statements[0].attributes[0].value
+    assert value == ast.HexColor(16)
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +364,41 @@ def test_string_literal_dollar_is_not_substituted():
     tokens, _ = expand_macros('define m { box "$1" }\nm(hello)\n')
     doc = Parser(tokens).parse_document()
     assert doc.statements[0].attributes[0].text == "$1"
+
+
+# ---------------------------------------------------------------------------
+# A macro cannot shadow a variable (docs/spec.md SS3.6): the two directions
+# of the guard, plus reserved words (which can never collide either way).
+# ---------------------------------------------------------------------------
+
+
+def test_define_naming_a_prelude_variable_is_an_error():
+    with pytest.raises(PikSyntaxError):
+        parse("define boxwid { 99 }\nbox\n")
+
+
+def test_define_naming_an_earlier_program_variable_is_an_error():
+    with pytest.raises(PikSyntaxError):
+        parse("myvar = 1\ndefine myvar { 99 }\nbox\n")
+
+
+def test_assigning_to_an_existing_macro_name_is_an_error():
+    with pytest.raises(PikSyntaxError):
+        parse("define legend { fill }\nlegend = 5\nbox\n")
+
+
+def test_reserved_word_cannot_be_a_macro_name():
+    # "small" lexes as a keyword, never an ID, so it can't even reach the
+    # macro-definition rule -- this is a plain syntax error, not the
+    # variable-shadow guard above.
+    with pytest.raises(PikSyntaxError):
+        parse("define small { 99 }\nbox\n")
+
+
+def test_macro_unrelated_to_any_variable_still_works():
+    doc = parse("define legend2 { box }\nlegend2\n")
+    assert len(doc.statements) == 1
+    assert isinstance(doc.statements[0], ast.ObjectStatement)
 
 
 # ---------------------------------------------------------------------------

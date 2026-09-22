@@ -1,7 +1,8 @@
 import sys
 
-from .markdown import extract_pik_blocks
+from .markdown import MarkdownDiagramError, extract_pik_blocks
 from .pik import PikSyntaxError, dump, parse
+from .pik.layout import LayoutError
 from .pptx_writer import resolve_for_pptx, write_pptx
 
 
@@ -17,15 +18,20 @@ def main() -> None:
         text = f.read()
 
     if path.endswith((".md", ".markdown")):
-        blocks = extract_pik_blocks(text)
+        try:
+            blocks = extract_pik_blocks(text)
+        except MarkdownDiagramError as e:
+            print(f"error: {e}", file=sys.stderr)
+            raise SystemExit(1)
         if not blocks:
-            print("no ```pik``` or ```pikchr``` code blocks found", file=sys.stderr)
+            print("no ```pik```/```pikchr```/```pikslide``` code blocks found", file=sys.stderr)
             raise SystemExit(1)
         for i, block in enumerate(blocks, start=1):
             block_out = _numbered(out_path, i, len(blocks)) if out_path else None
             if len(blocks) > 1 and block_out is None:
-                print(f"--- block {i} of {len(blocks)} ---")
-            _process(block, block_out)
+                label = f'"{block.name}"' if block.name else f"{i} of {len(blocks)}"
+                print(f"--- block {label} ---")
+            _process(block.text, block_out)
         return
 
     _process(text, out_path)
@@ -50,7 +56,11 @@ def _process(text: str, out_path: str | None) -> None:
         return
 
     if out_path.endswith(".pptx"):
-        write_pptx(resolve_for_pptx(doc), out_path)
+        try:
+            write_pptx(resolve_for_pptx(doc), out_path)
+        except LayoutError as e:
+            print(f"error: {e}", file=sys.stderr)
+            raise SystemExit(1)
         print(f"wrote {out_path}")
         return
 

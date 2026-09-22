@@ -1,10 +1,13 @@
 # pikslide language specification — draft 0.1
 
-Status: **draft for review.** Every syntax example below marked *(proposed)*
-is not implemented yet; examples without the mark run on today's parser
-(checked against `src/pikslide/pik/parser.py`). The language itself is
-defined, in BNF, in [grammar.md](grammar.md). Like the rest of `docs/`, this
-document is written in English; keywords are English in any case.
+Status: **draft for review.** A syntax example marked *(proposed)* is not
+implemented yet; one without the mark runs on today's parser (checked
+against `src/pikslide/pik/parser.py`). Which parts of the language are
+implemented changes as work continues, so it is tracked separately, in
+[docs/implementation-plan.md](implementation-plan.md), rather than kept in
+step with every marker here. The language itself is defined, in BNF, in
+[grammar.md](grammar.md). Like the rest of `docs/`, this document is written
+in English; keywords are English in any case.
 
 ## 1. What pikslide is
 
@@ -125,9 +128,9 @@ The usual slot names are defined for you as variables (§3.7), so programs
 write:
 
 ```pik
-box "Primary"  fill accent1                 # (proposed)
-box "Soft"     fill accent1 lighter 40%     # (proposed)
-box "Outline"  fill bg1 color text1         # (proposed)
+box "Primary"  fill accent1
+box "Soft"     fill accent1 lighter 40%
+box "Outline"  fill bg1 color text1
 ```
 
 - **`theme "slot"`.** The string is an OOXML `schemeClr` value (`accent1`–

@@ -283,12 +283,22 @@ def _add_block_shape(slide, shape: Shape, tf: _Transform, font_name: str, text_s
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
     autoshape_type = _AUTOSHAPE.get(shape.kind, MSO_SHAPE.RECTANGLE)
-    if shape.kind == "box" and shape.rad > 0:
+    if shape.kind == "shape":
+        # Validated already, in layout.py's _resolve_preset_name(); the
+        # roundRect preset is *literally* MSO_SHAPE.ROUNDED_RECTANGLE
+        # (checked), so the rad -> adjustments[0] branch just below applies
+        # to `shape roundRect` exactly as it does to `box rad ...`.
+        assert shape.preset is not None
+        autoshape_type = MSO_SHAPE.from_xml(shape.preset)
+    elif shape.kind == "box" and shape.rad > 0:
         autoshape_type = MSO_SHAPE.ROUNDED_RECTANGLE
     pptx_shape = slide.shapes.add_shape(autoshape_type, Inches(left), Inches(top), Inches(w), Inches(h))
-    if autoshape_type == MSO_SHAPE.ROUNDED_RECTANGLE:
+    if autoshape_type == MSO_SHAPE.ROUNDED_RECTANGLE and shape.rad > 0:
         # `adjustments[0]` is the corner radius as a fraction of min(w, h),
-        # not an absolute length.
+        # not an absolute length. `rad == 0` (no explicit `rad` attribute,
+        # for either `box rad ...` or a bare `shape roundRect`) leaves
+        # python-pptx's own sensible default (checked: ~1/6) alone, rather
+        # than flattening a plain `shape roundRect`'s corners to square.
         pptx_shape.adjustments[0] = min(0.5, shape.rad / min(w, h))
 
     if shape.kind == "text":

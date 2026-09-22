@@ -23,13 +23,14 @@ single slide sized to the diagram); colours as a type of their own, with
 theme colours (`theme "accent1"`, `lighter`/`darker`) rendered as real
 `schemeClr`, never resolved to RGB; a prelude of built-in names (CSS colour
 names, pikchr's own defaults, the theme-colour names); three fixed text
-sizes (`small`/`medium`/`large`); Markdown diagram names (the `pikslide`
-fence tag, naming a diagram when a file has more than one).
+sizes (`small`/`medium`/`large`); preset shapes (`shape roundRect`, any of
+the ~180 OOXML presets, matched case-insensitively); Markdown diagram names
+(the `pikslide` fence tag, naming a diagram when a file has more than one).
 
-**Specified, not implemented yet**: `shape` and `image` as real object
-classes (both are reserved words already, but not yet parsed as
-constructs), `include`, reading a template's own theme (`.potx`/`.pptx`),
-per-template settings files, and insertion into an existing deck. The rules
+**Specified, not implemented yet**: `image` as a real object class (a
+reserved word already, but not yet parsed as a construct), `include`,
+reading a template's own theme (`.potx`/`.pptx`), per-template settings
+files, and insertion into an existing deck. The rules
 marked `(ext)` in [docs/grammar.md](docs/grammar.md) are the ones not
 implemented yet; [docs/implementation-plan.md](docs/implementation-plan.md)
 lists everything that has to change.

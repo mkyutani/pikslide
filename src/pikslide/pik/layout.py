@@ -29,6 +29,7 @@ license. See the NOTICE file at the root of this repository.
 
 from __future__ import annotations
 
+import difflib
 import math
 from dataclasses import dataclass, field, replace
 from importlib import resources
@@ -90,6 +91,51 @@ THEME_SLOTS = {
     "accent4": "accent4", "accent5": "accent5", "accent6": "accent6",
     "hlink": "hlink", "folhlink": "folHlink",
 }
+
+# `shape preset-name` (docs/spec.md SS3.4): every OOXML preset geometry
+# (ECMA-376 ST_ShapeType) python-pptx knows -- checked against
+# python-pptx 1.0.2's own MSO_SHAPE table (177 distinct names, excluding
+# MSO_SHAPE.MIXED, which is not a real preset). Keyed lowercase for
+# case-insensitive matching; values are the canonical `prst` spelling
+# pptx_writer.py passes to python-pptx.
+_PRESET_NAME_LIST = [
+    "accentBorderCallout1", "accentBorderCallout2", "accentBorderCallout3", "accentCallout1",
+    "accentCallout2", "accentCallout3", "actionButtonBackPrevious", "actionButtonBeginning",
+    "actionButtonBlank", "actionButtonDocument", "actionButtonEnd", "actionButtonForwardNext",
+    "actionButtonHelp", "actionButtonHome", "actionButtonInformation", "actionButtonMovie",
+    "actionButtonReturn", "actionButtonSound", "arc", "bentArrow", "bentUpArrow", "bevel",
+    "blockArc", "borderCallout1", "borderCallout2", "borderCallout3", "bracePair",
+    "bracketPair", "callout1", "callout2", "callout3", "can", "chartPlus", "chartStar",
+    "chartX", "chevron", "chord", "circularArrow", "cloud", "cloudCallout", "corner",
+    "cornerTabs", "cube", "curvedDownArrow", "curvedLeftArrow", "curvedRightArrow",
+    "curvedUpArrow", "decagon", "diagStripe", "diamond", "dodecagon", "donut", "doubleWave",
+    "downArrow", "downArrowCallout", "ellipse", "ellipseRibbon", "ellipseRibbon2",
+    "flowChartAlternateProcess", "flowChartCollate", "flowChartConnector", "flowChartDecision",
+    "flowChartDelay", "flowChartDisplay", "flowChartDocument", "flowChartExtract",
+    "flowChartInputOutput", "flowChartInternalStorage", "flowChartMagneticDisk",
+    "flowChartMagneticDrum", "flowChartMagneticTape", "flowChartManualInput",
+    "flowChartManualOperation", "flowChartMerge", "flowChartMultidocument",
+    "flowChartOfflineStorage", "flowChartOffpageConnector", "flowChartOnlineStorage",
+    "flowChartOr", "flowChartPredefinedProcess", "flowChartPreparation", "flowChartProcess",
+    "flowChartPunchedCard", "flowChartPunchedTape", "flowChartSort",
+    "flowChartSummingJunction", "flowChartTerminator", "foldedCorner", "frame", "funnel",
+    "gear6", "gear9", "halfFrame", "heart", "heptagon", "hexagon", "homePlate",
+    "horizontalScroll", "irregularSeal1", "irregularSeal2", "leftArrow", "leftArrowCallout",
+    "leftBrace", "leftBracket", "leftCircularArrow", "leftRightArrow", "leftRightArrowCallout",
+    "leftRightCircularArrow", "leftRightRibbon", "leftRightUpArrow", "leftUpArrow",
+    "lightningBolt", "lineInv", "mathDivide", "mathEqual", "mathMinus", "mathMultiply",
+    "mathNotEqual", "mathPlus", "moon", "noSmoking", "nonIsoscelesTrapezoid",
+    "notchedRightArrow", "octagon", "parallelogram", "pentagon", "pie", "pieWedge", "plaque",
+    "plaqueTabs", "plus", "quadArrow", "quadArrowCallout", "rect", "ribbon", "ribbon2",
+    "rightArrow", "rightArrowCallout", "rightBrace", "rightBracket", "round1Rect",
+    "round2DiagRect", "round2SameRect", "roundRect", "rtTriangle", "smileyFace", "snip1Rect",
+    "snip2DiagRect", "snip2SameRect", "snipRoundRect", "squareTabs", "star10", "star12",
+    "star16", "star24", "star32", "star4", "star5", "star6", "star7", "star8",
+    "stripedRightArrow", "sun", "swooshArrow", "teardrop", "trapezoid", "triangle", "upArrow",
+    "upArrowCallout", "upDownArrow", "upDownArrowCallout", "uturnArrow", "verticalScroll",
+    "wave", "wedgeEllipseCallout", "wedgeRectCallout", "wedgeRoundRectCallout",
+]
+PRESET_NAMES = {name.lower(): name for name in _PRESET_NAME_LIST}
 
 
 @dataclass(frozen=True)
@@ -233,6 +279,8 @@ class Shape:
     out_dir: int = DIR_RIGHT
     sublist: list["Shape"] = field(default_factory=list)
     sublist_names: dict[str, "Shape"] = field(default_factory=dict)
+    preset: str | None = None
+    """The OOXML preset name (docs/spec.md SS3.4), when `kind == "shape"`."""
 
     def offset(self, edge: str | None) -> tuple[float, float]:
         return _edge_offset(self, edge)
@@ -604,6 +652,18 @@ def _resolve_theme_slot(slot: str) -> str:
     return canonical
 
 
+def _resolve_preset_name(name: str) -> str:
+    """Validate and canonicalise a `shape preset-name` (docs/spec.md SS3.4):
+    matched case-insensitively; an unknown name is an error that lists the
+    nearest matches (too many presets, 177, to list them all)."""
+    canonical = PRESET_NAMES.get(name.lower())
+    if canonical is not None:
+        return canonical
+    suggestions = difflib.get_close_matches(name, PRESET_NAMES.values(), n=3)
+    hint = f"; did you mean {', '.join(suggestions)}?" if suggestions else ""
+    raise LayoutError(f"unknown preset shape {name!r}{hint}")
+
+
 def eval_place(place: ast.Place, ctx: _Ctx) -> tuple[float, float]:
     if isinstance(place, ast.ObjectEdge):
         shape = resolve_object(place.obj, ctx)
@@ -730,30 +790,40 @@ _SIMPLE_DEFAULTS = {
 }
 
 
+def _var_number(ctx: "_Ctx", name: str) -> float:
+    """A built-in default variable's value, as a number -- guards against
+    e.g. `boxwid = red` leaving a Colour where every size/geometry
+    computation expects a float."""
+    return _as_number(ctx.vars[name], f"a numeric value for {name!r}")
+
+
 def _init_class_defaults(shape: Shape, classname: str, ctx: _Ctx) -> None:
     v = ctx.vars
     if classname in _SIMPLE_DEFAULTS:
         wname, hname = _SIMPLE_DEFAULTS[classname]
-        shape.w, shape.h = v[wname], v[hname]
+        shape.w, shape.h = _var_number(ctx, wname), _var_number(ctx, hname)
         if classname == "box":
-            shape.rad = v["boxrad"]
+            shape.rad = _var_number(ctx, "boxrad")
         elif classname == "cylinder":
-            shape.rad = v["cylrad"]
+            shape.rad = _var_number(ctx, "cylrad")
         elif classname == "file":
-            shape.rad = v["filerad"]
+            shape.rad = _var_number(ctx, "filerad")
         if classname == "arrow":
             shape.rarrow = True
     elif classname == "circle":
-        shape.w = shape.h = v["circlerad"] * 2
+        shape.w = shape.h = _var_number(ctx, "circlerad") * 2
         shape.rad = 0.5 * shape.w
     elif classname == "dot":
-        shape.rad = v["dotrad"]
-        shape.w = shape.h = v["dotrad"] * 2
+        shape.rad = _var_number(ctx, "dotrad")
+        shape.w = shape.h = shape.rad * 2
         shape.fill = shape.color
     elif classname == "arc":
-        shape.w = shape.h = v["arcrad"]
+        shape.w = shape.h = _var_number(ctx, "arcrad")
     elif classname == "text":
         shape.w = shape.h = 0.0
+    elif classname == "shape":
+        shape.w, shape.h = _var_number(ctx, "boxwid"), _var_number(ctx, "boxht")
+        shape.rad = _var_number(ctx, "boxrad")
     else:
         raise LayoutError(f"unknown object class: {classname}")
 
@@ -1040,6 +1110,12 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
         shape = Shape(kind="text", name=None, cx=0.0, cy=0.0, w=0.0, h=0.0,
                       sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["color"])
         shape.texts.append((base.text, base.flags))
+        is_line = False
+    elif isinstance(base, ast.ShapeBase):
+        shape = Shape(kind="shape", name=None, cx=0.0, cy=0.0, w=0.0, h=0.0,
+                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["color"],
+                      preset=_resolve_preset_name(base.preset))
+        _init_class_defaults(shape, "shape", ctx)
         is_line = False
     else:
         classname = base.classname

@@ -249,3 +249,37 @@ def test_default_text_sizes_come_from_the_prelude():
 def test_text_size_is_overridable_like_fill_and_color():
     result = layout('medium = 11pt\nbox "hi"\n')
     assert result.text_sizes["medium"] == pytest.approx(11 / 72)
+
+
+# ---------------------------------------------------------------------------
+# Preset shapes: `shape` (docs/spec.md SS3.4)
+# ---------------------------------------------------------------------------
+
+
+def test_shape_default_size_matches_box():
+    result = layout('shape chevron "x"\n')
+    box_result = layout('box "x"\n')
+    shape_obj, box_obj = result.shapes[0], box_result.shapes[0]
+    assert shape_obj.w == pytest.approx(box_obj.w)
+    assert shape_obj.h == pytest.approx(box_obj.h)
+    assert shape_obj.kind == "shape"
+    assert shape_obj.preset == "chevron"
+
+
+def test_shape_preset_name_is_canonicalised():
+    result = layout('shape ROUNDRECT "x"\n')
+    assert result.shapes[0].preset == "roundRect"
+
+
+def test_unknown_preset_name_is_an_error_with_a_suggestion():
+    with pytest.raises(LayoutError, match="roundRect"):
+        layout('shape roundRact "x"\n')
+
+
+def test_shape_supports_edges_and_same_like_box():
+    result = layout('A: shape hexagon "A" width 2 height 1\n'
+                     'B: shape hexagon "B" same at 4 right of A.e\n')
+    a, b = result.shapes
+    assert b.w == pytest.approx(a.w)
+    assert b.h == pytest.approx(a.h)
+    assert b.cx == pytest.approx(a.edge_point("e")[0] + 4)

@@ -8,7 +8,7 @@ import pytest
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL_TYPE, MSO_THEME_COLOR
-from pptx.enum.shapes import MSO_SHAPE_TYPE
+from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 
 from pikslide.pik import parse
 from pikslide.pptx_writer import resolve_for_pptx, write_pptx
@@ -128,3 +128,25 @@ def test_overriding_medium_changes_the_default_text_size(tmp_path: pathlib.Path)
     prs = render('medium = 14pt\nbox "hi"\n', tmp_path)
     run = prs.slides[0].shapes[0].text_frame.paragraphs[0].runs[0]
     assert run.font.size.pt == pytest.approx(14.0)
+
+
+def test_preset_shape_renders_as_the_named_autoshape(tmp_path: pathlib.Path):
+    prs = render('shape chevron "Step 1"\n', tmp_path)
+    shape = prs.slides[0].shapes[0]
+    assert shape.auto_shape_type == MSO_SHAPE.CHEVRON
+    assert shape.text_frame.text == "Step 1"
+
+
+def test_bare_round_rect_preset_keeps_pptx_own_default_corner(tmp_path: pathlib.Path):
+    # Checked: python-pptx's own fresh-shape default is ~1/6, not 0 -- a
+    # bare `shape roundRect` (no explicit `rad`) must not flatten that.
+    prs = render('shape roundRect "x"\n', tmp_path)
+    shape = prs.slides[0].shapes[0]
+    assert shape.auto_shape_type == MSO_SHAPE.ROUNDED_RECTANGLE
+    assert shape.adjustments[0] == pytest.approx(0.16667, abs=0.001)
+
+
+def test_explicit_rad_on_a_round_rect_preset_overrides_the_corner(tmp_path: pathlib.Path):
+    prs = render('shape roundRect "x" rad 0.1 width 1 height 1\n', tmp_path)
+    shape = prs.slides[0].shapes[0]
+    assert shape.adjustments[0] == pytest.approx(0.1, abs=0.01)

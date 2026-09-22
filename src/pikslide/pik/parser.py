@@ -122,6 +122,11 @@ _EXPR_START = {
     TokType.LAST,
 }
 
+# Tokens that can start a `basetype` (docs/grammar.md, Objects): the
+# pikchr core (CLASSNAME/STRING/'[') plus pikslide's `shape` (ext). `image`
+# isn't wired in yet -- see docs/implementation-plan.md.
+_BASETYPE_START = {TokType.CLASSNAME, TokType.STRING, TokType.LB, TokType.SHAPE}
+
 _OBJECT_START = {TokType.PLACENAME, TokType.THIS, TokType.NTH, TokType.LAST}
 
 
@@ -211,14 +216,14 @@ class Parser:
                 label = self.advance().text
                 self.advance()  # COLON
                 after = self.peek()
-                if after is not None and after.type in (TokType.CLASSNAME, TokType.STRING, TokType.LB):
+                if after is not None and after.type in _BASETYPE_START:
                     base, attrs = self.parse_unnamed_statement()
                     return ast.ObjectStatement(label=label, base=base, attributes=attrs)
                 pos = self.parse_position()
                 return ast.LabelPosition(label, pos)
             self._error("expected ':' after label")
 
-        if t.type in (TokType.CLASSNAME, TokType.STRING, TokType.LB):
+        if t.type in _BASETYPE_START:
             base, attrs = self.parse_unnamed_statement()
             return ast.ObjectStatement(label=None, base=base, attributes=attrs)
 
@@ -286,7 +291,23 @@ class Parser:
             statements = self.parse_statement_list()
             self.expect(TokType.RB)
             return ast.BlockBase(statements)
-        self._error("expected an object class, a string, or '['")
+        if self.at(TokType.SHAPE):
+            self.advance()
+            return ast.ShapeBase(self.parse_preset_name())
+        self._error("expected an object class, a string, '[', or 'shape'")
+
+    def parse_preset_name(self) -> str:
+        # preset-name ::= ID | CLASSNAME (ext; docs/grammar.md, Objects) --
+        # CLASSNAME too, since some preset names ("ellipse", "diamond",
+        # "line", "arc") already lex as pikchr class-name tokens. Matched
+        # case-insensitively downstream (layout._resolve_preset_name), so
+        # an uppercase-led spelling ("ROUNDRECT"), which the lexer can only
+        # produce as a PLACENAME, must be accepted here too -- this is the
+        # one position right after `shape` where that can't be ambiguous
+        # with an object reference.
+        if self.at(TokType.ID, TokType.CLASSNAME, TokType.PLACENAME):
+            return self.advance().text
+        self._error("expected a preset shape name")
 
     def parse_textposition(self) -> list[str]:
         flags: list[str] = []

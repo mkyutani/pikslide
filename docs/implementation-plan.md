@@ -42,12 +42,21 @@ already-built behaviour.
   then `legend = 5` silently expanded to `fill = 5` with no error at all.
 - **Reserved words**: `shape`, `image`, `include`, `alt`, `major`, `medium`,
   `large`, `theme`, `lighter`, `darker`, `none`, `off`, `connector` are all
-  now real keyword tokens (`pik/tokens.py`) — but only `theme`/`none`/`off`/
-  `lighter`/`darker`/`medium`/`large` have actual parsing+evaluation
-  behind them (colours, text sizes). `shape`, `image`, `include`,
-  `connector` are reserved (can't be used as a variable/macro name) but
-  parsing them as real constructs is not implemented (`shape roundRect`,
-  `image "x.png"`, `include "x.pik"` are still syntax errors).
+  real keyword tokens (`pik/tokens.py`). `image`, `include`, `connector` are
+  reserved (can't be used as a variable/macro name) but not parsed as real
+  constructs yet (`image "x.png"`, `include "x.pik"` are still syntax
+  errors); `theme`/`none`/`off`/`lighter`/`darker`/`medium`/`large`/`shape`
+  are fully implemented.
+- **Preset shapes** (`shape preset-name`, `ast.ShapeBase`, `Shape.preset`):
+  matched case-insensitively against all 177 OOXML presets python-pptx 1.0.2
+  knows (`pik/layout.py` `PRESET_NAMES`); an unknown name is an error with
+  "did you mean" suggestions (`difflib`). Behaves like `box` (default size,
+  `width`/`height`/`fit`/`at`/`with`/`same`/text/`fill`/`color`/`dashed`/
+  `thickness`, edges on the bounding rectangle, checked) -- including
+  `rad` on `roundRect` specifically (that preset *is* the same
+  `MSO_SHAPE.ROUNDED_RECTANGLE` `box rad>0` already uses; a bare
+  `shape roundRect`, `rad` unset, keeps python-pptx's own default corner
+  rather than flattening it to square, checked).
 - **Markdown diagram names** (`markdown.py` `PikBlock`, `extract_pik_blocks`):
   the `pikslide` fence tag is recognised alongside `pik`/`pikchr`; a fence
   may be named (` ```pikslide architecture `); a file with more than one
@@ -55,8 +64,8 @@ already-built behaviour.
   `--block NAME` (to select one diagram for `--into`) is not implemented —
   there is no `--into` yet either.
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
-  new coverage for colours, text sizes, the macro-shadow guard, and
-  Markdown names (`tests/test_layout.py`, `tests/test_pik_parser.py`,
+  new coverage for colours, text sizes, the macro-shadow guard, Markdown
+  names, and preset shapes (`tests/test_layout.py`, `tests/test_pik_parser.py`,
   `tests/test_pptx_writer.py`, `tests/test_markdown.py`).
 
 ## Not yet started
@@ -65,13 +74,12 @@ already-built behaviour.
 |---|---|---|
 | `pik/tokens.py` `Token`, `PikSyntaxError` | carry a line number only | carry the source file and column, so errors inside an `include` point at the right file |
 | `pik/macros.py` | no `include` statement | resolve `include "path"` in the same pass as `define` (shared macro table, definitions-only check, path containment, cycle/depth limits) |
-| `pik/parser.py`, `pik/layout.py` | `shape`/`image` are reserved words only | `shape preset-name` and `image STRING` as real object classes (basetype parsing, layout defaults, `alt`) |
+| `pik/parser.py`, `pik/layout.py`, `pptx_writer.py` | `image` is a reserved word only | `image STRING` as a real object class: basetype parsing, `alt`, aspect-ratio sizing (needs a source-file-relative path and an injected image-metrics reader, mirroring how `FontMetrics` already works), `p:pic` output, SVG picture (`svgBlip` + PNG fallback, hand-written XML) |
 | *(new)* theme reader | none; theme colours always render against python-pptx's built-in Office theme | read `ppt/theme/*.xml` from a `.pptx`/`.potx` with `zipfile`; slide → layout → master → theme lookup; `.potx` normalisation for use as a base |
 | *(new)* template settings | none | find the settings file beside a template or deck and read it after the prelude; `layout`, `typeface`, accent colours, text sizes, content area |
 | `pptx_writer.py` `FONT_NAME` | hard-coded `"Arial"`; no `typeface` variable | read `typeface` (once settings files exist) or the theme's own font |
 | `pik/layout.py` `_flatten` | flattens `[ ]` blocks, losing the tree | keep the hierarchy so groups can be written |
 | `pik/layout.py` `behind` | parsed, ignored | affects z-order |
 | `pptx_writer.py` | always a new blank presentation | open an existing deck, insert group, replace by name, check that the diagram fits its region |
-| `pptx_writer.py` | no pictures | `p:pic` for `image`; SVG picture (`svgBlip` + PNG fallback, hand-written XML) |
 | `__init__.py` | `pikslide <in> [<out>]` only | `--into --slide --region/--rect --id --template --settings --block --include-path --align --strict --check --format` |
 | Docs | README's *Status* section | keep it in step with this file as items are implemented |

@@ -378,6 +378,16 @@ class ClassBase(Basetype):
 
 
 @dataclass
+class ShapeBase(Basetype):
+    """``shape preset-name`` (ext, docs/spec.md SS3.4): a PowerPoint preset
+    geometry by name, e.g. ``shape roundRect``, instead of one of the 14
+    fixed pikchr classes. Behaves like `box` otherwise; see
+    pikslide.pik.layout.PRESET_NAMES for the recognised names."""
+
+    preset: str
+
+
+@dataclass
 class TextBase(Basetype):
     text: str
     flags: list[str]

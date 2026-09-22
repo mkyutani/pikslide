@@ -402,6 +402,40 @@ def test_macro_unrelated_to_any_variable_still_works():
 
 
 # ---------------------------------------------------------------------------
+# Preset shapes: `shape` (docs/spec.md SS3.4)
+# ---------------------------------------------------------------------------
+
+
+def test_shape_with_lowercase_preset_name():
+    doc = parse('shape chevron "Step 1" fit\n')
+    stmt = doc.statements[0]
+    assert stmt.base == ast.ShapeBase("chevron")
+    assert stmt.attributes[0] == ast.TextAttribute("Step 1", [])
+    assert isinstance(stmt.attributes[1], ast.Fit)
+
+
+def test_shape_preset_name_can_collide_with_a_classname():
+    # "ellipse"/"diamond"/"line"/"arc" lex as CLASSNAME, not ID -- the
+    # preset-name rule accepts both (docs/grammar.md, Objects).
+    doc = parse('shape ellipse "x"\n')
+    assert doc.statements[0].base == ast.ShapeBase("ellipse")
+
+
+def test_shape_preset_name_can_start_uppercase():
+    # A preset name matches case-insensitively (docs/spec.md SS3.4), so an
+    # uppercase-led spelling -- which the lexer can only produce as a
+    # PLACENAME -- must parse too.
+    doc = parse('shape RoundRect "x"\n')
+    assert doc.statements[0].base == ast.ShapeBase("RoundRect")
+
+
+def test_shape_can_be_labeled():
+    doc = parse('A: shape hexagon "x"\n')
+    assert doc.statements[0].label == "A"
+    assert doc.statements[0].base == ast.ShapeBase("hexagon")
+
+
+# ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
 

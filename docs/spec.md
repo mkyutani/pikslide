@@ -209,9 +209,9 @@ that is not installed.
 One new class keyword instead of ~180 reserved words:
 
 ```pik
-shape chevron "Step 1" fit                  # (proposed)
-shape roundRect "Card" fill accent2         # (proposed)
-shape wedgeRectCallout "Note" fit           # (proposed)
+shape chevron "Step 1" fit
+shape roundRect "Card" fill accent2
+shape wedgeRectCallout "Note" fit
 ```
 
 - The name is an OOXML preset geometry (`prstGeom prst=…`, ECMA-376

@@ -91,9 +91,9 @@ def test_slide_size_matches_diagram_bbox_plus_margin(tmp_path: pathlib.Path):
 
 
 def test_fill_color_is_applied(tmp_path: pathlib.Path):
-    # Unlike pikchr, a colour name is an ordinary lowercase variable,
+    # Unlike pikchr, a color name is an ordinary lowercase variable,
     # defined by the prelude (docs/spec.md SS2, SS3.7) -- not a capitalized
-    # PLACENAME the way pikchr's own colour-name shorthand works.
+    # PLACENAME the way pikchr's own color-name shorthand works.
     prs = render("box fill red\n", tmp_path)
     shape = prs.slides[0].shapes[0]
     assert shape.fill.fore_color.rgb == RGBColor(0xFF, 0x00, 0x00)
@@ -105,7 +105,7 @@ def test_invis_object_has_no_outline(tmp_path: pathlib.Path):
     assert shape.line.fill.type == MSO_FILL_TYPE.BACKGROUND
 
 
-def test_theme_colour_is_emitted_as_schemeclr_not_resolved_rgb(tmp_path: pathlib.Path):
+def test_theme_color_is_emitted_as_schemeclr_not_resolved_rgb(tmp_path: pathlib.Path):
     # docs/spec.md SS3.3: emitted as schemeClr, never as resolved RGB, so
     # swapping the theme restyles the diagram.
     prs = render('box fill accent1 lighter 40%\n', tmp_path)
@@ -632,7 +632,7 @@ def test_template_unknown_layout_name_lists_the_known_ones(tmp_path: pathlib.Pat
         _from_template('box "Web"\n', tmpl, tmp_path, layout_name="Nope")
 
 
-def test_template_colours_and_fonts_stay_symbolic(tmp_path: pathlib.Path):
+def test_template_colors_and_fonts_stay_symbolic(tmp_path: pathlib.Path):
     tmpl = _template_deck(tmp_path)
     prs = _from_template('box "Web" fill accent1\n', tmpl, tmp_path)
     shape = prs.slides[0].shapes[0]

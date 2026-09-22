@@ -45,7 +45,7 @@ def _run(monkeypatch, argv: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Standalone mode (pre-existing behaviour, now via argparse)
+# Standalone mode (pre-existing behavior, now via argparse)
 # ---------------------------------------------------------------------------
 
 
@@ -352,7 +352,7 @@ def test_check_parses_and_lays_out_without_writing(monkeypatch, capsys, tmp_path
 
 
 def test_check_still_catches_a_layout_error(monkeypatch, capsys, tmp_path):
-    src = _write(tmp_path, "d.pik", "box fill nosuchcolour\n")
+    src = _write(tmp_path, "d.pik", "box fill nosuchcolor\n")
     with pytest.raises(SystemExit) as exc:
         _run(monkeypatch, [str(src), str(tmp_path / "d.pptx"), "--check"])
     assert exc.value.code == 1
@@ -381,14 +381,14 @@ def test_format_json_syntax_error_has_file_line_column(monkeypatch, capsys, tmp_
 
 
 def test_format_json_layout_error_has_no_position(monkeypatch, capsys, tmp_path):
-    src = _write(tmp_path, "d.pik", "box fill nosuchcolour\n")
+    src = _write(tmp_path, "d.pik", "box fill nosuchcolor\n")
     out = tmp_path / "d.pptx"
     with pytest.raises(SystemExit):
         _run(monkeypatch, [str(src), str(out), "--format", "json"])
     payload = json.loads(capsys.readouterr().out)
     err = payload["errors"][0]
     assert err["line"] is None
-    assert "nosuchcolour" in err["message"]
+    assert "nosuchcolor" in err["message"]
 
 
 def test_block_selects_the_named_diagram(monkeypatch, tmp_path):

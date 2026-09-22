@@ -33,7 +33,7 @@ from pptx.util import Emu, Inches, Pt
 from .pik import ast
 from .pik.layout import (
     NOT_RENDERED,
-    Colour,
+    Color,
     LayoutError,
     LayoutResult,
     Shape,
@@ -193,7 +193,7 @@ def _rgb(value: int) -> RGBColor:
     return RGBColor((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
 
 
-# docs/spec.md SS3.3: a Colour's theme_slot is one of these OOXML schemeClr
+# docs/spec.md SS3.3: a Color's theme_slot is one of these OOXML schemeClr
 # reference names (see pik.layout.THEME_SLOTS for the full explanation of
 # why these, and not dk1/lt1/dk2/lt2, are the ones a shape can reference).
 _MSO_THEME_COLOR = {
@@ -206,29 +206,29 @@ _MSO_THEME_COLOR = {
 }
 
 
-def _brightness(colour: Colour) -> float:
+def _brightness(color: Color) -> float:
     """The python-pptx `ColorFormat.brightness` (-1..1) that reproduces a
-    Colour's lum_mod/lum_off (checked: brightness > 0 writes lumMod=
+    Color's lum_mod/lum_off (checked: brightness > 0 writes lumMod=
     (1-b)*100000/lumOff=b*100000, matching "Lighter N%"; brightness < 0
     writes lumMod=(1+b)*100000 alone, matching "Darker N%")."""
-    if colour.lum_off > 0:
-        return colour.lum_off
-    if colour.lum_mod < 1.0:
-        return colour.lum_mod - 1.0
+    if color.lum_off > 0:
+        return color.lum_off
+    if color.lum_mod < 1.0:
+        return color.lum_mod - 1.0
     return 0.0
 
 
-def _apply_colour(color_format, colour: Colour) -> None:
+def _apply_color(color_format, color: Color) -> None:
     """Set a python-pptx ColorFormat (`fill.fore_color`, `line.color`, or
-    `font.color` -- the same API for all three, checked) from a Colour: a
-    theme colour is written as `schemeClr` (never resolved to RGB, so it
-    stays linked to whatever theme the diagram lands in), an RGB colour as
+    `font.color` -- the same API for all three, checked) from a Color: a
+    theme color is written as `schemeClr` (never resolved to RGB, so it
+    stays linked to whatever theme the diagram lands in), an RGB color as
     `srgbClr`; `lighter`/`darker` apply to either the same way."""
-    if colour.theme_slot is not None:
-        color_format.theme_color = _MSO_THEME_COLOR[colour.theme_slot]
+    if color.theme_slot is not None:
+        color_format.theme_color = _MSO_THEME_COLOR[color.theme_slot]
     else:
-        color_format.rgb = _rgb(colour.rgb or 0)
-    b = _brightness(colour)
+        color_format.rgb = _rgb(color.rgb or 0)
+    b = _brightness(color)
     if b != 0.0:
         color_format.brightness = b
 
@@ -294,7 +294,7 @@ def _apply_line_style(line, shape: Shape) -> None:
     if shape.sw < 0:
         line.fill.background()
         return
-    _apply_colour(line.color, shape.color or Colour(rgb=0))
+    _apply_color(line.color, shape.color or Color(rgb=0))
     line.width = Pt(max(shape.sw, 0.001) * 72)
     if shape.dashed > 0:
         line.dash_style = MSO_LINE_DASH_STYLE.DASH
@@ -306,7 +306,7 @@ def _apply_run_font(run, flags: list[str], typeface: str) -> None:
     """Set a run's font family (docs/spec.md SS3.3): by default the
     theme's own minor font (`+mn-lt`/`+mn-ea`), or its major (heading)
     font (`+mj-lt`/`+mj-ea`) when the `major` text flag is present --
-    kept as a symbolic theme reference, exactly like a `theme` colour
+    kept as a symbolic theme reference, exactly like a `theme` color
     (never resolved to a literal family here, checked: round-trips and
     renders correctly through real PowerPoint, picking each script's own
     family, not just the Latin one), unless `typeface` (empty by default,
@@ -359,7 +359,7 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
-        _apply_colour(run.font.color, shape.color or Colour(rgb=0))
+        _apply_color(run.font.color, shape.color or Color(rgb=0))
 
 
 #: The OOXML SVG-picture extension (Microsoft's own, not ECMA-376): a
@@ -368,7 +368,7 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
 #: (the PNG fallback older ones use) -- checked against real PowerPoint,
 #: rendering the SVG (a crisp vector circle), not the fallback (a solid
 #: rectangle) purposely made to look different, so this is really being
-#: read, not just tolerated as unrecognised markup.
+#: read, not just tolerated as unrecognized markup.
 _SVG_EXT_URI = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}"
 
 
@@ -448,7 +448,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
-        _apply_colour(run.font.color, shape.color or Colour(rgb=0))
+        _apply_color(run.font.color, shape.color or Color(rgb=0))
 
 
 def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
@@ -483,7 +483,7 @@ def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
             pptx_shape.fill.background()
         else:
             pptx_shape.fill.solid()
-            _apply_colour(pptx_shape.fill.fore_color, shape.fill)
+            _apply_color(pptx_shape.fill.fore_color, shape.fill)
         _apply_line_style(pptx_shape.line, shape)
 
     _apply_text(pptx_shape, shape)
@@ -562,7 +562,7 @@ def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
-        _apply_colour(run.font.color, shape.color or Colour(rgb=0))
+        _apply_color(run.font.color, shape.color or Color(rgb=0))
 
 
 def _content_bbox(result: LayoutResult) -> tuple[float, float, float, float]:
@@ -667,11 +667,11 @@ def _normalize_potx(path: str) -> str:
 def _open_template_base(path: str) -> tuple[Presentation, str | None]:
     """Open `path` (`.pptx` or `.potx`) as a base for a new standalone
     deck: every existing slide removed (docs/spec.md SS3.3: "stripped of
-    its sample slides" -- generalised here to any `--template`, not just
+    its sample slides" -- generalized here to any `--template`, not just
     a bare `.potx`, since `--template` may just as well name a real,
     populated deck, and standalone output is one new slide, not the
     template's own N plus one). Returns the temp file path to remove
-    afterward too, for a normalised `.potx` (`None` for a plain `.pptx`,
+    afterward too, for a normalized `.potx` (`None` for a plain `.pptx`,
     opened directly, nothing to clean up)."""
     if not os.path.isfile(path):
         raise LayoutError(f"--template file not found: {path}")
@@ -719,9 +719,9 @@ def write_pptx_from_template(
 ) -> None:
     """`write_pptx()`, but starting from `template_path`'s theme (docs/
     spec.md SS3.3 rule 2, SS4.1 `--template`) instead of the built-in
-    Office theme, so theme colours and fonts resolve the way the real
+    Office theme, so theme colors and fonts resolve the way the real
     deck will -- both are emitted symbolically either way (never resolved
-    to a literal here, see `_apply_run_font`/`Colour`), so this needs no
+    to a literal here, see `_apply_run_font`/`Color`), so this needs no
     theme file of its own read at all: the diagram's new slide is simply
     made from the *right* slide layout (`layout_name`, SS3.8) of
     `template_path` itself, so its symbols resolve against that

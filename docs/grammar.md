@@ -65,7 +65,7 @@ EOL             ::= NEWLINE | ";"
 STRING          ::= '"' { not-quote-or-backslash | "\" any } '"'
 
 NUMBER          ::= decimal [ unit ]
-                   | "0" ( "x" | "X" ) { hexdigit }        (* no unit; a colour literal (ext) *)
+                   | "0" ( "x" | "X" ) { hexdigit }        (* no unit; a color literal (ext) *)
 decimal         ::= ( digit { digit } [ "." { digit } ] | "." digit { digit } )
                     [ ( "e" | "E" ) [ "+" | "-" ] digit { digit } ]
 unit            ::= "in" | "cm" | "mm" | "pt" | "px" | "pc"
@@ -95,7 +95,7 @@ Notes:
 
 - **Lengths are inches.** A `NUMBER` with a unit is converted to inches
   (`px` = 1/96 in, `pt` = 1/72 in, `pc` = 1/6 in, `cm` = 1/2.54 in). A bare
-  number is already inches. A hex number is a colour literal (ext).
+  number is already inches. A hex number is a color literal (ext).
 - **`ID` vs `PLACENAME`.** An identifier starting with a lowercase letter is
   looked up first among the keywords, then among `CLASSNAME`s, and is an
   `ID` otherwise. An identifier starting with an uppercase letter is always a
@@ -135,7 +135,7 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
   confusingly (`boxwid = 2` expands to `99 = 2`, a syntax error at `99`,
   not at the real cause), and `define legend { fill }` then `legend = 5`
   would not fail at all — it would silently expand to `fill = 5`,
-  changing the default fill colour instead of setting a variable named
+  changing the default fill color instead of setting a variable named
   `legend` (checked, before this guard existed). Because a diagram may be
   written by an LLM, and pikslide's prelude (§3.7) makes many more names
   collision-prone than pikchr's own, this is checked at the `define`
@@ -166,7 +166,7 @@ never place anything. Path resolution, containment and cycle rules are in
 [spec.md §3.6](spec.md#36-shared-definitions-include).
 
 The **prelude** is read the same way, as an implicit `include-file` before
-the document. It defines the colour names, the built-in default variables
+the document. It defines the color names, the built-in default variables
 (`boxwid`, `linewid`, …) and the text sizes ([spec.md](spec.md) §3.7). A
 template's settings file ([spec.md](spec.md) §3.8) is read the same way,
 after the prelude.
@@ -266,7 +266,7 @@ optrelexpr      ::= [ relexpr ]
 complete attribute on its own: it marks a new path segment without
 moving yet.
 
-## Colours
+## Colors
 
 ```
 value           ::= STRING                           (* ext *)
@@ -278,26 +278,26 @@ color-base      ::= "theme" STRING                   (* ext *)
                    | "none" | "off"                  (* ext *)
                    | rvalue
 
-rvalue          ::= expr                             (* a colour name is an ID (ext) *)
+rvalue          ::= expr                             (* a color name is an ID (ext) *)
 ```
 
-A colour is a value of its own type, distinct from a number (ext). It is a hex
-literal (`0xff0000`), a theme colour (`theme "accent1"`), `none` or `off`, or
+A color is a value of its own type, distinct from a number (ext). It is a hex
+literal (`0xff0000`), a theme color (`theme "accent1"`), `none` or `off`, or
 the value of a variable that holds one. `lighter` and `darker` apply to any
-colour. The names of the theme's slots (`accent1`, `text1`, …) are ordinary
+color. The names of the theme's slots (`accent1`, `text1`, …) are ordinary
 variables defined by the prelude, not words of the language: the language has
 only `theme`, which takes a slot name as a string, so the set of slots is data
 ([spec.md](spec.md) §3.3).
 
-Colour names are ordinary variables (`ID`) defined by the prelude, which is
+Color names are ordinary variables (`ID`) defined by the prelude, which is
 read as an `include-file` before the document (ext; see [spec.md](spec.md)
 §3.7). `red`, `lightblue` and the other CSS names can be overridden
 (`red = 0xcc0000`) and added to, and are lowercase like every variable. The
-words `none` and `off` mean *no colour* and are reserved. An undefined name is
+words `none` and `off` mean *no color* and are reserved. An undefined name is
 an error.
 
-A variable can hold a colour (`primary = accent1 lighter 60%`, then
-`box fill primary`); arithmetic on a colour (`primary + 1`) is an error.
+A variable can hold a color (`primary = accent1 lighter 60%`, then
+`box fill primary`); arithmetic on a color (`primary + 1`) is an error.
 
 A variable can also hold a string (`typeface = "BIZ UDPゴシック"`; ext). A
 string is not a number and cannot be used in an expression. Strings serve the
@@ -381,19 +381,19 @@ the other keywords: they cannot be used as variable or macro names.
 | `include` | the include statement |
 | `alt` | an attribute of `image` |
 | `major`, `medium`, `large` | text flags |
-| `theme` | builds a theme colour from a slot name, `theme "accent1"` |
-| `lighter`, `darker` | colour modifiers |
-| `none`, `off` | the *no colour* value |
+| `theme` | builds a theme color from a slot name, `theme "accent1"` |
+| `lighter`, `darker` | color modifiers |
+| `none`, `off` | the *no color* value |
 | `connector` | reserved for a future object class ([spec.md](spec.md) §3.2); not used yet |
 
 Semantic constraints the grammar cannot express (each is an error):
 
 - a statement in an included file that is not an `include-item`;
 - `alt` on anything other than an `image`;
-- arithmetic on a colour (`primary + 1`);
+- arithmetic on a color (`primary + 1`);
 - a `preset-name` that is not a known OOXML preset geometry;
 - a `theme` string that names no known slot;
-- an unknown colour name;
+- an unknown color name;
 - assigning to `layout` outside a settings file ([spec.md](spec.md) §3.8).
 
 A name that merely looks like a theme slot but is not one (`accent7`) is an
@@ -401,7 +401,7 @@ ordinary name and fails as an undefined variable.
 
 ## Meaning of the constructs
 
-This summarises what the layout stage (`src/pikslide/pik/layout.py`) does; it
+This summarizes what the layout stage (`src/pikslide/pik/layout.py`) does; it
 is not exhaustive.
 
 **Placement.** There is a *current direction* (initially `right`). Each
@@ -444,7 +444,7 @@ different concept, planned as a separate `connector` object class (see
 **Attributes.** `width`/`height`/`radius`/`diameter`/`thickness` set a
 size (a `relexpr` with `%` is a percentage of the current value);
 `dashed`/`dotted` take an optional length (default `dashwid`); `fill` and
-`color` set the interior and stroke colour; `thick`/`thin` scale the
+`color` set the interior and stroke color; `thick`/`thin` scale the
 stroke by 1.5/0.67, `solid` resets stroke and dashing, `invis` hides the
 outline; `cw`/`ccw` set an arc's direction; `<-`/`->`/`<->` add arrowheads;
 `fit` sizes the object to its text; `chop` shortens a line's ends to the
@@ -469,11 +469,11 @@ text flags (`"Label" large`), not because their values are
 prelude-supplied; the same is true of `fill`/`color`/`thickness` in
 pikchr itself, which are attribute keywords *and* lvalues. Names that are
 never used as syntax — `content_left`, `layout`, `typeface`, `primary`,
-`accent1`, the CSS colour names, … — are ordinary `ID`s and are never
+`accent1`, the CSS color names, … — are ordinary `ID`s and are never
 reserved, however important their value is.
 
 **Variables.** `name = expr` (and `+=`, `-=`, `*=`, `/=`; dividing by zero
-leaves the value unchanged) assigns a number, a colour or a string (ext). The built-in
+leaves the value unchanged) assigns a number, a color or a string (ext). The built-in
 variables above are ordinary variables and can be reassigned to change every
 later default; they are defined by the prelude (ext; see [spec.md](spec.md)
 §3.7). `fill`, `color` and `thickness` set the defaults for later objects, and
@@ -491,11 +491,11 @@ tracks which).
 | Topic | pikchr | pikslide |
 |---|---|---|
 | Text size | `big` ×1.25 and `small` ×0.8 of the viewer's font size; repeating a flag (`big big`) compounds | three sizes in points, `small` / `medium` (the default) / `large` or `big`, set by assigning to the words themselves, with values from the prelude; the last size flag wins (ext) |
-| Variable values | numbers only | numbers, colours and strings (ext) |
-| Colour type | a colour is a number (24-bit RGB) | a colour is a value of its own type; arithmetic on a colour is an error (ext) |
-| Hex literals | plain numbers | colour literals (ext) |
-| Colour names | a fixed table in the code, matched case-insensitively (`Red`, `red`); a variable of the same name takes precedence | ordinary lowercase variables defined by the prelude, overridable; a capitalised name is an object label (ext) |
-| Theme colours | none | `theme "accent1"`; the slot names are variables defined by the prelude; `lighter` / `darker` apply to any colour (ext) |
+| Variable values | numbers only | numbers, colors and strings (ext) |
+| Color type | a color is a number (24-bit RGB) | a color is a value of its own type; arithmetic on a color is an error (ext) |
+| Hex literals | plain numbers | color literals (ext) |
+| Color names | a fixed table in the code, matched case-insensitively (`Red`, `red`); a variable of the same name takes precedence | ordinary lowercase variables defined by the prelude, overridable; a capitalized name is an object label (ext) |
+| Theme colors | none | `theme "accent1"`; the slot names are variables defined by the prelude; `lighter` / `darker` apply to any color (ext) |
 | Built-in defaults (`boxwid`, `linewid`, …) | a table in the code | variables defined by the prelude (ext) |
 | Prelude | none | a file of definitions read before every program (ext) |
 | `include` | none | brings in definitions only (ext) |
@@ -504,7 +504,7 @@ tracks which).
 | Reserved words | pikchr's keywords | adds the words in [Reserved words](#reserved-words-ext); a pikchr program that uses one as a name (`shape = 3`) does not parse (ext) |
 | Connectors | none | the word `connector` is reserved for a future class (ext) |
 
-Where pikslide inherits pikchr's behaviour, and the inheritance is worth
+Where pikslide inherits pikchr's behavior, and the inheritance is worth
 knowing:
 
 - pikchr's grammar also lists `expr "on" "heading" ...` position forms,

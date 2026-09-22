@@ -17,20 +17,20 @@ language is specified in [docs/spec.md](docs/spec.md) and defined, in BNF, in
 
 v1 (docs/spec.md §1) is implemented: the pikchr-derived core (a parser, a
 layout stage — a pragmatic subset of pikchr's own — and PowerPoint output);
-colours as a type of their own, with theme colours (`theme "accent1"`,
+colors as a type of their own, with theme colors (`theme "accent1"`,
 `lighter`/`darker`) rendered as real `schemeClr`, never resolved to RGB;
 fonts the same way — text set in the theme's own font by default, not a
 hard-coded family, with `major` selecting the heading font and `typeface`
 overriding both with one literal family; three fixed text sizes
-(`small`/`medium`/`large`); a prelude of built-in names (CSS colour names,
-pikchr's own defaults, the theme-colour names); preset shapes (`shape
+(`small`/`medium`/`large`); a prelude of built-in names (CSS color names,
+pikchr's own defaults, the theme-color names); preset shapes (`shape
 roundRect`, any of the ~180 OOXML presets, matched case-insensitively);
 images (PNG/JPEG/GIF, and SVG — embedded together with a PNG fallback for
 older viewers, sized explicitly or by aspect ratio, path resolved and
 contained under the source file's own directory); `include "house.pik"`
 for shared definitions (contained the same way, with cycle detection);
 object identity — a pik label becomes the shape's real PowerPoint name
-(an unlabelled object gets a default `box 1`-style name), `[ ... ]` blocks
+(an unlabeled object gets a default `box 1`-style name), `[ ... ]` blocks
 become real, nameable, nestable PowerPoint groups, and `behind X` places
 an object immediately below `X` in z-order — so the Selection Pane reads
 like the source; Markdown diagram names (the `pikslide` fence tag, naming
@@ -40,7 +40,7 @@ idempotently-replaceable group (`--into`, with `--region`/`--rect`/
 `--align` placing it); starting a new standalone deck from another file's
 theme instead of the built-in Office one (`--template`); a template's
 settings file (`<name>.theme.pik`, or `--settings FILE`), for its slide
-layout, font, accent colours, text sizes and content area (`--into`'s
+layout, font, accent colors, text sizes and content area (`--into`'s
 default target region when neither `--region` nor `--rect` is given); and
 diagnostics — `file:line:column`, the source line and a caret for a syntax
 error (naming the right file even inside a nested `include`), `--strict`,
@@ -50,12 +50,12 @@ error (naming the right file even inside a nested `include`), `--strict`,
 [docs/implementation-plan.md](docs/implementation-plan.md) for the full,
 current list): reading a template's actual theme *content* would sharpen
 `fit` sizing for a font this machine doesn't have installed, but isn't
-needed for correctness, since colours and fonts both stay theme-linked
+needed for correctness, since colors and fonts both stay theme-linked
 regardless; and a `LayoutError` (unlike a syntax error) carries no source
 position yet. Deliberately out of v1 (docs/spec.md §7): connectors, SVG
 *output*, auto-layout, tables/charts/SmartArt, animation, multi-slide
 authoring, true Bézier curves, shape adjustment handles, arithmetic on
-colours.
+colors.
 
 ## How it works
 
@@ -164,7 +164,7 @@ uv run pytest
 ```
 
 Test fixtures under `tests/fixtures/examples/` are pikchr's own official
-example scripts, kept as a corpus for behaviour that has not deliberately
+example scripts, kept as a corpus for behavior that has not deliberately
 changed.
 
 ## Acknowledgments

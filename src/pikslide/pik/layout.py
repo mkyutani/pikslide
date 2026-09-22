@@ -111,12 +111,12 @@ NOT_RENDERED = {"move", "point"}  # pseudo-objects: real for placement/naming, n
 
 
 # ---------------------------------------------------------------------------
-# Values: pikslide's colour type (docs/spec.md SS2, SS3.3)
+# Values: pikslide's color type (docs/spec.md SS2, SS3.3)
 #
-# A pikslide value is a plain float (a length or other number), a Colour
-# (below), or a str (docs/grammar.md, Colours: "A variable can also hold a
-# string"). Unlike pikchr, where every value -- including a colour -- is a
-# 24-bit number, a colour here is a value of its own type: never produced
+# A pikslide value is a plain float (a length or other number), a Color
+# (below), or a str (docs/grammar.md, Colors: "A variable can also hold a
+# string"). Unlike pikchr, where every value -- including a color -- is a
+# 24-bit number, a color here is a value of its own type: never produced
 # by arithmetic, and never itself usable in arithmetic (see _as_number()).
 # ---------------------------------------------------------------------------
 
@@ -181,16 +181,16 @@ PRESET_NAMES = {name.lower(): name for name in _PRESET_NAME_LIST}
 
 
 @dataclass(frozen=True)
-class Colour:
-    """A colour value: either a literal RGB, or a reference to a theme
+class Color:
+    """A color value: either a literal RGB, or a reference to a theme
     slot (docs/spec.md SS3.3) -- kept symbolic, never resolved to RGB here,
-    so a renderer can emit `schemeClr` and the colour stays linked to
+    so a renderer can emit `schemeClr` and the color stays linked to
     whatever theme the diagram lands in. Exactly one of `rgb`/`theme_slot`
     is set. `lum_mod`/`lum_off` (0..1, 1.0/0.0 = no change) are PowerPoint's
     own "Lighter N%"/"Darker N%" transform, from a `lighter`/`darker`
-    modifier (docs/grammar.md, Colours) -- applicable to either kind of
-    colour. A later `lighter`/`darker` on the same base *replaces* these
-    rather than compounding them, matching PowerPoint's own colour-swatch
+    modifier (docs/grammar.md, Colors) -- applicable to either kind of
+    color. A later `lighter`/`darker` on the same base *replaces* these
+    rather than compounding them, matching PowerPoint's own color-swatch
     picker (one adjustment level, not a stack of them)."""
 
     rgb: int | None = None
@@ -199,15 +199,15 @@ class Colour:
     lum_off: float = 0.0
 
 
-PikValue = float | Colour | str
+PikValue = float | Color | str
 
 
 def _as_number(value: PikValue, what: str = "a numeric value") -> float:
     """Unwrap a value expected to be a plain number, e.g. for arithmetic or
-    a size (docs/spec.md SS3.3: "arithmetic on a colour is an error")."""
+    a size (docs/spec.md SS3.3: "arithmetic on a color is an error")."""
     if isinstance(value, (int, float)):
         return float(value)
-    kind = "colour" if isinstance(value, Colour) else "string"
+    kind = "color" if isinstance(value, Color) else "string"
     raise LayoutError(f"expected {what}, got a {kind}")
 
 
@@ -216,21 +216,21 @@ def _as_string(value: PikValue, what: str = "a string value") -> str:
     SS3.3/SS3.8)."""
     if isinstance(value, str):
         return value
-    kind = "a colour" if isinstance(value, Colour) else "a number"
+    kind = "a color" if isinstance(value, Color) else "a number"
     raise LayoutError(f"expected {what}, got {kind}")
 
 
-def _as_colour(value: PikValue | None) -> Colour | None:
-    """Coerce a value to what `fill`/`color` hold: a Colour, or None for
-    "no colour". A bare number is accepted as a legacy RGB colour (pikchr
+def _as_color(value: PikValue | None) -> Color | None:
+    """Coerce a value to what `fill`/`color` hold: a Color, or None for
+    "no color". A bare number is accepted as a legacy RGB color (pikchr
     itself lets any expression stand for a fill/color, e.g. `fill -1` for
-    "invisible"); a string cannot be a colour."""
-    if value is None or isinstance(value, Colour):
+    "invisible"); a string cannot be a color."""
+    if value is None or isinstance(value, Color):
         return value
     if isinstance(value, str):
-        raise LayoutError("a string cannot be used as a colour")
+        raise LayoutError("a string cannot be used as a color")
     n = int(value)
-    return None if n < 0 else Colour(rgb=n)
+    return None if n < 0 else Color(rgb=n)
 
 
 def assign_text_slots(texts: list[tuple[str, list[str]]]) -> list[str]:
@@ -316,8 +316,8 @@ class Shape:
     sw: float = 0.015
     dashed: float = 0.0
     dotted: float = 0.0
-    fill: Colour | None = None
-    color: Colour | None = None
+    fill: Color | None = None
+    color: Color | None = None
     larrow: bool = False
     rarrow: bool = False
     cw: bool = True
@@ -607,8 +607,8 @@ def _eval_assignment(stmt: ast.AssignStatement, ctx: "_Ctx") -> None:
     """Evaluate one `name = expr`/`+=`/`-=`/`*=`/`/=` statement into
     `ctx.vars` -- shared by the prelude, a settings file, an included
     file, and a program's own top-level assignments, so all four follow
-    the same rules (docs/spec.md SS2: "arithmetic on a colour is an
-    error"; fill/color are always coerced to a Colour or None).
+    the same rules (docs/spec.md SS2: "arithmetic on a color is an
+    error"; fill/color are always coerced to a Color or None).
 
     `layout` (docs/spec.md SS3.8, ext) can be set only while loading the
     prelude or a settings file, never by a program (or anything a program
@@ -623,14 +623,14 @@ def _eval_assignment(stmt: ast.AssignStatement, ctx: "_Ctx") -> None:
     if stmt.op == "=":
         result: PikValue = rhs
     else:
-        if current is None or rhs is None or isinstance(current, (Colour, str)) or isinstance(rhs, (Colour, str)):
-            raise LayoutError(f"'{stmt.name} {stmt.op}' requires a number, not a colour or string")
+        if current is None or rhs is None or isinstance(current, (Color, str)) or isinstance(rhs, (Color, str)):
+            raise LayoutError(f"'{stmt.name} {stmt.op}' requires a number, not a color or string")
         result = {
             "+=": current + rhs, "-=": current - rhs,
             "*=": current * rhs, "/=": current / rhs if rhs != 0 else current,
         }[stmt.op]
     if stmt.name in ("fill", "color"):
-        result = _as_colour(result)
+        result = _as_color(result)
     ctx.vars[stmt.name] = result
 
 
@@ -736,25 +736,25 @@ _PROP_GETTERS = {
 
 
 def eval_expr(e: ast.Expr, ctx: _Ctx) -> PikValue | None:
-    """Evaluate any value expression -- a number, a colour, `None` (the
-    `none`/`off` "no colour" value), or a string (ext) -- to whatever it
+    """Evaluate any value expression -- a number, a color, `None` (the
+    `none`/`off` "no color" value), or a string (ext) -- to whatever it
     denotes. Arithmetic nodes (`BinOp` etc.) require numeric operands; see
     `_as_number()`. This also serves as `color-value`/`value` evaluation
     (docs/grammar.md): pikslide has no separate rvalue-only evaluator the
-    way pikchr's colour-name special case used to need."""
+    way pikchr's color-name special case used to need."""
     if isinstance(e, ast.Num):
         return e.value
     if isinstance(e, ast.HexColor):
-        return Colour(rgb=e.rgb)
+        return Color(rgb=e.rgb)
     if isinstance(e, ast.ThemeColor):
-        return Colour(theme_slot=_resolve_theme_slot(e.slot))
+        return Color(theme_slot=_resolve_theme_slot(e.slot))
     if isinstance(e, ast.NoColor):
         return None
     if isinstance(e, ast.ColorMod):
         base = eval_expr(e.base, ctx)
-        if not isinstance(base, Colour):
-            kind = "no colour" if base is None else "a number" if isinstance(base, (int, float)) else "a string"
-            raise LayoutError(f"'{e.op}' requires a colour, not {kind}")
+        if not isinstance(base, Color):
+            kind = "no color" if base is None else "a number" if isinstance(base, (int, float)) else "a string"
+            raise LayoutError(f"'{e.op}' requires a color, not {kind}")
         amount = _as_number(eval_expr(e.amount, ctx), "a lighter/darker percentage") / 100.0
         if e.op == "lighter":
             return replace(base, lum_mod=1.0 - amount, lum_off=amount)
@@ -797,7 +797,7 @@ def eval_expr(e: ast.Expr, ctx: _Ctx) -> PikValue | None:
 
 
 def _resolve_theme_slot(slot: str) -> str:
-    """Validate and canonicalise a `theme "slot"` name (docs/spec.md
+    """Validate and canonicalize a `theme "slot"` name (docs/spec.md
     SS3.3): matched case-insensitively, an unknown name is an error that
     lists the ones this tool knows."""
     canonical = THEME_SLOTS.get(slot.lower())
@@ -808,7 +808,7 @@ def _resolve_theme_slot(slot: str) -> str:
 
 
 def _resolve_preset_name(name: str) -> str:
-    """Validate and canonicalise a `shape preset-name` (docs/spec.md SS3.4):
+    """Validate and canonicalize a `shape preset-name` (docs/spec.md SS3.4):
     matched case-insensitively; an unknown name is an error that lists the
     nearest matches (too many presets, 177, to list them all)."""
     canonical = PRESET_NAMES.get(name.lower())
@@ -1017,7 +1017,7 @@ _SIMPLE_DEFAULTS = {
 
 def _var_number(ctx: "_Ctx", name: str) -> float:
     """A built-in default variable's value, as a number -- guards against
-    e.g. `boxwid = red` leaving a Colour where every size/geometry
+    e.g. `boxwid = red` leaving a Color where every size/geometry
     computation expects a float."""
     return _as_number(ctx.vars[name], f"a numeric value for {name!r}")
 
@@ -1191,7 +1191,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         else:
             shape.dotted, shape.dashed = value, 0.0
     elif isinstance(attr, ast.ColorProperty):
-        value = _as_colour(eval_expr(attr.value, ctx))
+        value = _as_color(eval_expr(attr.value, ctx))
         if attr.name == "fill":
             shape.fill = value
         else:
@@ -1516,10 +1516,10 @@ def _layout_statements(
             continue
         if isinstance(stmt, ast.ObjectStatement):
             shape, behind_target = _layout_object(stmt, direction, prev, ctx)
-            # Counts every object of this kind, labelled or not (matching
+            # Counts every object of this kind, labeled or not (matching
             # NthRef's own pool-filter-by-kind in resolve_object() above),
             # so a default name's ordinal always agrees with what "Nth
-            # <class>" would address, even with labelled objects in between.
+            # <class>" would address, even with labeled objects in between.
             class_counts[shape.kind] = class_counts.get(shape.kind, 0) + 1
             if stmt.label:
                 shape.name = stmt.label

@@ -572,10 +572,10 @@ class Parser:
 
     def parse_value(self) -> ast.Expr:
         """``value`` (ext): the right-hand side of an assignment -- a
-        string, or a colour value. A colour name (e.g. ``fill red``) is an
+        string, or a color value. A color name (e.g. ``fill red``) is an
         ordinary lowercase `ID`/`Var`, resolved against the prelude at
-        evaluation time (docs/grammar.md, Colours); pikslide does not
-        special-case a bare `PLACENAME` as a colour name the way pikchr
+        evaluation time (docs/grammar.md, Colors); pikslide does not
+        special-case a bare `PLACENAME` as a color name the way pikchr
         does, since pikslide is not aiming for pikchr compatibility
         (docs/spec.md SS2)."""
         if self.at(TokType.STRING):
@@ -583,12 +583,12 @@ class Parser:
         return self.parse_color_value()
 
     def parse_color_value(self) -> ast.Expr:
-        """``color-value`` (ext): a colour base, with an optional
+        """``color-value`` (ext): a color base, with an optional
         ``lighter``/``darker`` adjustment. Also used directly wherever a
         plain number is just as valid a result (``boxwid = 1.2``) -- the
         distinction between "this holds a number" and "this holds a
-        colour" is made by what the expression evaluates to (a bare hex
-        literal is a colour, a decimal literal is a number), not by which
+        color" is made by what the expression evaluates to (a bare hex
+        literal is a color, a decimal literal is a number), not by which
         grammar rule parsed it; see ast.HexColor."""
         base = self._parse_color_base()
         if self.at(TokType.LIGHTER, TokType.DARKER):

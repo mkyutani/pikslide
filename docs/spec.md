@@ -24,7 +24,7 @@ into a slide that already exists.
 
 ### Scope of v1
 
-v1 covers theme colours and fonts (§3.3), an editable structure of shape
+v1 covers theme colors and fonts (§3.3), an editable structure of shape
 names, groups and z-order (§3.1), insertion into an existing slide (§4.2),
 preset shapes (§3.4), and images and icons (§3.5). What v1 leaves out is
 listed in §7.
@@ -47,7 +47,7 @@ so.
 
 - **Origin.** The parser and layout began as a port of pikchr and are changed
   step by step, not rewritten. pikchr's official example scripts
-  (`tests/fixtures/examples/`) stay in the tests as a corpus for behaviour
+  (`tests/fixtures/examples/`) stay in the tests as a corpus for behavior
   pikslide has not deliberately changed; a test that pins a deliberate
   difference is changed along with it.
 - **New words are reserved.** The words pikslide adds (`shape`, `image`,
@@ -56,9 +56,9 @@ so.
   cannot be used as variable or macro names. Names such as `accent1` are not
   among them; the prelude defines those as ordinary variables (§3.7). See
   [grammar.md](grammar.md), *Reserved words*.
-- **Colours are a type of their own.** A colour is not a number. It is an RGB
-  value (a hex literal such as `0xff0000`) or a theme colour (§3.3), and
-  variables can hold colours. Colour names such as `red` are not built into
+- **Colors are a type of their own.** A color is not a number. It is an RGB
+  value (a hex literal such as `0xff0000`) or a theme color (§3.3), and
+  variables can hold colors. Color names such as `red` are not built into
   the language: they are ordinary variables defined by a prelude that is read
   first (§3.7), so a program can override them. An undefined name is an
   error.
@@ -75,7 +75,7 @@ so.
 Goal: the Selection Pane in PowerPoint reads like the source.
 
 - **Shape name.** A pik label names the shape: `Web: box "Web"` produces a
-  shape named `Web`. Unlabelled objects are named `<class> <n>`, where `n` is
+  shape named `Web`. Unlabeled objects are named `<class> <n>`, where `n` is
   the object's ordinal among that class in its scope (mirrors pik's `2nd box`).
 - **Z-order** follows source order. `behind X` is honoured: the object is
   placed immediately below `X`.
@@ -119,9 +119,9 @@ Groundwork already checked, for when `connector` is designed (python-pptx
 - A freeform does **not** follow when a shape moves; an attached connector
   does, and PowerPoint re-routes an attached elbow itself when that happens.
 
-### 3.3 Theme colours and fonts
+### 3.3 Theme colors and fonts
 
-Colours can refer to a **theme colour** instead of an RGB value, so the
+Colors can refer to a **theme color** instead of an RGB value, so the
 diagram follows whatever theme the slide uses. The language has one word for
 this, `theme`, which takes the name of a slot in the theme: `theme "accent1"`.
 The usual slot names are defined for you as variables (§3.7), so programs
@@ -143,17 +143,17 @@ box "Outline"  fill bg1 color text1
   `bg1`, `bg2`, `link` and `followed` are ordinary variables the prelude
   defines (`text1 = theme "tx1"`, `link = theme "hlink"`). They can be
   overridden, and more can be added.
-- **Modifiers** `lighter N%` / `darker N%` apply to any colour: a theme
-  colour, a hex colour, or a variable holding one. They follow the PowerPoint
+- **Modifiers** `lighter N%` / `darker N%` apply to any color: a theme
+  color, a hex color, or a variable holding one. They follow the PowerPoint
   palette ("Lighter 40%" = `lumMod 60 / lumOff 40`; "Darker 25%" =
-  `lumMod 75`); on an RGB colour they are emitted as the same transforms on
+  `lumMod 75`); on an RGB color they are emitted as the same transforms on
   `srgbClr`.
 - Emitted as `schemeClr`, **never** as resolved RGB, so swapping the theme
-  restyles the diagram. RGB (`0xRRGGBB`) and the CSS colour names (from the
+  restyles the diagram. RGB (`0xRRGGBB`) and the CSS color names (from the
   prelude, §3.7) remain available.
-- **Colours are a type of their own** (§2). A variable can hold one, so a
+- **Colors are a type of their own** (§2). A variable can hold one, so a
   house style is plain variables: `primary = accent1 lighter 60%`, then
-  `box fill primary`. A colour is not a number: `primary + 1` is an error.
+  `box fill primary`. A color is not a number: `primary + 1` is an error.
 - **Fonts.** Text uses the theme's minor font (Latin `+mn-lt`, East Asian
   `+mn-ea`), not a hard-coded family. A new text flag `major` selects the
   heading font (`+mj-lt` / `+mj-ea`). A specific family is set with the
@@ -184,10 +184,10 @@ the diagram is going into; the language never names a theme file.
    that owns the slide layout its settings file names with `layout` (§3.8),
    or of its first master when there is none. Giving both `--into` and
    `--template` is an error, since the deck is already the template.
-3. Otherwise the built-in Office theme, with a warning that colours and
+3. Otherwise the built-in Office theme, with a warning that colors and
    fonts are stand-ins.
 
-Facts this rests on (checked): a valid theme always defines all 12 colour
+Facts this rests on (checked): a valid theme always defines all 12 color
 slots (`dk1 lt1 dk2 lt2 accent1`–`6 hlink folHlink`) and both the major and
 minor font, so **a valid slot name is never undefined**. What can go wrong
 is only (a) no theme was supplied → rule 3; (b) a name is not defined, e.g.
@@ -197,7 +197,7 @@ the slots the tool knows.
 
 Reading the theme needs only the zip (`ppt/theme/*.xml`), not python-pptx.
 Writing is different: python-pptx refuses a `.potx` as-is (it raises
-`ValueError`, checked), so a `.potx` used as a base is first normalised to a
+`ValueError`, checked), so a `.potx` used as a base is first normalized to a
 presentation content type and stripped of its sample slides.
 
 The theme yields font *names* only. `fit` sizing still measures with a
@@ -266,7 +266,7 @@ into every diagram. A deck holds many diagrams, so pikslide adds one.
 
 ```pik
 include "house.pik"
-Web: box "Web" fill primary card            # a colour variable, a macro
+Web: box "Web" fill primary card            # a color variable, a macro
 ```
 
 ```pik
@@ -283,7 +283,7 @@ define card { rad 8px color text1 }
   parts are written as macros (`define legend { [ … ] }`).
 - **Same scope, in order.** Macros and variables defined by the file are
   visible from the `include` line onward, exactly as if written there.
-- **House colours are variables** holding colours (§3.3); macros are for
+- **House colors are variables** holding colors (§3.3); macros are for
   bundles of attributes such as `card`.
 - **Resolution.** The path is relative to the file containing the `include`
   (for a Markdown fence: to the `.md` file), then to each `--include-path DIR`.
@@ -296,7 +296,7 @@ define card { rad 8px color text1 }
 - Cycles are an error; nesting is limited to 50 levels (as for macros).
 - **A macro cannot shadow a variable.** `define` and variable assignment
   share the token-substitution pass, so a macro named after an existing
-  variable (a prelude colour or default, a settings-file name, or one
+  variable (a prelude color or default, a settings-file name, or one
   from an earlier `include`) would silently replace every later use of
   that name, including as an assignment target. `define <name> { … }` is
   an error when `<name>` is already a variable; see
@@ -339,10 +339,10 @@ primary    = text2
 emphasis   = accent1
 ```
 
-- **It defines the CSS colour names** as variables holding colours. Nothing
-  about colour names is special in the language: `red` is a variable, like
+- **It defines the CSS color names** as variables holding colors. Nothing
+  about color names is special in the language: `red` is a variable, like
   `boxwid`.
-- **It defines the theme-colour names** `accent1`–`accent6`, `text1`, `text2`,
+- **It defines the theme-color names** `accent1`–`accent6`, `text1`, `text2`,
   `bg1`, `bg2`, `link` and `followed`, with `theme` (§3.3). They are ordinary
   variables, so a template's settings file can redefine or add them.
 - **It defines the built-in defaults.** The 33 variables that pikchr keeps in
@@ -354,9 +354,9 @@ emphasis   = accent1
 - **It defines `layout` and `typeface`**, both empty strings: the slide layout
   for a new slide and the font family (§3.3, §3.8). The PowerPoint writer
   reads them, not the layout stage.
-- **It defines the standard accent-colour names** `primary` and `emphasis`,
+- **It defines the standard accent-color names** `primary` and `emphasis`,
   so a diagram that uses them runs with any template; a template's settings
-  file (§3.8) gives them that template's own colours.
+  file (§3.8) gives them that template's own colors.
 - **Everything in it can be overridden.** The prelude comes first, so an
   assignment in the program, or in an `include`d file, wins: `red = 0xcc0000`,
   `boxwid = 1.2`, `medium = 11pt`, or a project's house file that
@@ -365,17 +365,17 @@ emphasis   = accent1
   without them would fail. A project's own definitions are layered on top of
   it, by an `include` (§3.6) or by a settings file (§3.8), which `--settings
   FILE` supplies from outside the program.
-- **Names are lowercase**, like every variable. pikchr's capitalised
-  spellings (`Red`, `DarkBlue`) are not colours; a capitalised name is an
+- **Names are lowercase**, like every variable. pikchr's capitalized
+  spellings (`Red`, `DarkBlue`) are not colors; a capitalized name is an
   object label.
-- **A hex literal is a colour.** `0xRRGGBB` is a colour value, not a number;
+- **A hex literal is a color.** `0xRRGGBB` is a color value, not a number;
   decimal numbers are numbers.
-- **`none` and `off`** (*no colour*) cannot be written as a value, so they
+- **`none` and `off`** (*no color*) cannot be written as a value, so they
   remain reserved words ([grammar.md](grammar.md), *Reserved words*).
 
 ### 3.8 Template settings
 
-Which theme, which slide layout and which accent colours suit a diagram
+Which theme, which slide layout and which accent colors suit a diagram
 depend on the template it goes into, and so do sensible text sizes. These
 choices therefore belong to the template, not to the diagram and not to the
 tool. Each `.potx` or `.pptx` used with `--template` or `--into` can have a
@@ -385,7 +385,7 @@ holds:
 - the slide layout for a new slide (`layout`), which also fixes the master
   and so the theme (§3.3);
 - the font (`typeface`, §3.3);
-- the accent colours: which of the theme's colours the diagram uses for
+- the accent colors: which of the theme's colors the diagram uses for
   emphasis. `primary` and `emphasis` are the standard names (§3.7); a
   template may define others;
 - the default text sizes (`small`, `medium`, `large`, §3.7);
@@ -404,7 +404,7 @@ deck the diagram goes into, or the caller names it (§4).
 layout        = "1_本文"   # the layout for a new slide; fixes the master too
 typeface      = "BIZ UDPゴシック"
 medium        = 12pt       # this template's diagram text size
-primary       = text2      # the standard accent-colour names
+primary       = text2      # the standard accent-color names
 emphasis      = accent1
 warning       = accent5    # any further names the template wants
 content_left   = 15pt       # where a diagram may go on a slide
@@ -421,7 +421,7 @@ content_bottom = 534.6pt
   looked for beside the template. The caller names it, so the path rules of
   §3.6 do not apply. A named file that does not exist is an error.
   `--settings` also works when no template is given, to set text sizes and
-  accent colours for the built-in theme.
+  accent colors for the built-in theme.
 - **Name.** `<template name>.theme.pik` beside the template or deck
   (`corporate.potx` → `corporate.theme.pik`).
 - **`layout`** is the name of a slide layout, used when pikslide makes a new
@@ -437,9 +437,9 @@ content_bottom = 534.6pt
   (`typeface = "…"`). A string is not a number and cannot be used in an
   expression; in v1 strings serve settings only, and a string variable is not
   accepted as the text of an object.
-- **Accent colours** are ordinary colour variables (§3.3) whose values are
-  theme colours: `primary = text2`, or `primary = accent2 lighter 40%`. A
-  value that is a theme colour stays linked to the theme, so switching the
+- **Accent colors** are ordinary color variables (§3.3) whose values are
+  theme colors: `primary = text2`, or `primary = accent2 lighter 40%`. A
+  value that is a theme color stays linked to the theme, so switching the
   template's theme restyles the diagram.
 
 ## 4. Output model
@@ -449,10 +449,10 @@ command line or the caller, so the same diagram can be reused in any deck.
 
 ### 4.1 Standalone
 
-Today's behaviour: a new one-slide presentation sized to the diagram plus a
+Today's behavior: a new one-slide presentation sized to the diagram plus a
 margin. Kept, for previews and for producing a file to copy from.
 `--template deck.pptx` (or a `.potx`) starts from that file's theme instead
-of the built-in Office theme, so theme colours and fonts resolve the way the
+of the built-in Office theme, so theme colors and fonts resolve the way the
 real deck will (see §3.3).
 
 ### 4.2 Insert into an existing deck
@@ -496,7 +496,7 @@ Humans and LLMs both need errors they can act on.
   file is the included one when the error is inside an `include` (§3.6).
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
 - A diagram larger than its region is an **error** (§4.2).
-- Unknown names (colour, theme slot, preset, image path, region) are
+- Unknown names (color, theme slot, preset, image path, region) are
   **errors with suggestions**, not silent fallbacks. `--strict` turns
   warnings into errors.
 - A `define` naming an already-defined variable is an **error** (§3.6).
@@ -528,7 +528,7 @@ are supported, §3.5) · auto-layout and declarative graph syntax (a large
 piece of work of its own) · tables, charts, SmartArt · animation,
 transitions, speaker notes · multi-slide or whole-deck authoring · true
 Bézier curves (`spline`/`arc` stay polylines) · shape adjustment handles ·
-arithmetic on colours.
+arithmetic on colors.
 
 ## 8. Implementation status
 

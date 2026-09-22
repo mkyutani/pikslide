@@ -80,21 +80,21 @@ class ObjectProp(Expr):
 
 
 # ---------------------------------------------------------------------------
-# Value literals (pikslide ext: colours and strings, see docs/spec.md SS2)
+# Value literals (pikslide ext: colors and strings, see docs/spec.md SS2)
 #
-# pikslide's colour and string handling departs from pikchr's (a colour is a
+# pikslide's color and string handling departs from pikchr's (a color is a
 # value of its own type, not a 24-bit number; pikchr's capitalized
-# colour-name shorthand is dropped -- see docs/grammar.md, "Differences
+# color-name shorthand is dropped -- see docs/grammar.md, "Differences
 # from pikchr"). These nodes are reused as `Expr` for the same reason
 # `ColorName` used to be: `AssignStatement.value`/`ColorProperty.value` are
-# typed `Expr` and a colour or string is exactly as much "not really
-# arithmetic" as a bare colour name was.
+# typed `Expr` and a color or string is exactly as much "not really
+# arithmetic" as a bare color name was.
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class HexColor(Expr):
-    """A ``0xRRGGBB`` literal -- a colour value, not a number (ext)."""
+    """A ``0xRRGGBB`` literal -- a color value, not a number (ext)."""
 
     rgb: int
 
@@ -109,14 +109,14 @@ class ThemeColor(Expr):
 
 @dataclass
 class NoColor(Expr):
-    """``none`` or ``off`` used as a colour value (ext): no colour."""
+    """``none`` or ``off`` used as a color value (ext): no color."""
 
 
 @dataclass
 class ColorMod(Expr):
-    """``base lighter|darker expr%`` (ext): PowerPoint's own colour-swatch
-    adjustment, applicable to any colour (a theme colour, an RGB colour, or
-    a variable holding one) -- not only theme colours as in pikchr's
+    """``base lighter|darker expr%`` (ext): PowerPoint's own color-swatch
+    adjustment, applicable to any color (a theme color, an RGB color, or
+    a variable holding one) -- not only theme colors as in pikchr's
     absence of the concept entirely."""
 
     base: Expr
@@ -391,7 +391,7 @@ class ShapeBase(Basetype):
     """``shape preset-name`` (ext, docs/spec.md SS3.4): a PowerPoint preset
     geometry by name, e.g. ``shape roundRect``, instead of one of the 14
     fixed pikchr classes. Behaves like `box` otherwise; see
-    pikslide.pik.layout.PRESET_NAMES for the recognised names."""
+    pikslide.pik.layout.PRESET_NAMES for the recognized names."""
 
     preset: str
 

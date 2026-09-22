@@ -5,24 +5,24 @@ pikslide *should* do) and the current code (what it *does* do today). Unlike
 those two, this file is not part of the language definition and is expected
 to go stale row by row as each item is implemented — update or delete a row
 once its "Needed" column is done, rather than leaving it to describe
-already-built behaviour.
+already-built behavior.
 
 ## Done
 
-- **Colours are a type of their own** (`pik/layout.py` `Colour`), not a
+- **Colors are a type of their own** (`pik/layout.py` `Color`), not a
   `float` RGB int: `Shape.fill`/`Shape.color`, and any variable, can hold a
-  number, a `Colour`, or a string. A hex literal (`ast.HexColor`) is a
-  colour; a decimal literal is a number. Arithmetic on a colour or string is
+  number, a `Color`, or a string. A hex literal (`ast.HexColor`) is a
+  color; a decimal literal is a number. Arithmetic on a color or string is
   an error.
 - **`theme "slot"`** (`ast.ThemeColor`) and **`lighter`/`darker`**
   (`ast.ColorMod`) are implemented and kept symbolic end to end: rendered as
   `schemeClr` (+ `brightness` for the modifier), never resolved to RGB
   (checked against python-pptx's actual XML output). `none`/`off`
-  (`ast.NoColor`) are reserved words, not colour-table entries.
+  (`ast.NoColor`) are reserved words, not color-table entries.
 - **The prelude** (`src/pikslide/prelude.pik`, `pik/layout.py`
   `_load_prelude`) replaces both `pik/colors.py` `COLOR_NAMES` (deleted) and
-  the old `DEFAULTS` dict: CSS colour names, the built-in pikchr defaults,
-  and the theme-colour names (`accent1` … `followed`, via `theme "tx1"`
+  the old `DEFAULTS` dict: CSS color names, the built-in pikchr defaults,
+  and the theme-color names (`accent1` … `followed`, via `theme "tx1"`
   etc.) are now `.pik` assignments, read once before every program.
 - **Three fixed text sizes** (`small`/`medium`/`large`, prelude-defined,
   9/10.5/12pt): assignable like `fill`/`color`/`thickness` (`lvalue` grammar
@@ -131,7 +131,7 @@ already-built behaviour.
   look different (a solid rectangle vs. a vector circle), it renders the
   *circle*, proving the extension is genuinely read, not just tolerated.
 - **Markdown diagram names** (`markdown.py` `PikBlock`, `extract_pik_blocks`):
-  the `pikslide` fence tag is recognised alongside `pik`/`pikchr`; a fence
+  the `pikslide` fence tag is recognized alongside `pik`/`pikchr`; a fence
   may be named (` ```pikslide architecture `); a file with more than one
   diagram must name every one, uniquely, or `MarkdownDiagramError`.
 - **Inserting into an existing deck** (`pptx_writer.py` `insert_into_pptx`,
@@ -194,7 +194,7 @@ already-built behaviour.
 
   Combining flags that don't make sense together (`--slide`/`--align`
   without `--into`, `--into` with `--template`, `-o` and `--in-place`
-  together, `-o` given both positionally and as `-o`, an unrecognised
+  together, `-o` given both positionally and as `-o`, an unrecognized
   `--align`) are `argparse`-level errors (exit 2), same as an unparsable
   `--rect`. Verified end-to-end via real PowerPoint rendering (WSL ->
   Windows COM), not just python-pptx introspection: title and the region
@@ -206,7 +206,7 @@ already-built behaviour.
   font slots (`<a:latin>`/`<a:ea>`) get a *symbolic* theme reference by
   default -- the minor font (`+mn-lt`/`+mn-ea`), or the major (heading)
   font (`+mj-lt`/`+mj-ea`) where the `major` text flag is used -- never a
-  literal name, exactly like a `theme` colour. This needs no theme file
+  literal name, exactly like a `theme` color. This needs no theme file
   read at all, for either output path: a fresh standalone deck already has
   the built-in Office theme these symbols resolve against (same as any new
   PowerPoint file), and `--into` writes straight into the target deck, so
@@ -233,8 +233,8 @@ already-built behaviour.
   SS3.1, ext -- previously not implemented at all despite being listed as
   v1 scope, found while working through the rest of this list):
   - **Shape names**: a pik label becomes the saved shape's real PowerPoint
-    name; an unlabelled object gets `"<class> <n>"`, `n` counting *every*
-    object of that kind in its scope, labelled or not (checked: `box "a"\n
+    name; an unlabeled object gets `"<class> <n>"`, `n` counting *every*
+    object of that kind in its scope, labeled or not (checked: `box "a"\n
     Web: box "b"\nbox "c"` names the third one `"box 3"`, not `"box 2"` --
     matches `resolve_object()`'s own `NthRef` pool-filter-by-kind, so a
     default name's number always agrees with what `"Nth box"` would
@@ -289,14 +289,14 @@ already-built behaviour.
   `_right`/`_bottom` become `LayoutResult.content_area` (a `(left, top,
   width, height)` tuple) only when a settings file defines all four; it's
   `--into`'s default target when neither `--region` nor `--rect` is given.
-  `primary`/`emphasis` (standard accent-colour names) and `layout`/
+  `primary`/`emphasis` (standard accent-color names) and `layout`/
   `typeface` are now real prelude defaults too (docs/spec.md SS3.7's own
   excerpt already specified them; they just hadn't been added to
   `prelude.pik` yet).
 
   `write_pptx_from_template()` (`pptx_writer.py`) builds the actual new
   deck: strips every existing slide (SS3.3: "stripped of its sample
-  slides" -- generalised to any `--template`, not just a `.potx`, since
+  slides" -- generalized to any `--template`, not just a `.potx`, since
   standalone output is one new slide, not the template's own N plus one),
   resolves `layout` to a slide layout (named, found in any master, first
   match wins; empty, the first `blank`-type layout of the first master,
@@ -305,11 +305,11 @@ already-built behaviour.
   at all, so this fallback is the *common* case in practice, not a rare
   corner), and adds one new diagram-sized slide from it, so the new
   slide's theme (and, if `layout` was named explicitly, its placeholder
-  shapes) come from the *right* master. A `.potx` is normalised first
+  shapes) come from the *right* master. A `.potx` is normalized first
   (`_normalize_potx`): python-pptx refuses one as-is (`ValueError`,
   checked) since the only actual difference from a `.pptx` is the content
   type declared for `/ppt/presentation.xml`, rewritten in a temp copy.
-  Since colours and fonts are both emitted symbolically regardless (see
+  Since colors and fonts are both emitted symbolically regardless (see
   their own bullets above), `--template` needed no theme-*content*
   reading at all to be correct -- the new slide's own theme reference
   resolves once the file is reopened, exactly like `--into`'s does against
@@ -318,7 +318,7 @@ already-built behaviour.
   Checked: a real multi-master `.potx` (Japanese layout names, no `type`
   attributes on any layout) opens, strips (already empty here), resolves
   its fallback layout correctly, and renders with correct symbolic
-  colours/fonts; a synthetic `.potx` (an ordinary `.pptx` with its content
+  colors/fonts; a synthetic `.potx` (an ordinary `.pptx` with its content
   type rewritten to simulate one, so tests don't depend on a real `.potx`
   file existing anywhere) round-trips the same way.
 - **Diagnostics** (docs/spec.md SS5): `Token`/`PikSyntaxError` now carry
@@ -345,7 +345,7 @@ already-built behaviour.
   Known gap against SS5's "every error carries file:line:column"; `main()`
   reports a `LayoutError` as a plain message either way.
 - Tests: `box fill Red`/`box color DarkBlue` → lowercase (`red`/`darkblue`);
-  coverage for colours, text sizes, the macro-shadow guard, Markdown
+  coverage for colors, text sizes, the macro-shadow guard, Markdown
   names, preset shapes, images (including SVG), `include`, inserting into
   a deck, fonts, object identity (names/groups/z-order), templates and
   settings files, and diagnostics
@@ -355,7 +355,7 @@ already-built behaviour.
 
 ## Not yet started
 
-Everything docs/spec.md marks as v1 scope (§1: theme colours and fonts,
+Everything docs/spec.md marks as v1 scope (§1: theme colors and fonts,
 object identity, insertion into an existing slide, preset shapes, images)
 is implemented, along with the output model (§4), diagnostics (§5) and
 Markdown integration (§6) built around it. What's left is smaller, and
@@ -363,6 +363,6 @@ each row is independent of the others:
 
 | Area | Today | Needed |
 |---|---|---|
-| *(new)* theme reader | not needed for correctness -- colours and fonts both stay symbolic and resolve against whatever theme the target deck (or `--template`) actually has | only a `fit`-measurement accuracy improvement: real font *names* (not just `+mn-lt` symbols) would let `PilFontMetrics` pick a closer installed substitute; read `ppt/theme/*.xml`'s `<a:fontScheme>` (via the already-open `Presentation` for `--into`/`--template`, no raw zip work needed there) |
+| *(new)* theme reader | not needed for correctness -- colors and fonts both stay symbolic and resolve against whatever theme the target deck (or `--template`) actually has | only a `fit`-measurement accuracy improvement: real font *names* (not just `+mn-lt` symbols) would let `PilFontMetrics` pick a closer installed substitute; read `ppt/theme/*.xml`'s `<a:fontScheme>` (via the already-open `Presentation` for `--into`/`--template`, no raw zip work needed there) |
 | `pik/layout.py` `LayoutError` | no position at all | `file`/`line`/`column`, matching what `PikSyntaxError` now has -- needs it threaded through `ast` and most of `layout.py`, not a small change (see the Diagnostics bullet above) |
 | Docs | README's *Status* section | keep it in step with this file as items are implemented |

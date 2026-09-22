@@ -313,7 +313,7 @@ def _run(args: argparse.Namespace, text: str, base_dir: str, out_path: str | Non
     # Standalone, no --template (docs/spec.md SS3.3 rule 3): the built-in
     # Office theme stands in for a real one, which --strict makes fatal
     # rather than just noted.
-    warning = "no --template given: colours and fonts are stand-ins from the built-in Office theme (docs/spec.md SS3.3)"
+    warning = "no --template given: colors and fonts are stand-ins from the built-in Office theme (docs/spec.md SS3.3)"
     if args.strict:
         _fail(args, warning)
         return

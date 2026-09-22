@@ -364,8 +364,8 @@ def unescape_string(raw: str) -> str:
 
 def is_hex_number(token_text: str) -> bool:
     """True for a NUMBER token spelled ``0x...``/``0X...`` -- pikslide (ext)
-    treats these as colour literals, not plain numbers; see
-    docs/spec.md SS2 and docs/grammar.md, Colours."""
+    treats these as color literals, not plain numbers; see
+    docs/spec.md SS2 and docs/grammar.md, Colors."""
     return len(token_text) >= 3 and token_text[0] == "0" and token_text[1] in "xX"
 
 

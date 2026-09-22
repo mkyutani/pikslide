@@ -16,7 +16,7 @@ import pathlib
 import pytest
 
 from pikslide.pik import parse
-from pikslide.pik.layout import Colour, LayoutError, flatten_shapes, resolve_layout
+from pikslide.pik.layout import Color, LayoutError, flatten_shapes, resolve_layout
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "examples"
 EXAMPLE_FILES = sorted(FIXTURES_DIR.glob("*.pik"))
@@ -161,18 +161,18 @@ def test_from_after_movement_rebases_the_whole_path():
 # ---------------------------------------------------------------------------
 
 
-def test_unlabelled_objects_get_default_class_n_names():
+def test_unlabeled_objects_get_default_class_n_names():
     result = layout('box "a"\nbox "b"\ncircle "c"\n')
     assert [s.name for s in result.shapes] == ["box 1", "box 2", "circle 1"]
 
 
-def test_labelled_object_keeps_its_pik_label_as_its_name():
+def test_labeled_object_keeps_its_pik_label_as_its_name():
     result = layout('box "a"\nWeb: box "b"\nbox "c"\n')
     assert [s.name for s in result.shapes] == ["box 1", "Web", "box 3"]
 
 
-def test_default_name_ordinal_counts_labelled_objects_too():
-    # "mirrors pik's 2nd box" (SS3.1): a labelled object still occupies a
+def test_default_name_ordinal_counts_labeled_objects_too():
+    # "mirrors pik's 2nd box" (SS3.1): a labeled object still occupies a
     # slot in the count, so a default name's number always agrees with
     # what "Nth box" would address for that same object.
     result = layout('box "a"\nWeb: box "b"\nbox "c"\n')
@@ -257,33 +257,33 @@ def test_expr_evaluates_functions_and_variables():
 
 
 # ---------------------------------------------------------------------------
-# Colours (docs/spec.md SS2, SS3.3, SS3.7): a type of their own, not a
+# Colors (docs/spec.md SS2, SS3.3, SS3.7): a type of their own, not a
 # number, defined by the prelude rather than a lexer table.
 # ---------------------------------------------------------------------------
 
 
-def test_prelude_defines_css_colour_names_as_variables():
+def test_prelude_defines_css_color_names_as_variables():
     result = layout('box fill red\n')
-    assert result.shapes[0].fill == Colour(rgb=0xFF0000)
+    assert result.shapes[0].fill == Color(rgb=0xFF0000)
 
 
-def test_colour_name_is_overridable_like_any_variable():
-    # Unlike pikchr's own colour-name table, a prelude colour is an
+def test_color_name_is_overridable_like_any_variable():
+    # Unlike pikchr's own color-name table, a prelude color is an
     # ordinary variable: a later assignment wins.
     result = layout('red = 0x00FF00\nbox fill red\n')
-    assert result.shapes[0].fill == Colour(rgb=0x00FF00)
+    assert result.shapes[0].fill == Color(rgb=0x00FF00)
 
 
-def test_hex_literal_and_none_are_colours():
+def test_hex_literal_and_none_are_colors():
     result = layout('box fill 0x123456\nbox fill none\n')
-    assert result.shapes[0].fill == Colour(rgb=0x123456)
+    assert result.shapes[0].fill == Color(rgb=0x123456)
     assert result.shapes[1].fill is None
 
 
-def test_theme_colour_stays_symbolic_with_lighter_darker():
+def test_theme_color_stays_symbolic_with_lighter_darker():
     result = layout('box fill accent1 lighter 40%\nbox color accent2 darker 25%\n')
-    assert result.shapes[0].fill == Colour(theme_slot="accent1", lum_mod=0.6, lum_off=0.4)
-    assert result.shapes[1].color == Colour(theme_slot="accent2", lum_mod=0.75, lum_off=0.0)
+    assert result.shapes[0].fill == Color(theme_slot="accent1", lum_mod=0.6, lum_off=0.4)
+    assert result.shapes[1].color == Color(theme_slot="accent2", lum_mod=0.75, lum_off=0.0)
 
 
 def test_unknown_theme_slot_is_an_error():
@@ -291,7 +291,7 @@ def test_unknown_theme_slot_is_an_error():
         layout('box fill theme "notaslot"\n')
 
 
-def test_arithmetic_on_a_colour_is_an_error():
+def test_arithmetic_on_a_color_is_an_error():
     # "x"/"y" are reserved (pikchr's own .x/.y coordinate access), so this
     # uses an ordinary name instead.
     with pytest.raises(LayoutError):
@@ -384,7 +384,7 @@ def test_settings_file_overrides_the_prelude_and_the_program_overrides_it_in_tur
 def test_settings_file_can_define_new_names_not_in_the_prelude():
     settings = 'warning = accent5\n'
     result = resolve_layout(parse('box fill warning\n'), settings_text=settings)
-    assert result.shapes[0].fill == Colour(theme_slot="accent5")
+    assert result.shapes[0].fill == Color(theme_slot="accent5")
 
 
 def test_settings_file_must_be_definitions_only():
@@ -448,7 +448,7 @@ def test_shape_default_size_matches_box():
     assert shape_obj.preset == "chevron"
 
 
-def test_shape_preset_name_is_canonicalised():
+def test_shape_preset_name_is_canonicalized():
     result = layout('shape ROUNDRECT "x"\n')
     assert result.shapes[0].preset == "roundRect"
 

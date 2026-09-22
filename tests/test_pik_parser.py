@@ -51,9 +51,9 @@ def test_simple_box():
 
 
 def test_lowercase_color_name_is_an_ordinary_variable():
-    # Unlike pikchr, a colour name is not special in the grammar: pikslide
+    # Unlike pikchr, a color name is not special in the grammar: pikslide
     # is not aiming for pikchr compatibility (docs/spec.md SS2), and a
-    # capitalized PLACENAME is always an object reference, never a colour
+    # capitalized PLACENAME is always an object reference, never a color
     # -- "darkblue" is an ordinary Var, resolved against the prelude
     # (docs/spec.md SS3.7) at evaluation time, not parse time.
     doc = parse("box color darkblue\n")
@@ -111,8 +111,8 @@ def test_numeric_units(text: str, expected: float):
     assert value == ast.Num(expected)
 
 
-def test_hex_literal_is_a_colour_not_a_number():
-    # A hex literal is a colour value (ext), not a number -- unlike a
+def test_hex_literal_is_a_color_not_a_number():
+    # A hex literal is a color value (ext), not a number -- unlike a
     # decimal literal, regardless of where it's used (docs/spec.md SS2).
     doc = parse('box fill 0x10\n')
     value = doc.statements[0].attributes[0].value

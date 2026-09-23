@@ -1,14 +1,4 @@
-"""Tokenizer for the pikchr (.pik) diagram language.
-
-This is a line-by-line port of the hand-written tokenizer in pikchr's
-own ``pikchr.y`` (function ``pik_token_length``), so that pikslide accepts
-exactly the same lexical grammar as upstream pikchr.
-Reference: https://pikchr.org/home/doc/tip/pikchr.y
-
-Substantially ported from pikchr, Copyright (C) 2020-09-01 by
-D. Richard Hipp <drh@sqlite.org>, released under the Zero-Clause BSD
-license. See the NOTICE file at the root of this repository.
-"""
+"""Tokenizer for the diagram language."""
 
 from __future__ import annotations
 
@@ -99,7 +89,6 @@ class TokType(Enum):
     MONO = auto()
     NTH_WORD = auto()  # 'first' -- lexes as NTH, kept separate only for clarity
     OF = auto()
-    ISODATE = auto()
     PRINT = auto()
     RADIUS = auto()
     RIGHT = auto()
@@ -125,7 +114,7 @@ class TokType(Enum):
     X = auto()
     Y = auto()
 
-    # pikslide extensions (not in pikchr) -- see docs/grammar.md, "Reserved words"
+    # Extensions -- see docs/grammar.md, "Reserved words"
     SHAPE = auto()
     IMAGE = auto()
     INCLUDE = auto()
@@ -154,7 +143,7 @@ CLASS_NAMES = {
     "ellipse", "file", "line", "move", "oval", "spline", "text",
 }
 
-# name -> (TokType, eCode, eEdge)  -- transcribed verbatim from pik_keywords[]
+# name -> (TokType, eCode, eEdge)
 KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "above": (TokType.ABOVE, None, None),
     "abs": (TokType.FUNC1, "abs", None),
@@ -213,7 +202,6 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "north": (TokType.EDGEPT, None, "n"),
     "nw": (TokType.EDGEPT, None, "nw"),
     "of": (TokType.OF, None, None),
-    "pikchr_date": (TokType.ISODATE, None, None),
     "previous": (TokType.LAST, None, None),
     "print": (TokType.PRINT, None, None),
     "rad": (TokType.RADIUS, None, None),
@@ -251,8 +239,7 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "x": (TokType.X, None, None),
     "y": (TokType.Y, None, None),
 
-    # pikslide extensions (not in pikchr's own pik_keywords[]) -- reserved
-    # words the language adds; see docs/grammar.md, "Reserved words".
+    # Extensions -- reserved words the language adds; see docs/grammar.md, "Reserved words".
     "shape": (TokType.SHAPE, None, None),
     "image": (TokType.IMAGE, None, None),
     "include": (TokType.INCLUDE, None, None),
@@ -370,7 +357,7 @@ def is_hex_number(token_text: str) -> bool:
 
 
 def numeric_value(token_text: str) -> float:
-    """Port of pik_atof(): parse a NUMBER token's text into inches."""
+    """Parse a NUMBER token's text into inches."""
     if is_hex_number(token_text):
         return float(int(token_text[2:], 16))
     suffix = token_text[-2:] if len(token_text) >= 2 else ""
@@ -386,7 +373,7 @@ def numeric_value(token_text: str) -> float:
 
 
 def nth_value(token_text: str) -> int:
-    """Port of pik_nth_value(): '2nd' -> 2, '5th' -> 5, 'first' -> 1."""
+    """'2nd' -> 2, '5th' -> 5, 'first' -> 1."""
     i = 0
     neg = False
     if i < len(token_text) and token_text[i] == "-":
@@ -402,7 +389,7 @@ def nth_value(token_text: str) -> int:
 
 
 class Lexer:
-    """Splits raw pikchr source text into a flat list of Tokens.
+    """Splits raw diagram source text into a flat list of Tokens.
 
     This does not perform macro expansion; see :mod:`pikslide.pik.macros`.
     """

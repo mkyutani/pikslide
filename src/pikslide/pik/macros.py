@@ -1,14 +1,8 @@
-"""Macro (``#define``) expansion for pikchr source.
+"""Macro (``#define``) expansion for diagram source.
 
-Ported from ``pik_tokenize()`` / ``pik_parse_macro_args()`` / ``pik_add_macro()``
-in pikchr's ``pikchr.y``. Upstream pikchr expands macros token-by-token while
-feeding an LALR parser; here expansion runs as a separate pass that consumes
-the flat token list from :class:`pikslide.pik.tokens.Lexer` and produces a new,
-fully-expanded flat token list for :mod:`pikslide.pik.parser` to consume.
-
-Substantially ported from pikchr, Copyright (C) 2020-09-01 by
-D. Richard Hipp <drh@sqlite.org>, released under the Zero-Clause BSD
-license. See the NOTICE file at the root of this repository.
+Expansion runs as a separate pass that consumes the flat token list from
+:class:`pikslide.pik.tokens.Lexer` and produces a new, fully-expanded flat
+token list for :mod:`pikslide.pik.parser` to consume.
 """
 
 from __future__ import annotations
@@ -25,7 +19,7 @@ TOKEN_LIMIT = 100_000
 MAX_MACRO_ARGS = 9
 
 # lvalue keyword tokens (docs/grammar.md: `lvalue`) besides a plain ID --
-# pikchr's own fill/color/thickness, and pikslide's small/medium/large ext.
+# fill/color/thickness, and the small/medium/large ext.
 _LVALUE_KEYWORD_TYPES = {
     TokType.FILL, TokType.COLOR, TokType.THICKNESS,
     TokType.SMALL, TokType.MEDIUM, TokType.LARGE,
@@ -272,8 +266,7 @@ def _parse_macro_args(
     Returns the list of argument token-slices and the index just past the
     matching ')'. A bare ``$N`` argument is resolved against ``outer_params``
     immediately (macro-argument pass-through); any other ``$N`` occurring
-    inside a multi-token argument is left as-is, matching upstream pikchr
-    (which re-tokenizes each argument with no parameter context).
+    inside a multi-token argument is left as-is.
     """
     if tokens[lp_index + 1].type == TokType.RP:
         return [[]], lp_index + 2

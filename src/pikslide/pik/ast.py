@@ -1,14 +1,13 @@
 """Abstract syntax tree produced by :func:`pikslide.pik.parser.parse`.
 
-The tree mirrors the shape of pikchr's own internal ``PObj``/``PList``
-structure: a :class:`Document` holds a list of :class:`Statement` nodes,
+A :class:`Document` holds a list of :class:`Statement` nodes,
 and an :class:`ObjectStatement` whose base is a :class:`BlockBase`
 (``[ ... ]``) recursively holds another such list -- so a ``[...]``
 grouping is the point where the tree actually branches.
 
 Numeric expressions, positions and attributes are kept as small,
 un-evaluated node trees (e.g. ``BinOp``, ``DirectionOffset``) rather than
-being resolved to final coordinates: resolving them requires pikchr's
+being resolved to final coordinates: resolving them requires the
 layout engine (default sizes, "current position/direction" state,
 variable scope, etc.), which is a later stage in the pik -> PPTX/SVG
 pipeline, not part of the tree-building stage.
@@ -82,10 +81,8 @@ class ObjectProp(Expr):
 # ---------------------------------------------------------------------------
 # Value literals (pikslide ext: colors and strings, see docs/spec.md SS2)
 #
-# pikslide's color and string handling departs from pikchr's (a color is a
-# value of its own type, not a 24-bit number; pikchr's capitalized
-# color-name shorthand is dropped -- see docs/grammar.md, "Differences
-# from pikchr"). These nodes are reused as `Expr` for the same reason
+# A color is a value of its own type, not a number (see docs/grammar.md,
+# Colors). These nodes are reused as `Expr` for the same reason
 # `ColorName` used to be: `AssignStatement.value`/`ColorProperty.value` are
 # typed `Expr` and a color or string is exactly as much "not really
 # arithmetic" as a bare color name was.
@@ -116,8 +113,7 @@ class NoColor(Expr):
 class ColorMod(Expr):
     """``base lighter|darker expr%`` (ext): PowerPoint's own color-swatch
     adjustment, applicable to any color (a theme color, an RGB color, or
-    a variable holding one) -- not only theme colors as in pikchr's
-    absence of the concept entirely."""
+    a variable holding one)."""
 
     base: Expr
     op: str  # 'lighter' or 'darker'
@@ -390,7 +386,7 @@ class ClassBase(Basetype):
 class ShapeBase(Basetype):
     """``shape preset-name`` (ext, docs/spec.md SS3.4): a PowerPoint preset
     geometry by name, e.g. ``shape roundRect``, instead of one of the 14
-    fixed pikchr classes. Behaves like `box` otherwise; see
+    fixed classes. Behaves like `box` otherwise; see
     pikslide.pik.layout.PRESET_NAMES for the recognized names."""
 
     preset: str

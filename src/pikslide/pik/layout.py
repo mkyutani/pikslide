@@ -1,12 +1,9 @@
 """Resolve a parsed pik AST (:mod:`pikslide.pik.ast`) into concrete 2-D geometry.
 
-This is a pragmatic *subset* of pikchr's own layout engine (the
-``pik_elem_new`` / ``pik_after_adding_attributes`` / per-class
-``xInit``/``xOffset``/``xChop`` functions in pikchr.y): default object
-sizes, current-direction sequential placement, ``at``/``with``/``from``/
-``to``/``then``/``go``/``same``/``chop``, and box/ellipse/diamond edge
-geometry are all ported faithfully from that source. Deliberately NOT
-ported, in line with a "good enough for common diagrams" scope:
+Covers default object sizes, current-direction sequential placement,
+``at``/``with``/``from``/``to``/``then``/``go``/``same``/``chop``, and
+box/ellipse/diamond edge geometry. Deliberately left out, in line with a
+"good enough for common diagrams" scope:
 
 - spline/arc curve shapes are treated as straight polylines,
 - "fit" text sizing defaults to an estimate from charwid/charht constants;
@@ -14,16 +11,12 @@ ported, in line with a "good enough for common diagrams" scope:
   `resolve_layout()` for sizing that tracks actual text content instead of
   a flat per-character guess,
 - chopping against diamond/cylinder/file uses their rectangle-like
-  xOffset via the same 8-direction dispatch as pikchr's own boxChop,
+  edge offsets via the same 8-direction dispatch as box chopping,
   rather than each shape's true outline,
-- name resolution is a simplified version of pikchr's scope-chain search.
+- name resolution is a simplified scope-chain search.
 
-All coordinates are inches, with y pointing *up* (matching pikchr) --
+All coordinates are inches, with y pointing *up* --
 callers producing screen/slide coordinates (y-down) must flip y.
-
-Substantially ported from pikchr, Copyright (C) 2020-09-01 by
-D. Richard Hipp <drh@sqlite.org>, released under the Zero-Clause BSD
-license. See the NOTICE file at the root of this repository.
 """
 
 from __future__ import annotations
@@ -45,7 +38,7 @@ class FontMetrics(Protocol):
     so a fitted object's size tracks the font that will actually draw it
     rather than a flat per-character estimate. `flags` are a text item's
     position/style flags (see ast.TextAttribute) -- only "big"/"small"
-    matter here, for the font-size step pikchr's own pik_font_scale() applies.
+    matter here, for the font-size step they apply.
 
     `text_sizes`, if given, is the small/medium/large (inches) to measure
     with -- the *object's own* `Shape.text_sizes` (docs/spec.md SS3.3,
@@ -57,8 +50,8 @@ class FontMetrics(Protocol):
 
     def text_width(self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
         """Width, in inches, of one line of `text` at this flags' size,
-        including whatever margin this metrics considers standard (mirrors
-        pik_size_to_fit()'s own "+ one charWidth" margin)."""
+        including whatever margin this metrics considers standard (one
+        charWidth)."""
         ...
 
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
@@ -115,8 +108,7 @@ NOT_RENDERED = {"move", "point"}  # pseudo-objects: real for placement/naming, n
 #
 # A pikslide value is a plain float (a length or other number), a Color
 # (below), or a str (docs/grammar.md, Colors: "A variable can also hold a
-# string"). Unlike pikchr, where every value -- including a color -- is a
-# 24-bit number, a color here is a value of its own type: never produced
+# string"). A color is a value of its own type: never produced
 # by arithmetic, and never itself usable in arithmetic (see _as_number()).
 # ---------------------------------------------------------------------------
 
@@ -222,9 +214,8 @@ def _as_string(value: PikValue, what: str = "a string value") -> str:
 
 def _as_color(value: PikValue | None) -> Color | None:
     """Coerce a value to what `fill`/`color` hold: a Color, or None for
-    "no color". A bare number is accepted as a legacy RGB color (pikchr
-    itself lets any expression stand for a fill/color, e.g. `fill -1` for
-    "invisible"); a string cannot be a color."""
+    "no color". A bare number is accepted as a legacy RGB color; a string
+    cannot be a color."""
     if value is None or isinstance(value, Color):
         return value
     if isinstance(value, str):
@@ -234,7 +225,7 @@ def _as_color(value: PikValue | None) -> Color | None:
 
 
 def assign_text_slots(texts: list[tuple[str, list[str]]]) -> list[str]:
-    """Port of pik_txt_vertical_layout(): decide, for each text item that
+    """Decide, for each text item that
     has no explicit above/below/center flag, which vertical slot it goes
     in -- e.g. two un-flagged texts split "above" / "below" the object's
     reference point/line, not both centered on it."""
@@ -427,7 +418,7 @@ class LayoutResult:
     place a default region on)."""
 
 
-# ---------------------------------------------------------------------------
+# Edge/offset/chop geometry for box/ellipse/diamond
 # Edge/offset/chop geometry -- ported from box/ellipse/diamond Offset+Chop
 # ---------------------------------------------------------------------------
 
@@ -473,7 +464,7 @@ def _edge_offset(shape: Shape, edge: str | None) -> tuple[float, float]:
 
 def _octant_for(w: float, h: float, dx: float, dy: float) -> str:
     """Pick the compass point that a ray from the center towards (dx, dy)
-    exits through -- the same 8-way slope comparison as pikchr's boxChop."""
+    exits through, by an 8-way slope comparison."""
     if w <= 0 or h <= 0:
         return C
     sdx = dx * h / w
@@ -512,7 +503,7 @@ def _ellipse_chop(shape: Shape, from_pt: tuple[float, float]) -> tuple[float, fl
 
 def chop_point(shape: Shape, from_pt: tuple[float, float]) -> tuple[float, float]:
     """Where the segment from `from_pt` towards shape's center crosses its
-    boundary (pikchr's xChop)."""
+    boundary."""
     if shape.kind in ELLIPSE_LIKE:
         return _ellipse_chop(shape, from_pt)
     dx, dy = from_pt[0] - shape.cx, from_pt[1] - shape.cy
@@ -554,7 +545,7 @@ def _index_by_identity(pool: list[Shape], target: Shape) -> int:
 
 
 class _ApproxMetrics:
-    """Default FontMetrics: pikchr's own charwid/charht constants applied
+    """Default FontMetrics: the charwid/charht constants applied
     as a flat per-character/per-line estimate. Used whenever no real font
     metrics are supplied -- accurate enough for layout-only work, but a
     renderer that cares about matching its own font should supply its own
@@ -577,8 +568,7 @@ class _ApproxMetrics:
 
 def _text_size_name(flags: list[str]) -> str:
     """Which of small/medium/large a text item's flags select (ext);
-    pikslide's own three fixed sizes, not pikchr's big/small percentage
-    scaling -- see docs/spec.md SS3.3. `big` is a synonym for `large`; the
+    pikslide's own three fixed sizes -- see docs/spec.md SS3.3. `big` is a synonym for `large`; the
     *last* size flag on the string wins."""
     name = "medium"
     for f in flags:
@@ -591,7 +581,7 @@ def _text_size_name(flags: list[str]) -> str:
 
 def _font_scale(flags: list[str], ctx: "_Ctx") -> float:
     """A text item's size, relative to `medium` (the default) -- the ratio
-    the approximate metrics scale pikchr's own charht/charwid by. Reads
+    the approximate metrics scale charht/charwid by. Reads
     `ctx.vars["small"/"medium"/"large"]` (ext), so a program's own override
     of those (`medium = 11pt`) is honoured, not just the prelude default."""
     medium = _as_number(ctx.vars.get("medium", 10.5 / 72.0), "a text size")
@@ -719,7 +709,7 @@ class _Ctx:
         self._layout_assignment_allowed = False
 
     def lookup_name(self, path: list[str]) -> Shape | None:
-        """Port of pik_find_byname(): a name resolves against the *current*
+        """A name resolves against the *current*
         scope only (no chaining out through enclosing blocks) -- first by
         an explicit "NAME: ..." label, then, if none matches, by exact text
         content on any object in that same scope."""
@@ -755,8 +745,7 @@ def eval_expr(e: ast.Expr, ctx: _Ctx) -> PikValue | None:
     `none`/`off` "no color" value), or a string (ext) -- to whatever it
     denotes. Arithmetic nodes (`BinOp` etc.) require numeric operands; see
     `_as_number()`. This also serves as `color-value`/`value` evaluation
-    (docs/grammar.md): pikslide has no separate rvalue-only evaluator the
-    way pikchr's color-name special case used to need."""
+    (docs/grammar.md): there is no separate rvalue-only evaluator."""
     if isinstance(e, ast.Num):
         return e.value
     if isinstance(e, ast.HexColor):
@@ -777,9 +766,7 @@ def eval_expr(e: ast.Expr, ctx: _Ctx) -> PikValue | None:
     if isinstance(e, ast.StrLit):
         return e.value
     if isinstance(e, ast.Var):
-        # Matches real pikchr (checked: `box width undefinedvar` -> "ERROR:
-        # no such variable"), not the silent-0.0 default a variable lookup
-        # used to fall back to here. "did you mean accent1?" for a typo'd
+        # An undefined variable is an error, not a silent 0.0. "did you mean accent1?" for a typo'd
         # `accent7` is docs/spec.md SS3.3's own example of this.
         if e.name not in ctx.vars:
             raise LayoutError(f"no such variable: {e.name}{_did_you_mean(e.name, ctx.vars.keys())}")
@@ -1091,9 +1078,8 @@ def _apply_circle_constraint(shape: Shape) -> None:
 
 
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
-    """Approximate pik_size_to_fit() using ctx.metrics: real pikchr (and,
-    for the pptx backend, PilFontMetrics) measures actual glyph widths;
-    only the fallback _ApproxMetrics estimates from flat constants.
+    """Size a "fit" object to its text using ctx.metrics: the pptx
+    backend's PilFontMetrics measures actual glyph widths; only the fallback _ApproxMetrics estimates from flat constants.
 
     Measures at `shape.text_sizes` (docs/spec.md SS3.3, ext) -- captured
     when this object was created, in `_layout_object()` -- not whatever
@@ -1190,7 +1176,7 @@ def _ensure_start(build: "_Build", shape: Shape) -> None:
 
 
 def _new_point(build: "_Build") -> None:
-    """Port of pik_next_rpath(): start a new path point as a copy of the
+    """Start a new path point as a copy of the
     current last one (so a lone axis-move from it becomes a diagonal)."""
     build.path.append(build.path[-1])
     build.seg_objs.append(None)
@@ -1281,7 +1267,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         build.with_edge = attr.edge if attr.edge is not None else C
         build.with_pos = eval_position(attr.position, ctx)
     elif isinstance(attr, ast.Same):
-        # Port of pik_same(): copies size, radius, and the full visual
+        # Copies size, radius, and the full visual
         # style (not just dimensions) from the reference object.
         same_from = resolve_object(attr.obj, ctx) if attr.obj is not None else _find_same_class(ctx, shape.kind)
         if same_from is not None:
@@ -1300,7 +1286,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
     elif isinstance(attr, ast.From_):
         pt = eval_position(attr.position, ctx)
         if build.path:
-            # Port of pik_set_from(): re-base the whole path already built
+            # Re-base the whole path already built
             # from earlier movement attributes, rather than discarding it.
             dx, dy = pt[0] - build.path[0][0], pt[1] - build.path[0][1]
             build.path = [(x + dx, y + dy) for x, y in build.path]
@@ -1338,7 +1324,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
 
 
 def _move_current_direction(build: "_Build", shape: Shape, direction: int, length: float) -> None:
-    """Port of pik_add_direction()'s path-point bookkeeping: a lone move
+    """Path-point bookkeeping for a direction move: a lone move
     merges into the current point (so "right 1 up 1" makes one diagonal
     point), but a repeated move on the same axis, or one after an explicit
     "then", starts a fresh point."""
@@ -1363,7 +1349,7 @@ def _move_current_direction(build: "_Build", shape: Shape, direction: int, lengt
 
 
 def _move_even_with(build: "_Build", shape: Shape, direction: int, target: tuple[float, float]) -> None:
-    """Port of pik_evenwith(): move in `direction` until aligned with
+    """Move in `direction` until aligned with
     `target` on the relevant axis -- same point-merge rules as a plain
     direction move, but snapping to an absolute coordinate."""
     _ensure_start(build, shape)
@@ -1395,7 +1381,7 @@ def _find_same_class(ctx: _Ctx, kind: str) -> Shape | None:
 
 
 def _set_exit(shape: Shape, direction: int) -> None:
-    """Port of pik_elem_set_exit(): retroactively updates an already-placed
+    """Retroactively updates an already-placed
     object's exit point when the ambient direction changes after it."""
     shape.out_dir = direction
     if shape.kind in LINE_LIKE and not shape.closed:

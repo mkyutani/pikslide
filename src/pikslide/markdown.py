@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_PIK_LANGS = {"pikslide"}
+_PIKSLIDE_LANGS = {"pikslide"}
 
 # A CommonMark-style fenced code block: an opening fence of 3+ backticks or
 # tildes, an info string (the first word of which is the language tag,
@@ -45,14 +45,14 @@ class PikBlock:
     text: str
 
 
-def extract_pik_blocks(markdown_text: str) -> list[PikBlock]:
+def extract_pikslide_blocks(markdown_text: str) -> list[PikBlock]:
     """Return every ```pikslide``` fenced code block in ``markdown_text``,
     in document order. Raises :class:`MarkdownDiagramError` if the file
     has more than one diagram and any is unnamed, or two share a name."""
     blocks = [
         PikBlock(m.group("name"), m.group("body"))
         for m in _FENCE_RE.finditer(markdown_text)
-        if m.group("lang").lower() in _PIK_LANGS
+        if m.group("lang").lower() in _PIKSLIDE_LANGS
     ]
     if len(blocks) > 1:
         _require_unique_names(blocks)

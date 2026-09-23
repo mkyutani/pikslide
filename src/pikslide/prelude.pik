@@ -4,13 +4,11 @@
 # `define` and variable assignment, nothing that draws an object or names
 # a point. Everything here can be overridden by the program that follows.
 #
-# Lengths are bare numbers, already in inches (pikchr's own internal
-# unit); text sizes are written with an explicit `pt` suffix instead, so
+# Lengths are bare numbers, already in inches; text sizes are written with an explicit `pt` suffix instead, so
 # they read as what they are.
 
 # --- CSS color names -------------------------------------------------
-# Transcribed from pikchr's own aColor[] table (pikchr.y), lowercase, as
-# color values (0xRRGGBB), not the 24-bit numbers pikchr itself uses.
+# Lowercase names, as color values (0xRRGGBB).
 # "none"/"off" are not color names here -- they are the reserved `none`/
 # `off` literal (docs/grammar.md, Colors), since a value that means "no
 # color" is not itself an RGB color.
@@ -166,7 +164,7 @@ yellowgreen = 0x9acd32
 
 # --- Theme colors (docs/spec.md SS3.3) --------------------------------
 # `theme "slot"` names an OOXML schemeClr slot directly; these give the
-# slots friendlier, pikchr-flavoured names. Kept symbolic (never resolved
+# slots friendlier names. Kept symbolic (never resolved
 # to RGB here), so a diagram using them restyles when the theme does.
 
 accent1 = theme "accent1"
@@ -183,8 +181,7 @@ link = theme "hlink"
 followed = theme "folHlink"
 
 # --- Built-in defaults ---------------------------------------------------
-# Transcribed from pikchr's own aBuiltin[] table (pikchr.y): default
-# object sizes and drawing style, all in inches.
+# Default object sizes and drawing style, all in inches.
 
 arcrad = 0.25
 arrowhead = 2.0
@@ -221,8 +218,7 @@ textwid = 0.75
 thickness = 0.015
 
 # --- Text sizes (docs/spec.md SS3.3) --------------------------------------
-# Three fixed sizes in points, not pikchr's percentage-of-viewer-font
-# scaling. `small`/`medium`/`large` are reserved words (they also work as
+# Three fixed sizes in points. `small`/`medium`/`large` are reserved words (they also work as
 # text flags, `"Label" large`), assignable exactly like `fill`/`color`/
 # `thickness` above.
 

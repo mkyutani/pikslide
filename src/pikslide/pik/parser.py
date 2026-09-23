@@ -1,16 +1,11 @@
-"""Recursive-descent parser for pikchr source, built on the token stream
+"""Recursive-descent parser for diagram source, built on the token stream
 produced by :mod:`pikslide.pik.macros` (which already lexes and expands
 ``#define`` macros).
 
 This is a hand-written parser rather than a generated LALR one, so a few
-of pikchr's grammar rules (chiefly around ``position``) are implemented
-with small bounded backtracking instead of grammar-level precedence
-declarations; see comments at each such spot. The rule shapes and token
-semantics themselves are transcribed directly from pikchr's ``pikchr.y``.
-
-Substantially ported from pikchr, Copyright (C) 2020-09-01 by
-D. Richard Hipp <drh@sqlite.org>, released under the Zero-Clause BSD
-license. See the NOTICE file at the root of this repository.
+grammar rules (chiefly around ``position``) are implemented with small
+bounded backtracking instead of grammar-level precedence declarations;
+see comments at each such spot.
 """
 
 from __future__ import annotations
@@ -123,7 +118,7 @@ _EXPR_START = {
 }
 
 # Tokens that can start a `basetype` (docs/grammar.md, Objects): the
-# pikchr core (CLASSNAME/STRING/'[') plus pikslide's `shape`/`image` (ext).
+# core CLASSNAME/STRING/'[' plus `shape`/`image` (ext).
 _BASETYPE_START = {TokType.CLASSNAME, TokType.STRING, TokType.LB, TokType.SHAPE, TokType.IMAGE}
 
 _OBJECT_START = {TokType.PLACENAME, TokType.THIS, TokType.NTH, TokType.LAST}
@@ -299,7 +294,7 @@ class Parser:
     def parse_preset_name(self) -> str:
         # preset-name ::= ID | CLASSNAME (ext; docs/grammar.md, Objects) --
         # CLASSNAME too, since some preset names ("ellipse", "diamond",
-        # "line", "arc") already lex as pikchr class-name tokens. Matched
+        # "line", "arc") already lex as class-name tokens. Matched
         # case-insensitively downstream (layout._resolve_preset_name), so
         # an uppercase-led spelling ("ROUNDRECT"), which the lexer can only
         # produce as a PLACENAME, must be accepted here too -- this is the
@@ -574,10 +569,8 @@ class Parser:
         """``value`` (ext): the right-hand side of an assignment -- a
         string, or a color value. A color name (e.g. ``fill red``) is an
         ordinary lowercase `ID`/`Var`, resolved against the prelude at
-        evaluation time (docs/grammar.md, Colors); pikslide does not
-        special-case a bare `PLACENAME` as a color name the way pikchr
-        does, since pikslide is not aiming for pikchr compatibility
-        (docs/spec.md SS2)."""
+        evaluation time (docs/grammar.md, Colors); a bare `PLACENAME` is
+        not special-cased as a color name (docs/spec.md SS2)."""
         if self.at(TokType.STRING):
             return ast.StrLit(unescape_string(self.advance().text))
         return self.parse_color_value()
@@ -654,10 +647,8 @@ class Parser:
             self.expect(TokType.OF)
             return ast.DirectionOffset("right of", x, self.parse_position())
 
-        # Note: pikchr's grammar also has "expr ON HEADING ... " variants, but
-        # "on" is not present in pik_keywords, so the upstream tokenizer never
-        # actually produces that token either -- those rules are unreachable
-        # in real pikchr, and are intentionally not supported here.
+        # "expr ON HEADING ..." is intentionally not supported: "on" is not
+        # a keyword.
         if self.at(TokType.HEADING):
             self.advance()
             if self._at_edge_token():
@@ -803,7 +794,7 @@ class Parser:
 
 
 def parse(text: str, base_dir: str = ".", include_paths: list[str] | None = None) -> ast.Document:
-    """Parse pikchr source text into a :class:`pikslide.pik.ast.Document` tree.
+    """Parse diagram source text into a :class:`pikslide.pik.ast.Document` tree.
 
     `base_dir` is the source file's own directory (docs/spec.md SS3.6): an
     `include "path"` resolves against it first, then against each of

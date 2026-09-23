@@ -1,7 +1,7 @@
 """Render a resolved pik layout (:mod:`pikslide.pik.layout`) to a PowerPoint file.
 
 Coordinates in a :class:`~pikslide.pik.layout.LayoutResult` are inches with
-y pointing up (pikchr's convention); PowerPoint slides use EMU with y
+y pointing up; PowerPoint slides use EMU with y
 pointing down from the top-left, so this module flips y and adds a margin
 around the diagram's bounding box.
 
@@ -49,7 +49,7 @@ from .pik.layout import (
 EMU_PER_INCH = 914400
 
 # Vertical offset (in line-steps, positive = up in pik's y-up space) for
-# each text slot pik_txt_vertical_layout() can assign -- see assign_text_slots().
+# each text slot assign_text_slots() can assign.
 _SLOT_STEP = {"above2": 2, "above": 1, "center": 0, "below": -1, "below2": -2}
 
 # What "fit" sizing actually measures text *with* (a real installed font
@@ -361,7 +361,7 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     # PowerPoint's default autoshape text margins (~0.1in sides, ~0.05in
     # top/bottom) eat into the box width _autosize_text() already sized to
-    # the text, which can force unwanted wrapping. pikchr's own charWidth
+    # the text, which can force unwanted wrapping. The charwid-based
     # padding is the only margin that's meant to apply, and that's already
     # folded into _autosize_text()'s width/height estimate.
     tf.margin_left = tf.margin_right = 0

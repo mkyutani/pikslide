@@ -3,7 +3,7 @@ import json
 import os
 import sys
 
-from .markdown import MarkdownDiagramError, PikBlock, extract_pik_blocks
+from .markdown import MarkdownDiagramError, PikBlock, extract_pikslide_blocks
 from .pik import PikSyntaxError, dump, format_syntax_error, parse
 from .pik.layout import LayoutError
 from .pik.tokens import column_at
@@ -33,7 +33,7 @@ def main() -> None:
 
     if args.input.endswith((".md", ".markdown")):
         try:
-            blocks = extract_pik_blocks(text)
+            blocks = extract_pikslide_blocks(text)
         except MarkdownDiagramError as e:
             _fail(args, str(e))
         if not blocks:

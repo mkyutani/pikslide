@@ -26,7 +26,9 @@ FORMATS = ("png", "pdf")
 #: plenty of room without waiting forever on a modal dialog nobody sees.
 _TIMEOUT_S = 120
 
-LIBREOFFICE_WARNING = (
+RENDERERS = ("auto", "powerpoint", "libreoffice")
+
+LIBREOFFICE_NOTE = (
     "rendered with LibreOffice, not PowerPoint: good for a quick look, "
     "not for checking exact layout or text fit"
 )
@@ -36,33 +38,35 @@ class RenderError(Exception):
     pass
 
 
-def render_deck(pptx_path: str, out_path: str, fmt: str, allow_fallback: bool = True) -> list[str]:
+def render_deck(pptx_path: str, out_path: str, fmt: str, renderer: str = "auto") -> list[str]:
     """Render the first (for pikslide's own output, the only) slide of
-    `pptx_path` to `out_path` as `fmt` ("png" or "pdf"). Returns any
-    warnings; raises RenderError if nothing could render it.
-    `allow_fallback=False` (`--strict`) refuses LibreOffice outright,
-    since falling back to it is a warning."""
-    powershell = shutil.which("powershell.exe")
+    `pptx_path` to `out_path` as `fmt` ("png" or "pdf"), with `renderer`
+    (`--renderer`): "auto" tries PowerPoint, then LibreOffice; the other
+    two use only that one. Returns notes worth telling the user (what
+    was used, when that isn't PowerPoint); raises RenderError if nothing
+    could render it."""
     failure = None
-    if powershell is not None:
-        try:
-            _render_powerpoint(powershell, pptx_path, out_path, fmt)
-            return []
-        except RenderError as e:
-            failure = f"PowerPoint COM automation failed: {e}"
+    if renderer in ("auto", "powerpoint"):
+        powershell = shutil.which("powershell.exe")
+        if powershell is None:
+            failure = "PowerPoint is not reachable (no powershell.exe on PATH)"
+        else:
+            try:
+                _render_powerpoint(powershell, pptx_path, out_path, fmt)
+                return []
+            except RenderError as e:
+                failure = f"PowerPoint COM automation failed: {e}"
+        if renderer == "powerpoint":
+            raise RenderError(failure)
 
-    if not allow_fallback:
-        raise RenderError(
-            (failure or "PowerPoint is not reachable (no powershell.exe on PATH)")
-            + "; --strict refuses to fall back to LibreOffice, which doesn't render exactly as PowerPoint does"
-        )
     soffice = shutil.which("soffice")
     if soffice is None:
-        if failure is not None:
-            raise RenderError(f"{failure}; and LibreOffice (soffice) is not on PATH to fall back to")
-        raise RenderError(f"--{fmt} needs PowerPoint (via powershell.exe) or LibreOffice (soffice) on PATH")
+        missing = "LibreOffice (soffice) is not on PATH"
+        raise RenderError(f"{failure}; and {missing} to fall back to" if failure else missing)
     _render_libreoffice(soffice, pptx_path, out_path, fmt)
-    return [failure, LIBREOFFICE_WARNING] if failure is not None else [LIBREOFFICE_WARNING]
+    if renderer == "libreoffice":
+        return []  # asked for by name: nothing to point out
+    return [f"{failure}; {LIBREOFFICE_NOTE}"]
 
 
 def _render_powerpoint(powershell: str, pptx_path: str, out_path: str, fmt: str) -> None:

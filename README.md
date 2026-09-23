@@ -118,9 +118,10 @@ uv run pikslide diagram.pik diagram.pptx --png images/diagram.png
 uses PowerPoint itself, through COM automation (via `powershell.exe`),
 when it's reachable — Windows, or WSL with a Windows PowerPoint install —
 since that's the actual renderer pikslide's output is meant for; otherwise
-it falls back to LibreOffice (`soffice`) with a warning: a different
-rendering engine, good for a quick look but not for verifying exact layout
-or text fit against real PowerPoint (`--strict` refuses the fallback).
+it falls back to LibreOffice (`soffice`) and says so in a note: a
+different rendering engine, good for a quick look but not for verifying
+exact layout or text fit against real PowerPoint. `--renderer powerpoint`
+or `--renderer libreoffice` uses only that one.
 Since pikslide sizes its slide exactly to the diagram, the PNG is an image
 of just the diagram, no separate cropping needed. The PowerShell scripts
 behind this (`src/pikslide/ps/*.ps1`) also run on their own from Windows

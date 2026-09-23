@@ -428,7 +428,7 @@ A `.pik` never names a deck, slide or theme file. Those come from the command
 line or the caller, so the same diagram can be reused in any deck.
 
 ```sh
-pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--settings FILE] [--png [PATH]] [--pdf [PATH]]
+pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--settings FILE] [--png [PATH]] [--pdf [PATH]] [--renderer R]
 ```
 
 `OUTPUT` omitted, the parsed tree is dumped instead of writing anything
@@ -450,8 +450,11 @@ to be written, so they are errors with no `OUTPUT` (and no `--template`)
 or with `--check`, and `PATH` must end in `.png`/`.pdf`. Rendering uses
 PowerPoint through COM automation when it is reachable (Windows, or WSL
 with a Windows PowerPoint install), since that is the renderer the output
-is meant for; otherwise LibreOffice, with a **warning** that its rendering
-is not PowerPoint's (§5). With neither, it is an error.
+is meant for; otherwise LibreOffice, with a note (not a warning: it says
+how the image was made, not that anything is wrong with the diagram, so
+`--strict` leaves it alone) that its rendering is not PowerPoint's. With
+neither, it is an error. `--renderer powerpoint|libreoffice` uses only
+that one; the default, `auto`, is the order above.
 
 ## 5. Diagnostics
 

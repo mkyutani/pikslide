@@ -5,6 +5,7 @@ PIKSLIDE_RENDER_TESTS=1 to also run a real render on this machine."""
 
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 import subprocess
@@ -12,7 +13,7 @@ import subprocess
 import pytest
 
 from pikslide import main, render
-from pikslide.render import LIBREOFFICE_WARNING, RenderError
+from pikslide.render import LIBREOFFICE_NOTE, RenderError
 
 
 class _FakeRun:
@@ -65,28 +66,37 @@ def test_pdf_uses_the_pdf_script(monkeypatch, tmp_path):
     assert ps[ps.index("-PdfPath") + 1] == str(tmp_path / "d.pdf")  # no wslpath: used as is
 
 
-def test_powerpoint_failure_falls_back_to_libreoffice_with_warnings(monkeypatch, tmp_path):
+def test_powerpoint_failure_falls_back_to_libreoffice_with_a_note(monkeypatch, tmp_path):
     _tools(monkeypatch, "powershell.exe", "soffice")
     monkeypatch.setattr(render.subprocess, "run", _FakeRun(fail=("powershell.exe",)))
     out = tmp_path / "chart.png"
-    warnings = render.render_deck(str(tmp_path / "d.pptx"), str(out), "png")
+    notes = render.render_deck(str(tmp_path / "d.pptx"), str(out), "png")
     assert out.exists()  # renamed from soffice's own d.png
-    assert "boom" in warnings[0] and warnings[1] == LIBREOFFICE_WARNING
+    assert "boom" in notes[0] and LIBREOFFICE_NOTE in notes[0]
 
 
-def test_libreoffice_alone_warns(monkeypatch, tmp_path):
+def test_auto_without_powershell_uses_libreoffice_with_a_note(monkeypatch, tmp_path):
     _tools(monkeypatch, "soffice")
     monkeypatch.setattr(render.subprocess, "run", _FakeRun())
-    assert render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.pdf"), "pdf") == [LIBREOFFICE_WARNING]
+    [note] = render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.pdf"), "pdf")
+    assert "powershell.exe" in note and LIBREOFFICE_NOTE in note
 
 
-def test_no_fallback_refuses_libreoffice(monkeypatch, tmp_path):
+def test_renderer_powerpoint_never_falls_back(monkeypatch, tmp_path):
     _tools(monkeypatch, "soffice")
     fake = _FakeRun()
     monkeypatch.setattr(render.subprocess, "run", fake)
-    with pytest.raises(RenderError, match="--strict"):
-        render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", allow_fallback=False)
+    with pytest.raises(RenderError, match="powershell.exe"):
+        render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", renderer="powerpoint")
     assert fake.calls == []
+
+
+def test_renderer_libreoffice_skips_powerpoint_silently(monkeypatch, tmp_path):
+    _tools(monkeypatch, "powershell.exe", "soffice")
+    fake = _FakeRun()
+    monkeypatch.setattr(render.subprocess, "run", fake)
+    assert render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", renderer="libreoffice") == []
+    assert [os.path.basename(c[0]) for c in fake.calls] == ["soffice"]
 
 
 def test_no_renderer_at_all_is_an_error(monkeypatch, tmp_path):
@@ -114,12 +124,12 @@ def _run_cli(monkeypatch, argv: list[str]) -> None:
 
 @pytest.fixture
 def rendered(monkeypatch):
-    """Replace render_deck() itself, recording (pptx, out, fmt, allow_fallback)."""
+    """Replace render_deck() itself, recording (pptx, out, fmt, renderer)."""
     calls = []
 
-    def fake_render(pptx_path, out_path, fmt, allow_fallback=True):
+    def fake_render(pptx_path, out_path, fmt, renderer="auto"):
         assert os.path.isfile(pptx_path)  # the deck is written first
-        calls.append((pptx_path, out_path, fmt, allow_fallback))
+        calls.append((pptx_path, out_path, fmt, renderer))
         return []
 
     monkeypatch.setattr("pikslide.render_deck", fake_render)
@@ -136,8 +146,8 @@ def test_png_and_pdf_default_beside_output(monkeypatch, capsys, tmp_path, render
     out = tmp_path / "out.pptx"
     _run_cli(monkeypatch, [str(_src(tmp_path)), str(out), "--png", "--pdf"])
     assert rendered == [
-        (str(out), str(tmp_path / "out.png"), "png", True),
-        (str(out), str(tmp_path / "out.pdf"), "pdf", True),
+        (str(out), str(tmp_path / "out.png"), "png", "auto"),
+        (str(out), str(tmp_path / "out.pdf"), "pdf", "auto"),
     ]
     stdout = capsys.readouterr().out
     assert f"wrote {tmp_path / 'out.png'}" in stdout and f"wrote {tmp_path / 'out.pdf'}" in stdout
@@ -146,7 +156,7 @@ def test_png_and_pdf_default_beside_output(monkeypatch, capsys, tmp_path, render
 def test_explicit_png_path(monkeypatch, tmp_path, rendered):
     out = tmp_path / "out.pptx"
     _run_cli(monkeypatch, [str(_src(tmp_path)), str(out), "--png", str(tmp_path / "x.png")])
-    assert rendered == [(str(out), str(tmp_path / "x.png"), "png", True)]
+    assert rendered == [(str(out), str(tmp_path / "x.png"), "png", "auto")]
 
 
 def test_png_with_template_and_no_output_follows_the_default_output(monkeypatch, tmp_path, rendered):
@@ -158,13 +168,20 @@ def test_png_with_template_and_no_output_follows_the_default_output(monkeypatch,
     assert rendered[0][:2] == (str(tmp_path / "d.pptx"), str(tmp_path / "d.png"))
 
 
-def test_strict_disallows_the_fallback(monkeypatch, tmp_path, rendered):
+def test_renderer_flag_is_passed_through(monkeypatch, tmp_path, rendered):
+    _run_cli(monkeypatch, [str(_src(tmp_path)), str(tmp_path / "o.pptx"), "--pdf", "--renderer", "libreoffice"])
+    assert rendered[0][3] == "libreoffice"
+
+
+def test_a_fallback_is_a_note_not_a_warning_so_strict_allows_it(monkeypatch, capsys, tmp_path):
     from pptx import Presentation
 
+    monkeypatch.setattr("pikslide.render_deck", lambda *a, **k: ["used LibreOffice"])
     tmpl = tmp_path / "tmpl.pptx"
     Presentation().save(str(tmpl))
-    _run_cli(monkeypatch, [str(_src(tmp_path)), str(tmp_path / "o.pptx"), "--template", str(tmpl), "--pdf", "--strict"])
-    assert rendered[0][3] is False
+    _run_cli(monkeypatch, [str(_src(tmp_path)), str(tmp_path / "o.pptx"), "--template", str(tmpl), "--png", "--strict", "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True and payload["warnings"] == [] and payload["notes"] == ["used LibreOffice"]
 
 
 def test_png_path_with_the_wrong_extension_is_an_error(monkeypatch, capsys, tmp_path, rendered):

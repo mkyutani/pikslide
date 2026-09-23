@@ -7,7 +7,7 @@ from .pik import PikSyntaxError, dump, format_syntax_error, parse
 from .pik.layout import LayoutError
 from .pik.tokens import column_at
 from .pptx_writer import find_settings_file, resolve_for_pptx, write_pptx, write_pptx_from_template
-from .render import FORMATS, RenderError, render_deck
+from .render import FORMATS, RENDERERS, RenderError, render_deck
 
 
 def main() -> None:
@@ -52,8 +52,13 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         parser.add_argument(
             f"--{fmt}", metavar="PATH", nargs="?", const="", default=None,
             help=f"also render the written deck to a {fmt.upper()} at PATH (default: OUTPUT with its "
-            f"extension changed to .{fmt}), via PowerPoint, else LibreOffice",
+            f"extension changed to .{fmt})",
         )
+    parser.add_argument(
+        "--renderer", choices=RENDERERS, default="auto",
+        help="what renders --png/--pdf: PowerPoint (via powershell.exe), LibreOffice (soffice), or "
+        "auto, PowerPoint if reachable, else LibreOffice (default: auto)",
+    )
     parser.add_argument("--strict", action="store_true", help="turn warnings into errors")
     parser.add_argument("--check", action="store_true", help="parse and lay out the source without writing any output")
     parser.add_argument(
@@ -144,12 +149,17 @@ def _fail_layout(args: argparse.Namespace, err: LayoutError) -> None:
     raise SystemExit(1)
 
 
-def _succeed(args: argparse.Namespace, message: str, warnings: list[str] = (), **extra) -> None:
+def _succeed(args: argparse.Namespace, message: str, warnings: list[str] = (), notes: list[str] = (), **extra) -> None:
+    """`notes` are informational only -- unlike `warnings`, --strict never
+    makes them fatal (e.g. --png falling back to LibreOffice: a fact about
+    how the image was made, not a problem with the diagram)."""
     if args.format == "json":
-        print(json.dumps({"ok": True, "errors": [], "warnings": list(warnings), **extra}))
+        print(json.dumps({"ok": True, "errors": [], "warnings": list(warnings), "notes": list(notes), **extra}))
     else:
         for w in warnings:
             print(f"warning: {w}", file=sys.stderr)
+        for n in notes:
+            print(f"note: {n}", file=sys.stderr)
         print(message)
 
 
@@ -210,14 +220,15 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
         write_pptx(result, out_path)
 
     written = {"output": out_path}
+    notes = []
     for fmt in FORMATS:
         path = getattr(args, fmt)
         if path is None:
             continue
         try:
-            warnings += render_deck(out_path, path, fmt, allow_fallback=not args.strict)
+            notes += render_deck(out_path, path, fmt, renderer=args.renderer)
         except RenderError as e:
             _fail(args, f"could not render {path}: {e}")
             return
         written[fmt] = path
-    _succeed(args, "\n".join(f"wrote {p}" for p in written.values()), warnings=warnings, **written)
+    _succeed(args, "\n".join(f"wrote {p}" for p in written.values()), warnings=warnings, notes=notes, **written)

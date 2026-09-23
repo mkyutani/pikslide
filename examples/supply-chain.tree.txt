@@ -48,7 +48,8 @@ Document
         TextAttribute
           text: 'Production'
           flags: []
-        Fit()
+        Same
+          obj: None
     ObjectStatement
       label: None
       base:
@@ -64,7 +65,8 @@ Document
         TextAttribute
           text: 'Warehouse'
           flags: []
-        Fit()
+        Same
+          obj: None
     ObjectStatement
       label: None
       base:
@@ -142,7 +144,7 @@ Document
                             NameRef
                               path:
                                 'Procurement'
-                          edge: None
+                          edge: 'w'
                   p2:
                     PlacePosition
                       place:
@@ -151,7 +153,7 @@ Document
                             NameRef
                               path:
                                 'Warehouse'
-                          edge: None
+                          edge: 'e'
               y_from:
                 DirectionOffset
                   direction: 'below'
@@ -225,14 +227,27 @@ Document
           kind: 'both'
         From_
           position:
-            PlacePosition
-              place:
-                ObjectEdge
-                  obj:
-                    NameRef
-                      path:
-                        'Finance'
-                  edge: None
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Procurement'
+                      edge: None
+                  axis: 'x'
+              y:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Finance'
+                      edge: 'n'
+                  axis: 'y'
         To
           position:
             PlacePosition
@@ -254,14 +269,27 @@ Document
           kind: 'both'
         From_
           position:
-            PlacePosition
-              place:
-                ObjectEdge
-                  obj:
-                    NameRef
-                      path:
-                        'Finance'
-                  edge: None
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Production'
+                      edge: None
+                  axis: 'x'
+              y:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Finance'
+                      edge: 'n'
+                  axis: 'y'
         To
           position:
             PlacePosition
@@ -283,14 +311,27 @@ Document
           kind: 'both'
         From_
           position:
-            PlacePosition
-              place:
-                ObjectEdge
-                  obj:
-                    NameRef
-                      path:
-                        'Finance'
-                  edge: None
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Warehouse'
+                      edge: None
+                  axis: 'x'
+              y:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Finance'
+                      edge: 'n'
+                  axis: 'y'
         To
           position:
             PlacePosition
@@ -398,7 +439,7 @@ Document
                             NameRef
                               path:
                                 'Procurement'
-                          edge: None
+                          edge: 'w'
                   p2:
                     PlacePosition
                       place:
@@ -407,7 +448,7 @@ Document
                             NameRef
                               path:
                                 'Warehouse'
-                          edge: None
+                          edge: 'e'
               y_from:
                 Between
                   fraction:

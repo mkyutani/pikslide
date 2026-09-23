@@ -3,20 +3,20 @@ arrow "materials" "" fit
 
 Procurement: box "Procurement" fit
 arrow
-Production: box "Production" fit
+Production: box "Production" same
 arrow
-Warehouse: box "Warehouse" fit
+Warehouse: box "Warehouse" same
 
 arrow "products" "" fit
 Distributor: ellipse "Distributor" fit
 arrow "delivery" "" fit
 Consumer: ellipse "Consumer" fit
 
-Finance: box "Finance" at (1/2<Procurement,Warehouse>, 1 below 1/2<Procurement,Warehouse>) wid (Warehouse.e.x-Procurement.w.x)
-arrow <-> from Finance to Procurement chop
-arrow <-> from Finance to Production chop
-arrow <-> from Finance to Warehouse chop
+Finance: box "Finance" at (1/2<Procurement.w,Warehouse.e>, 1 below 1/2<Procurement,Warehouse>) wid (Warehouse.e.x-Procurement.w.x)
+arrow <-> from (Procurement.x, Finance.n.y) to Procurement chop
+arrow <-> from (Production.x, Finance.n.y) to Production chop
+arrow <-> from (Warehouse.x, Finance.n.y) to Warehouse chop
 
 Company: box ht (Procurement.n.y-Finance.s.y)+0.6 wid (Warehouse.e.x-Procurement.w.x)+0.6 \
-    at (1/2<Procurement,Warehouse>, 1/2<Procurement,Finance>) fill 0xf5f5f5 behind Supplier
+    at (1/2<Procurement.w,Warehouse.e>, 1/2<Procurement,Finance>) fill 0xf5f5f5 behind Supplier
 "Company" bold at 0.17 below 1/2<Company.nw,Company.ne>

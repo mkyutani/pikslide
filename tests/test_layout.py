@@ -391,9 +391,10 @@ def test_fit_measurement_tracks_a_medium_override_at_the_objects_own_position():
 
 
 def test_above_and_below_offset_text_from_the_objects_center():
-    # A single above string sits with its bottom on the center (half a
-    # line up), a below one with its top there; the object stays centered
-    # on its `at` point and grows by the offset on both sides.
+    # A single above string sits half a line up plus a quarter-line gap
+    # (_TEXT_SIDE_GAP), so its bottom clears the center; a below one the
+    # mirror image. The object stays centered on its `at` point and grows
+    # by the offset on both sides.
     class FixedMetrics:
         def text_width(self, text, flags=(), text_sizes=None):
             return 1.0
@@ -406,16 +407,22 @@ def test_above_and_below_offset_text_from_the_objects_center():
 
     plain, above, below = shapes('text "p" at (0, 0)\ntext "a" above at (0, 0)\ntext "b" below at (0, 0)\n')
     assert plain.text_dy == 0.0
-    assert above.text_dy == pytest.approx(0.1)
-    assert below.text_dy == pytest.approx(-0.1)
+    assert above.text_dy == pytest.approx(0.1 + 0.05)
+    assert below.text_dy == pytest.approx(-(0.1 + 0.05))
     assert (above.cx, above.cy) == (0.0, 0.0)
-    assert above.h == pytest.approx(plain.h + 0.2)
+    assert above.h == pytest.approx(plain.h + 0.3)
 
-    # Balanced strings (split above/below, or explicitly so) don't shift.
-    assert shapes('box "a" "b"\n')[0].text_dy == 0.0
-    assert shapes('box "a" above "b" below\n')[0].text_dy == 0.0
-    # Two above strings stack both lines above the center.
-    assert shapes('text "a" above "b" above\n')[0].text_dy == pytest.approx(0.2)
+    # Balanced strings (split above/below, or explicitly so) don't shift;
+    # only the explicit split opens a gap between its halves -- un-flagged
+    # "a" "b" is just two lines in a box.
+    two_lines = shapes('box "a" "b"\n')[0]
+    assert (two_lines.text_dy, two_lines.text_split) == (0.0, 0.0)
+    split = shapes('text "a" above "b" below\n')[0]
+    assert split.text_dy == 0.0
+    assert split.text_split == pytest.approx(2 * 0.05)
+    assert split.h == pytest.approx(plain.h + 0.2 + 0.1)
+    # Two above strings stack both lines above the center, then the gap.
+    assert shapes('text "a" above "b" above\n')[0].text_dy == pytest.approx(0.2 + 0.05)
 
 
 # ---------------------------------------------------------------------------

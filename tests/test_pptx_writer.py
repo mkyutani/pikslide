@@ -88,6 +88,13 @@ def test_above_and_below_text_clear_a_line_through_its_anchor(tmp_path: pathlib.
     assert line_y - text_middle("up") == pytest.approx(text_middle("down") - line_y, abs=2)
 
 
+def test_explicit_above_below_split_opens_space_but_two_plain_lines_dont(tmp_path: pathlib.Path):
+    prs = render('text "up" above "down" below\nbox "one" "two" at (0, -1)\n', tmp_path)
+    split, plain = prs.slides[0].shapes
+    assert split.text_frame.paragraphs[1].space_before > 0
+    assert plain.text_frame.paragraphs[1].space_before is None
+
+
 def test_rounded_box_gets_rounded_rectangle_with_scaled_corner(tmp_path: pathlib.Path):
     prs = render("box rad 0.1 width 1 height 1\n", tmp_path)
     shape = prs.slides[0].shapes[0]

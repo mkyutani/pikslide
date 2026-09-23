@@ -358,8 +358,16 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
         tf.margin_bottom = Inches(2 * shape.text_dy)
     elif shape.text_dy < 0:
         tf.margin_top = Inches(-2 * shape.text_dy)
+    # An explicit above/below split (Shape.text_split): open space between
+    # the halves, before the first below-slotted string.
+    first_below = None
+    if shape.text_split > 0:
+        slots = assign_text_slots(shape.texts)
+        first_below = next(i for i, slot in enumerate(slots) if slot.startswith("below"))
     for i, (text, flags) in enumerate(shape.texts):
         para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        if i == first_below:
+            para.space_before = Inches(shape.text_split)
         para.alignment = (
             PP_ALIGN.LEFT if "ljust" in flags else PP_ALIGN.RIGHT if "rjust" in flags else PP_ALIGN.CENTER
         )

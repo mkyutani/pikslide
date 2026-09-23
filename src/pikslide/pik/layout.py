@@ -359,10 +359,14 @@ class Shape:
     text_dy: float = 0.0
     """How far (inches, y-up) this closed object's text block sits above
     its center, from its strings' above/below slots -- see
-    `_text_offset()`. A single `above` string sits with its bottom on the
-    center, a single `below` string with its top there. Lines don't use
-    this: their labels are placed per string instead (pptx_writer's
-    `_line_label_rects()`)."""
+    `_text_placement()`. Text on one side clears the center by a small
+    gap: a single `above` string sits just above it, `below` just below.
+    Lines don't use this: their labels are placed per string instead
+    (pptx_writer's `_line_label_rects()`)."""
+    text_split: float = 0.0
+    """Extra space (inches) before the first below-slotted string, when
+    `above` and `below` strings are split around the center explicitly --
+    see `_text_placement()`. The gap it opens is centered on the center."""
 
     def offset(self, edge: str | None) -> tuple[float, float]:
         return _edge_offset(self, edge)
@@ -1075,19 +1079,41 @@ def _apply_circle_constraint(shape: Shape) -> None:
     shape.rad = 0.5 * d
 
 
-def _text_offset(shape: Shape, ctx: _Ctx) -> float:
-    """The vertical offset of `shape.texts`, drawn as one stacked block:
+_TEXT_SIDE_GAP = 0.25  # extra clearance for one-sided above/below text, in medium line heights -- see _text_placement()
+
+
+def _text_placement(shape: Shape, ctx: _Ctx) -> tuple[float, float]:
+    """`(text_dy, text_split)` for `shape.texts`. text_dy is the vertical
+    offset of the texts, drawn as one stacked block:
     half the height of the lines slotted above the center, less half of
     those slotted below (assign_text_slots()). Balanced text -- one
-    un-flagged string, or `"a" "b"` split above/below -- gives 0."""
+    un-flagged string, or `"a" "b"` split above/below -- gives 0.
+
+    Text wholly on one side is moved a further `_TEXT_SIDE_GAP` line
+    away, so its bottom (or top) doesn't touch a line drawn through the
+    center -- about the clearance a line's own above/below label gets.
+    Text split explicitly -- `"a" above "b" below`, above strings first --
+    gets the same gap on each side as text_split, space opened between
+    the two halves; the offset is unchanged, since that space is centered
+    in the block. Un-flagged `"a" "b"` is an ordinary stacked block (two
+    lines in a box) and gets no gap."""
     up = down = 0.0
-    for (_text, flags), slot in zip(shape.texts, assign_text_slots(shape.texts)):
+    slots = assign_text_slots(shape.texts)
+    for (_text, flags), slot in zip(shape.texts, slots):
         lh = ctx.metrics.line_height(flags, shape.text_sizes)
         if slot.startswith("above"):
             up += lh
         elif slot.startswith("below"):
             down += lh
-    return (up - down) / 2
+    gap = _TEXT_SIDE_GAP * ctx.metrics.line_height([], shape.text_sizes)
+    if all(s.startswith("above") for s in slots):
+        return up / 2 + gap, 0.0
+    if all(s.startswith("below") for s in slots):
+        return -(down / 2 + gap), 0.0
+    explicit = any("above" in flags or "below" in flags for _text, flags in shape.texts)
+    sides = [s[:5] for s in slots]  # "above" / "below" / "cente"
+    split = sides == sorted(sides, key=lambda side: side != "above") and "cente" not in sides
+    return (up - down) / 2, (2 * gap if explicit and split else 0.0)
 
 
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
@@ -1108,7 +1134,8 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     # The object stays centered on its own position with the text shifted
     # off that center, so it grows by the shift on both sides (as pikchr's
     # own size-to-fit does), keeping .n/.s clear of the text.
-    shape.h += 2 * abs(_text_offset(shape, ctx))
+    dy, split = _text_placement(shape, ctx)
+    shape.h += 2 * abs(dy) + split
     if shape.kind == "diamond":
         # A diamond's text sits well inside its points, so needs extra room.
         shape.w *= 1.6
@@ -1490,7 +1517,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
         elif (shape.w <= 0.0 or shape.h <= 0.0) and shape.texts:
             _autosize_text(shape, ctx)
         if shape.texts:
-            shape.text_dy = _text_offset(shape, ctx)
+            shape.text_dy, shape.text_split = _text_placement(shape, ctx)
         ofst = shape.offset(with_edge)
         shape.cx = with_pos[0] - ofst[0]
         shape.cy = with_pos[1] - ofst[1]

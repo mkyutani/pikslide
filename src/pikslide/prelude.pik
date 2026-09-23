@@ -8,12 +8,12 @@
 # unit); text sizes are written with an explicit `pt` suffix instead, so
 # they read as what they are.
 
-# --- CSS colour names -------------------------------------------------
+# --- CSS color names -------------------------------------------------
 # Transcribed from pikchr's own aColor[] table (pikchr.y), lowercase, as
-# colour values (0xRRGGBB), not the 24-bit numbers pikchr itself uses.
-# "none"/"off" are not colour names here -- they are the reserved `none`/
-# `off` literal (docs/grammar.md, Colours), since a value that means "no
-# colour" is not itself an RGB colour.
+# color values (0xRRGGBB), not the 24-bit numbers pikchr itself uses.
+# "none"/"off" are not color names here -- they are the reserved `none`/
+# `off` literal (docs/grammar.md, Colors), since a value that means "no
+# color" is not itself an RGB color.
 
 aliceblue = 0xf0f8ff
 antiquewhite = 0xfaebd7
@@ -164,7 +164,7 @@ whitesmoke = 0xf5f5f5
 yellow = 0xffff00
 yellowgreen = 0x9acd32
 
-# --- Theme colours (docs/spec.md SS3.3) --------------------------------
+# --- Theme colors (docs/spec.md SS3.3) --------------------------------
 # `theme "slot"` names an OOXML schemeClr slot directly; these give the
 # slots friendlier, pikchr-flavoured names. Kept symbolic (never resolved
 # to RGB here), so a diagram using them restyles when the theme does.
@@ -244,15 +244,16 @@ typeface = ""
 # --- Slide layout (docs/spec.md SS3.8) --------------------------------------
 # Empty means "the first `blank`-type layout of the template's first
 # master, or that master's first layout if it has none" -- used only when
-# pikslide makes a *new* slide from a `--template` (with `--into` the
-# slide already has its layout). Settings-file only: a program assigning
-# this is an error, since a .pik never chooses the deck's structure.
+# pikslide makes a *new* slide from a `--template` (inserting into an
+# existing deck's slide, the slide already has its layout). Settings-file
+# only: a program assigning this is an error, since a .pik never chooses
+# the deck's structure.
 
 layout = ""
 
-# --- Standard accent-colour names (docs/spec.md SS3.7/SS3.8) ---------------
-# Ordinary colour variables, not reserved words, so a template's settings
-# file can repoint them at whichever theme colours suit it, and a diagram
+# --- Standard accent-color names (docs/spec.md SS3.7/SS3.8) ---------------
+# Ordinary color variables, not reserved words, so a template's settings
+# file can repoint them at whichever theme colors suit it, and a diagram
 # written against `primary`/`emphasis` runs unchanged under any template.
 
 primary = text2

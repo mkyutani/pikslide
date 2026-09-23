@@ -38,7 +38,7 @@ def main() -> None:
             _fail(args, str(e))
         if not blocks:
             _fail(args, "no ```pikslide``` code blocks found")
-        if args.block is not None or args.into is not None or args.template is not None:
+        if args.block is not None or args.insert_mode or args.template is not None:
             block = _select_block(args, blocks)
             default_id = block.name or os.path.splitext(os.path.basename(args.input))[0]
             _run(args, block.text, base_dir, args.output, default_id)
@@ -60,8 +60,9 @@ def main() -> None:
 
 def _select_block(args: argparse.Namespace, blocks: list[PikBlock]) -> PikBlock:
     """`--block NAME` (docs/spec.md SS6): required to pick one diagram out
-    of a multi-diagram Markdown file for `--into`/`--template`, which each
-    place exactly one. A single-diagram file needs no `--block` at all."""
+    of a multi-diagram Markdown file when inserting into an existing deck
+    or using `--template`, which each place exactly one. A single-diagram
+    file needs no `--block` at all."""
     if args.block is None:
         if len(blocks) > 1:
             names = ", ".join(repr(b.name) for b in blocks)
@@ -85,28 +86,28 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "input", help="a .pik source file, or a Markdown file containing ```pikslide``` fenced blocks"
     )
     parser.add_argument(
-        "output", nargs="?", default=None, help="output .pptx path; omit to dump the parsed tree (standalone mode only)"
+        "output", nargs="?", default=None,
+        help="output .pptx path, always overwritten in place; if it doesn't exist yet, a new deck is "
+        "created there (--template's theme, or the built-in Office one); if it already exists, the "
+        "diagram is inserted into it instead (docs/spec.md SS4); omit entirely (with no --template "
+        "either) to dump the parsed tree instead of writing anything",
     )
-    parser.add_argument(
-        "-o", dest="output_opt", metavar="OUT", default=None, help="output path (same as the positional OUTPUT; use with --into)"
-    )
-    parser.add_argument(
-        "--into", metavar="DECK", default=None, help="insert into this existing .pptx/.potx instead of writing a new deck"
-    )
-    parser.add_argument("--slide", type=int, metavar="N", default=None, help="1-based slide number (required with --into)")
+    parser.add_argument("--slide", type=int, metavar="N", default=None, help="1-based slide number to insert into")
     parser.add_argument(
         "--region", metavar="NAME", default=None, help="name of a shape/placeholder on that slide to use as the target rectangle"
     )
     parser.add_argument("--rect", metavar="X,Y,W,H", default=None, help="explicit target rectangle in inches")
     parser.add_argument(
-        "--id", metavar="ID", default=None, help="group id (default: the Markdown fence name, else the source file's stem)"
+        "--id", metavar="ID", default=None,
+        help="id used to derive the default name prefix pik:<ID> (default: the Markdown fence name, else the source file's stem)",
     )
     parser.add_argument(
-        "--in-place", action="store_true", help="overwrite the --into deck itself instead of writing a separate file"
+        "--prefix", metavar="STR", default=None,
+        help="override the default pik:<ID> name prefix outright (docs/spec.md SS4.2)",
     )
     parser.add_argument(
         "--align", metavar="ALIGN", default="top-left",
-        help=f"where a smaller-than-its-region diagram sits (--into only); one of {', '.join(sorted(ALIGN_CHOICES))} (default: top-left)",
+        help=f"where a smaller-than-its-region diagram sits (when inserting only); one of {', '.join(sorted(ALIGN_CHOICES))} (default: top-left)",
     )
     parser.add_argument(
         "--template", metavar="FILE", default=None,
@@ -130,34 +131,33 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     )
     args = parser.parse_args(argv)
 
-    if args.output is not None and args.output_opt is not None:
-        parser.error("output given twice: as a positional argument and with -o")
-    if args.output_opt is not None:
-        args.output = args.output_opt
     args.include_paths = args.include_path or []
 
-    if args.into is not None and args.template is not None:
-        # docs/spec.md SS3.3 rule 2: "the deck is already the template".
-        parser.error("--into and --template are mutually exclusive")
+    # OUTPUT's own default (docs/spec.md SS4.1, ext), when omitted but
+    # --template is given: INPUT's own path with its extension changed to
+    # .pptx. --template always starts a *new* deck (SS3.3 rule 2: "the
+    # deck is already the template", so an existing OUTPUT never applies
+    # here) -- re-running the same --template command is expected to keep
+    # overwriting it fresh, not switch into inserting.
+    if args.output is None and args.template is not None:
+        args.output = _default_output_path(args.input)
+    args.insert_mode = args.template is None and args.output is not None and os.path.isfile(args.output)
 
-    if args.into is None:
+    if not args.insert_mode:
         for flag, value in (
             ("--slide", args.slide),
             ("--region", args.region),
             ("--rect", args.rect),
             ("--id", args.id),
+            ("--prefix", args.prefix),
         ):
             if value is not None:
-                parser.error(f"{flag} requires --into")
-        if args.in_place:
-            parser.error("--in-place requires --into")
+                parser.error(f"{flag} requires an existing OUTPUT deck to insert into")
         if args.align != "top-left":
-            parser.error("--align requires --into")
+            parser.error("--align requires an existing OUTPUT deck to insert into")
     else:
         if args.slide is None:
-            parser.error("--into requires --slide")
-        if args.in_place and args.output is not None:
-            parser.error("--in-place and -o/OUTPUT are mutually exclusive")
+            parser.error("inserting into an existing deck requires --slide")
         if args.rect is not None:
             args.rect = _parse_rect(args.rect, parser)
         if args.align not in ALIGN_CHOICES:
@@ -184,12 +184,11 @@ def _numbered(path: str, i: int, total: int) -> str:
     return f"{stem}-{i}.{ext}" if dot else f"{path}-{i}"
 
 
-def _default_into_output(deck_path: str) -> str:
-    """`deck.pptx` -> `deck.pikslide.pptx` (docs/spec.md SS4.2): the
-    default output name when `--into` is used with neither `--in-place`
-    nor `-o`."""
-    stem, dot, ext = deck_path.rpartition(".")
-    return f"{stem}.pikslide.{ext}" if dot else f"{deck_path}.pikslide"
+def _default_output_path(input_path: str) -> str:
+    """`diagram.pik` -> `diagram.pptx` (docs/spec.md SS4.1, ext): OUTPUT's
+    own default when it's omitted but --template is given."""
+    stem, dot, _ext = input_path.rpartition(".")
+    return f"{stem}.pptx" if dot else f"{input_path}.pptx"
 
 
 # ---------------------------------------------------------------------------
@@ -260,11 +259,11 @@ def _run(args: argparse.Namespace, text: str, base_dir: str, out_path: str | Non
         _fail_syntax(args, e, args.input, text)
         return
 
-    if args.into is None and args.template is None and out_path is None and not args.check:
+    if out_path is None and not args.check:
         print(dump(doc))
         return
 
-    settings_target = args.into or args.template
+    settings_target = out_path if args.insert_mode else args.template
     settings_text = None
     settings_base_dir = "."
     try:
@@ -284,23 +283,20 @@ def _run(args: argparse.Namespace, text: str, base_dir: str, out_path: str | Non
         _succeed(args, f"ok: {args.input} parses and lays out cleanly (--check, nothing written)")
         return
 
-    if args.into is not None:
+    if args.insert_mode:
         try:
             prs = insert_into_pptx(
-                result, args.into, args.slide, region=args.region, rect=args.rect,
-                group_id=args.id or default_id, align=args.align,
+                result, out_path, args.slide, region=args.region, rect=args.rect,
+                group_id=args.id or default_id, align=args.align, prefix=args.prefix,
             )
         except LayoutError as e:
             _fail_layout(args, e)
             return
-        final_out = args.into if args.in_place else (out_path or _default_into_output(args.into))
-        prs.save(final_out)
-        _succeed(args, f"wrote {final_out}", output=final_out)
+        prs.save(out_path)
+        _succeed(args, f"wrote {out_path}", output=out_path)
         return
 
     if args.template is not None:
-        if out_path is None:
-            _fail(args, "an output path is required with --template")
         try:
             write_pptx_from_template(result, args.template, out_path, layout_name=result.layout_name)
         except LayoutError as e:

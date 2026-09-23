@@ -1,7 +1,7 @@
 """`pikslide.main()` -- the `argparse` CLI (docs/spec.md SS4), covering
 both standalone rendering (unchanged from before this file existed) and
-`--into` (docs/spec.md SS4.2), backed by the already-tested
-`pptx_writer.insert_into_pptx`."""
+inserting into an existing OUTPUT deck (docs/spec.md SS4.2), backed by
+the already-tested `pptx_writer.insert_into_pptx`."""
 
 from __future__ import annotations
 
@@ -69,13 +69,6 @@ def test_standalone_render_to_pptx(monkeypatch, capsys, tmp_path):
     assert f"wrote {out_path}" in capsys.readouterr().out
 
 
-def test_standalone_render_with_o_flag(monkeypatch, capsys, tmp_path):
-    src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    out_path = tmp_path / "d.pptx"
-    _run(monkeypatch, [str(src), "-o", str(out_path)])
-    assert out_path.exists()
-
-
 def test_unsupported_output_format_errors(monkeypatch, capsys, tmp_path):
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
     with pytest.raises(SystemExit) as exc:
@@ -92,80 +85,67 @@ def test_syntax_error_prints_message_and_exits(monkeypatch, capsys, tmp_path):
     assert "error:" in capsys.readouterr().err
 
 
-def test_positional_and_o_together_is_an_error(monkeypatch, tmp_path):
-    src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    with pytest.raises(SystemExit) as exc:
-        _run(monkeypatch, [str(src), str(tmp_path / "a.pptx"), "-o", str(tmp_path / "b.pptx")])
-    assert exc.value.code == 2
-
-
 # ---------------------------------------------------------------------------
-# --into (docs/spec.md SS4.2)
+# Inserting into an existing deck: OUTPUT already exists (docs/spec.md SS4.2)
 # ---------------------------------------------------------------------------
 
 
-def test_into_with_rect_and_default_output_filename(monkeypatch, capsys, tmp_path):
+def test_existing_output_is_inserted_into_and_overwritten_in_place(monkeypatch, capsys, tmp_path):
     deck = _existing_deck(tmp_path)
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--rect", "1,1,2,1"])
+    _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--rect", "1,1,2,1"])
 
-    default_out = tmp_path / "deck.pikslide.pptx"
-    assert default_out.exists()
-    assert f"wrote {default_out}" in capsys.readouterr().out
-    assert not deck.with_suffix(".pptx.bak").exists()  # the original deck is untouched
-    prs = Presentation(str(deck))
-    assert [s.name for s in prs.slides[0].shapes] == ["Figure"]  # unmodified
-
-    inserted = Presentation(str(default_out))
-    names = [s.name for s in inserted.slides[0].shapes]
-    assert names == ["Figure", "pikslide:d"]  # --id defaulted to the source file's stem
-
-
-def test_into_with_region_and_explicit_output(monkeypatch, capsys, tmp_path):
-    deck = _existing_deck(tmp_path)
-    src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    out = tmp_path / "out.pptx"
-    _run(
-        monkeypatch,
-        [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure", "--id", "arch", "-o", str(out)],
-    )
-    assert out.exists()
-    names = [s.name for s in Presentation(str(out)).slides[0].shapes]
-    assert names == ["Figure", "pikslide:arch"]  # region is an ordinary shape, so it's left in place
-
-
-def test_into_in_place_overwrites_deck(monkeypatch, capsys, tmp_path):
-    deck = _existing_deck(tmp_path)
-    src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure", "--in-place"])
-    assert not (tmp_path / "deck.pikslide.pptx").exists()
+    assert f"wrote {deck}" in capsys.readouterr().out
     names = [s.name for s in Presentation(str(deck)).slides[0].shapes]
-    assert "pikslide:d" in names
+    assert names == ["Figure", "pik:dbox 1"]  # --id defaulted to the source file's stem
 
 
-def test_into_requires_slide(monkeypatch, tmp_path):
+def test_region_is_an_ordinary_shape_left_in_place(monkeypatch, capsys, tmp_path):
+    deck = _existing_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--region", "Figure", "--id", "arch"])
+    names = [s.name for s in Presentation(str(deck)).slides[0].shapes]
+    assert names == ["Figure", "pik:archbox 1"]
+
+
+def test_prefix_flag_overrides_the_id_derived_default(monkeypatch, tmp_path):
+    deck = _existing_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--region", "Figure", "--prefix", "diagram-42:"])
+    names = [s.name for s in Presentation(str(deck)).slides[0].shapes]
+    assert names == ["Figure", "diagram-42:box 1"]
+
+
+def test_rerun_replaces_only_what_pikslide_previously_placed(monkeypatch, tmp_path):
+    deck = _existing_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--region", "Figure", "--id", "arch"])
+    # A person edits the slide by hand in between runs.
+    prs = Presentation(str(deck))
+    note = prs.slides[0].shapes.add_textbox(Inches(0), Inches(5), Inches(2), Inches(1))
+    note.name = "MyNote"
+    prs.save(str(deck))
+
+    src2 = _write(tmp_path, "d2.pik", 'box "Web2"\n')
+    _run(monkeypatch, [str(src2), str(deck), "--slide", "1", "--region", "Figure", "--id", "arch"])
+    names = [s.name for s in Presentation(str(deck)).slides[0].shapes]
+    # hand-added note untouched, no duplicate; the replacement keeps the
+    # z-order position the old diagram shape had (before MyNote).
+    assert names == ["Figure", "pik:archbox 1", "MyNote"]
+
+
+def test_slide_requires_an_existing_output_deck(monkeypatch, tmp_path):
     deck = _existing_deck(tmp_path)
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
     with pytest.raises(SystemExit) as exc:
-        _run(monkeypatch, [str(src), "--into", str(deck), "--region", "Figure"])
+        _run(monkeypatch, [str(src), str(deck), "--region", "Figure"])
     assert exc.value.code == 2
 
 
-def test_slide_without_into_is_an_error(monkeypatch, tmp_path):
+def test_slide_without_an_existing_output_is_an_error(monkeypatch, tmp_path):
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
     with pytest.raises(SystemExit) as exc:
-        _run(monkeypatch, [str(src), "--slide", "1"])
-    assert exc.value.code == 2
-
-
-def test_in_place_and_output_together_is_an_error(monkeypatch, tmp_path):
-    deck = _existing_deck(tmp_path)
-    src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    with pytest.raises(SystemExit) as exc:
-        _run(
-            monkeypatch,
-            [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure", "--in-place", "-o", str(tmp_path / "x.pptx")],
-        )
+        _run(monkeypatch, [str(src), str(tmp_path / "nope.pptx"), "--slide", "1"])
     assert exc.value.code == 2
 
 
@@ -173,38 +153,36 @@ def test_rect_must_have_four_numbers(monkeypatch, tmp_path):
     deck = _existing_deck(tmp_path)
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
     with pytest.raises(SystemExit) as exc:
-        _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--rect", "1,1,2"])
+        _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--rect", "1,1,2"])
     assert exc.value.code == 2
 
 
-def test_into_diagram_larger_than_region_is_a_clean_error(monkeypatch, capsys, tmp_path):
+def test_insert_diagram_larger_than_region_is_a_clean_error(monkeypatch, capsys, tmp_path):
     deck = _existing_deck(tmp_path)
     src = _write(tmp_path, "d.pik", "box wid 2000% ht 2000%\n")
     with pytest.raises(SystemExit) as exc:
-        _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure"])
+        _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--region", "Figure"])
     assert exc.value.code == 1
     assert "larger than its region" in capsys.readouterr().err
 
 
-def test_into_markdown_single_unnamed_block_defaults_id_to_file_stem(monkeypatch, tmp_path):
+def test_insert_markdown_single_unnamed_block_defaults_id_to_file_stem(monkeypatch, tmp_path):
     deck = _existing_deck(tmp_path)
     src = _write(tmp_path, "arch.md", '# doc\n\n```pikslide\nbox "Web"\n```\n')
-    _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure"])
-    out = tmp_path / "deck.pikslide.pptx"
-    names = [s.name for s in Presentation(str(out)).slides[0].shapes]
-    assert "pikslide:arch" in names
+    _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--region", "Figure"])
+    names = [s.name for s in Presentation(str(deck)).slides[0].shapes]
+    assert "pik:archbox 1" in names
 
 
-def test_into_markdown_named_block_defaults_id_to_block_name(monkeypatch, tmp_path):
+def test_insert_markdown_named_block_defaults_id_to_block_name(monkeypatch, tmp_path):
     deck = _existing_deck(tmp_path)
     src = _write(tmp_path, "doc.md", '# doc\n\n```pikslide architecture\nbox "Web"\n```\n')
-    _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure"])
-    out = tmp_path / "deck.pikslide.pptx"
-    names = [s.name for s in Presentation(str(out)).slides[0].shapes]
-    assert "pikslide:architecture" in names
+    _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--region", "Figure"])
+    names = [s.name for s in Presentation(str(deck)).slides[0].shapes]
+    assert "pik:architecturebox 1" in names
 
 
-def test_into_markdown_multiple_blocks_without_block_flag_is_an_error(monkeypatch, capsys, tmp_path):
+def test_insert_markdown_multiple_blocks_without_block_flag_is_an_error(monkeypatch, capsys, tmp_path):
     deck = _existing_deck(tmp_path)
     src = _write(
         tmp_path,
@@ -212,7 +190,7 @@ def test_into_markdown_multiple_blocks_without_block_flag_is_an_error(monkeypatc
         '# doc\n\n```pikslide one\nbox "A"\n```\n\n```pikslide two\nbox "B"\n```\n',
     )
     with pytest.raises(SystemExit) as exc:
-        _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure"])
+        _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--region", "Figure"])
     assert exc.value.code == 1
     assert "--block" in capsys.readouterr().err
 
@@ -263,12 +241,28 @@ def test_template_flag_starts_a_new_deck_from_that_theme(monkeypatch, capsys, tm
     assert [s.name for s in prs.slides[0].shapes] == ["box 1"]  # sample slide stripped
 
 
-def test_template_and_into_are_mutually_exclusive(monkeypatch, tmp_path):
-    deck = _existing_deck(tmp_path)
+def test_template_with_an_existing_output_still_recreates_it_fresh(monkeypatch, capsys, tmp_path):
+    # --template always starts a brand-new deck (docs/spec.md SS3.3 rule
+    # 2), even if OUTPUT already exists from an earlier run -- otherwise
+    # re-running the exact same --template command a second time would
+    # unexpectedly switch into inserting instead of just overwriting.
+    tmpl = _template_deck(tmp_path)
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    with pytest.raises(SystemExit) as exc:
-        _run(monkeypatch, [str(src), "--into", str(deck), "--template", str(deck), "--slide", "1"])
-    assert exc.value.code == 2
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--template", str(tmpl)])
+    _run(monkeypatch, [str(src), str(out), "--template", str(tmpl)])
+    prs = Presentation(str(out))
+    assert len(prs.slides) == 1
+    assert [s.name for s in prs.slides[0].shapes] == ["box 1"]  # fresh deck, not an insert
+
+
+def test_output_omitted_defaults_from_input_when_template_is_given(monkeypatch, capsys, tmp_path):
+    tmpl = _template_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    _run(monkeypatch, [str(src), "--template", str(tmpl)])
+    default_out = tmp_path / "d.pptx"
+    assert default_out.exists()
+    assert f"wrote {default_out}" in capsys.readouterr().out
 
 
 def test_settings_file_beside_template_is_found_automatically(monkeypatch, tmp_path):
@@ -300,14 +294,13 @@ def test_missing_explicit_settings_file_is_an_error(monkeypatch, tmp_path):
     assert exc.value.code == 1
 
 
-def test_settings_content_area_becomes_intos_default_region(monkeypatch, tmp_path):
+def test_settings_content_area_becomes_the_default_insert_region(monkeypatch, tmp_path):
     deck = _existing_deck(tmp_path)
     _write(tmp_path, "deck.theme.pik", "content_left = 2in\ncontent_top = 2in\ncontent_right = 6in\ncontent_bottom = 6in\n")
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1"])  # no --region/--rect at all
-    out = tmp_path / "deck.pikslide.pptx"
-    group = Presentation(str(out)).slides[0].shapes[-1]
-    assert (group.left.inches, group.top.inches) == pytest.approx((2.0, 2.0))
+    _run(monkeypatch, [str(src), str(deck), "--slide", "1"])  # no --region/--rect at all
+    shape = Presentation(str(deck)).slides[0].shapes[-1]
+    assert (shape.left.inches, shape.top.inches) == pytest.approx((2.0, 2.0))
 
 
 # ---------------------------------------------------------------------------
@@ -325,18 +318,17 @@ def test_include_path_flag_is_searched_when_not_found_beside_the_source(monkeypa
     assert out.exists()
 
 
-def test_align_center_with_into(monkeypatch, tmp_path):
+def test_align_center_when_inserting(monkeypatch, tmp_path):
     deck = _existing_deck(tmp_path)
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    _run(monkeypatch, [str(src), "--into", str(deck), "--slide", "1", "--region", "Figure", "--align", "center"])
-    out = tmp_path / "deck.pikslide.pptx"
-    group = Presentation(str(out)).slides[0].shapes[-1]
+    _run(monkeypatch, [str(src), str(deck), "--slide", "1", "--region", "Figure", "--align", "center"])
+    shape = Presentation(str(deck)).slides[0].shapes[-1]
     # Figure is (1,1,4,3); a bare box (0.75x0.5) centred within it:
-    assert group.left.inches == pytest.approx(1 + (4 - group.width.inches) / 2, abs=0.01)
-    assert group.top.inches == pytest.approx(1 + (3 - group.height.inches) / 2, abs=0.01)
+    assert shape.left.inches == pytest.approx(1 + (4 - shape.width.inches) / 2, abs=0.01)
+    assert shape.top.inches == pytest.approx(1 + (3 - shape.height.inches) / 2, abs=0.01)
 
 
-def test_align_without_into_is_an_error(monkeypatch, tmp_path):
+def test_align_without_an_existing_output_is_an_error(monkeypatch, tmp_path):
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
     with pytest.raises(SystemExit) as exc:
         _run(monkeypatch, [str(src), str(tmp_path / "d.pptx"), "--align", "center"])

@@ -28,17 +28,19 @@ ratio, path resolved and contained under the source file's own
 directory); `include "house.pik"` for shared definitions (contained the
 same way, with cycle detection); object identity — a label becomes the
 shape's real PowerPoint name (an unlabeled object gets a default `box
-1`-style name), `[ ... ]` blocks become real, nameable, nestable
-PowerPoint groups, and `behind X` places an object immediately below `X`
-in z-order — so the Selection Pane reads like the source; Markdown
+1`-style name), and `behind X` places an object immediately below `X`
+in z-order — so the Selection Pane reads like the source (`[ ... ]`
+blocks are a source-level grouping construct only, flattened rather than
+turned into a PowerPoint group when written out); Markdown
 diagram names (the `pikslide` fence tag, naming a diagram when a file has
 more than one, and selecting one with `--block`); inserting a diagram
-into an existing slide as one named, idempotently-replaceable group
-(`--into`, with `--region`/`--rect`/`--align` placing it); starting a new
+into an existing slide as a name-prefixed, idempotently-replaceable set
+of shapes (when OUTPUT already exists, with `--region`/`--rect`/`--align`
+placing it); starting a new
 standalone deck from another file's theme instead of the built-in Office
 one (`--template`); a template's settings file (`<name>.theme.pik`, or
 `--settings FILE`), for its slide layout, font, accent colors, text sizes
-and content area (`--into`'s default target region when neither
+and content area (the default target region when inserting and neither
 `--region` nor `--rect` is given); and diagnostics — `file:line:column`,
 the source line and a caret for a syntax error (naming the right file
 even inside a nested `include`), "did you mean" suggestions for an
@@ -84,19 +86,20 @@ directly — every block in the file is processed in order:
 uv run pikslide doc.md doc.pptx
 ```
 
-Insert a diagram into an existing deck instead of creating a new one
-(docs/spec.md §4.2) — into a named shape or placeholder's rectangle
-(`--region`), or an explicit one (`--rect x,y,w,h`, inches):
+If OUTPUT already exists, the diagram is inserted into it instead of a new
+deck being created (docs/spec.md §4.2) — into a named shape or placeholder's
+rectangle (`--region`), or an explicit one (`--rect x,y,w,h`, inches):
 
 ```sh
-uv run pikslide diagram.pik --into deck.pptx --slide 5 --region "Figure" -o out.pptx
+uv run pikslide diagram.pik deck.pptx --slide 5 --region "Figure"
 ```
 
-Omit `-o` to write `deck.pikslide.pptx` alongside the input deck, or pass
-`--in-place` to overwrite `deck.pptx` itself. Running the same command again
-replaces the diagram in place rather than adding a second copy. With no
-`--region`/`--rect`, a `<deck>.theme.pik` settings file's content area
-(docs/spec.md §3.8) is the default target.
+OUTPUT is always overwritten in place — there's no separate output flag.
+Running the same command again replaces the diagram in place rather than
+adding a second copy, and leaves anything else on that slide (including an
+edit made by hand since the last run) untouched. With no `--region`/`--rect`,
+a `<deck>.theme.pik` settings file's content area (docs/spec.md §3.8) is the
+default target.
 
 For a standalone preview that uses a real template's theme and fonts
 instead of the built-in Office ones:
@@ -104,6 +107,9 @@ instead of the built-in Office ones:
 ```sh
 uv run pikslide diagram.pik diagram.pptx --template corporate.potx
 ```
+
+(OUTPUT may be omitted when `--template` is given: it then defaults to
+INPUT's own path with its extension changed to `.pptx`.)
 
 `--check` parses and lays out a source without writing anything, and
 `--format json` emits diagnostics as one JSON object instead of plain

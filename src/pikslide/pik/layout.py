@@ -380,9 +380,11 @@ class LayoutResult:
     shapes: list[Shape]
     """The top-level shapes, in source (z-)order. A "block" shape (docs/
     spec.md SS3.1, ext) is *not* flattened into this list -- its own
-    children stay nested under its `.sublist`, recursively, since a
-    renderer draws a block as its own PowerPoint group. Use
-    `flatten_shapes()` for a flat view (bounding-box math, mainly)."""
+    children stay nested under its `.sublist`, recursively, mirroring the
+    source's own nesting, even though a renderer flattens it right back
+    out when drawing (pikslide never emits a PowerPoint group, docs/
+    spec.md SS3.1). Use `flatten_shapes()` for a flat view (bounding-box
+    math, mainly)."""
     bbox: tuple[float, float, float, float]
     text_sizes: dict[str, float] = field(default_factory=dict)
     """The resolved `small`/`medium`/`large` text sizes (ext, inches), so a
@@ -401,14 +403,16 @@ class LayoutResult:
     that master's own first layout if it has none"; settable only by the
     prelude or a settings file, never a program (`_eval_assignment()`
     enforces this) -- used only when making a *new* slide from a
-    `--template` (with `--into` the slide already has its layout)."""
+    `--template` (inserting into an existing deck's slide, that slide
+    already has its layout)."""
     content_area: tuple[float, float, float, float] | None = None
     """(left, top, width, height) in inches, from a settings file's
     `content_left`/`content_top`/`content_right`/`content_bottom` (docs/
-    spec.md SS3.8) -- `--into`'s default target region (SS4.2) when
-    neither `--region` nor `--rect` is given. `None` unless a settings
-    file defines all four (there is no prelude default for them: without
-    a template, there is no "the slide" to place a default region on)."""
+    spec.md SS3.8) -- the default target region (SS4.2) when inserting
+    into an existing deck and neither `--region` nor `--rect` is given.
+    `None` unless a settings file defines all four (there is no prelude
+    default for them: without a template, there is no "the slide" to
+    place a default region on)."""
 
 
 # ---------------------------------------------------------------------------
@@ -1560,11 +1564,12 @@ def flatten_shapes(shapes: list[Shape]) -> list[Shape]:
     """Every drawable shape in `shapes`, recursively -- a "block" shape
     (docs/spec.md SS3.1, ext) contributes its `sublist`'s own drawable
     shapes in its place, not itself, and a `move`/`point` pseudo-object
-    (never drawn -- `NOT_RENDERED`) is dropped. `LayoutResult.shapes` is
-    the *tree* (a block shape and its `sublist` intact), since a renderer
-    draws a block as a real nested group (SS3.1: "Blocks are groups");
-    this is for callers that just need every eventual on-slide shape
-    regardless of nesting -- bounding-box math, mainly."""
+    (never drawn -- `NOT_RENDERED`) is dropped. `LayoutResult.shapes` keeps
+    the *tree* (a block shape and its `sublist` intact), mirroring the
+    source's own nesting even though a renderer flattens it back out when
+    drawing (SS3.1: blocks are a source-level grouping construct, never a
+    PowerPoint group); this is for callers that just need every eventual
+    on-slide shape regardless of nesting -- bounding-box math, mainly."""
     out: list[Shape] = []
     for shape in shapes:
         if shape.kind == "block":

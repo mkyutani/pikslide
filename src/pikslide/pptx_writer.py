@@ -268,15 +268,29 @@ class _Transform:
 
 
 class _LocalTransform(_Transform):
-    """`_Transform` for a *group's* own local coordinate space
-    (docs/spec.md SS4.2), not a whole slide: no minimum-size clamp (that's
-    a presentation-wide requirement, not a region's) and no margin (the
-    region-fit check in `insert_into_pptx()` already guarantees the
-    diagram fits with no need for extra room)."""
+    """`_Transform` anchored at 0,0 instead of a whole slide's own margin:
+    no minimum-size clamp (that's a presentation-wide requirement) and no
+    margin. `_PlacedTransform`, below, is the version actually used by
+    `insert_into_pptx()`, anchored at the target region's own origin
+    instead of 0,0."""
 
     def __init__(self, bbox: tuple[float, float, float, float]):
         self.x0, self.y0, self.x1, self.y1 = bbox
         self.margin_x = self.margin_y = 0.0
+
+
+class _PlacedTransform(_LocalTransform):
+    """`_LocalTransform`, anchored at `origin` (left, top, in slide
+    inches) instead of 0,0 -- `insert_into_pptx()`'s own transform, so
+    each shape lands directly at the position a wrapping group would
+    have put it, with no group actually involved (docs/spec.md SS4.2,
+    ext: pikslide never creates a PowerPoint group anywhere -- see
+    `_add_all_shapes` -- since PowerPoint's own group-resize math was
+    found to silently distort a group's *children*'s sizes)."""
+
+    def __init__(self, bbox: tuple[float, float, float, float], origin: tuple[float, float]):
+        super().__init__(bbox)
+        self.margin_x, self.margin_y = origin
 
 
 def _set_arrowheads(line, larrow: bool, rarrow: bool) -> None:
@@ -398,7 +412,7 @@ def _attach_svg_extension(picture, svg_path: str) -> None:
     picture._element.blipFill.blip.append(parse_xml(ext_xml))
 
 
-def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
+def _add_image_shape(container, shape: Shape, tf: _Transform, name_prefix: str = "") -> None:
     """`image` (docs/spec.md SS3.5). A Picture has no text_frame of its own
     in python-pptx (checked, like a connector), so any text on it is drawn
     as a separate textbox, centred over it -- one box, not per-string
@@ -422,7 +436,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
     else:
         picture = container.shapes.add_picture(shape.image_path, Inches(left), Inches(top), width=Inches(w), height=Inches(h))
     if shape.name:
-        picture.name = shape.name
+        picture.name = f"{name_prefix}{shape.name}"
     if shape.alt_text:
         # python-pptx 1.0.2 has no real `alt_text` property (checked: it
         # silently becomes a plain, never-saved instance attribute --
@@ -452,7 +466,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
         _apply_color(run.font.color, shape.color or Color(rgb=0))
 
 
-def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
+def _add_block_shape(container, shape: Shape, tf: _Transform, name_prefix: str = "") -> None:
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
     autoshape_type = _AUTOSHAPE.get(shape.kind, MSO_SHAPE.RECTANGLE)
@@ -467,7 +481,7 @@ def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
         autoshape_type = MSO_SHAPE.ROUNDED_RECTANGLE
     pptx_shape = container.shapes.add_shape(autoshape_type, Inches(left), Inches(top), Inches(w), Inches(h))
     if shape.name:
-        pptx_shape.name = shape.name
+        pptx_shape.name = f"{name_prefix}{shape.name}"
     if autoshape_type == MSO_SHAPE.ROUNDED_RECTANGLE and shape.rad > 0:
         # `adjustments[0]` is the corner radius as a fraction of min(w, h),
         # not an absolute length. `rad == 0` (no explicit `rad` attribute,
@@ -490,7 +504,7 @@ def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
     _apply_text(pptx_shape, shape)
 
 
-def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
+def _add_line_shape(container, shape: Shape, tf: _Transform, name_prefix: str = "") -> None:
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
@@ -498,7 +512,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
         (x1, y1), (x2, y2) = points
         connector = container.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
         if shape.name:
-            connector.name = shape.name
+            connector.name = f"{name_prefix}{shape.name}"
         _apply_line_style(connector.line, shape)
         _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
     else:
@@ -507,12 +521,12 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
         builder.add_line_segments([(Inches(x), Inches(y)) for x, y in points[1:]], close=shape.closed)
         freeform = builder.convert_to_shape()
         if shape.name:
-            freeform.name = shape.name
+            freeform.name = f"{name_prefix}{shape.name}"
         freeform.fill.background()
         _apply_line_style(freeform.line, shape)
         _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
 
-    _add_line_text(container, shape, tf)
+    _add_line_text(container, shape, tf, name_prefix)
 
 
 def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, float], str, list[str]]]:
@@ -540,7 +554,7 @@ def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, flo
     return out
 
 
-def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
+def _add_line_text(container, shape: Shape, tf: _Transform, name_prefix: str = "") -> None:
     """A connector/freeform shape has no text_frame in python-pptx, so a
     line's text (e.g. an arrow's label) is rendered as small floating
     textboxes instead, placed above/on/below the line per
@@ -550,7 +564,7 @@ def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
         left, top = tf.point((x0, y1))
         textbox = container.shapes.add_textbox(Inches(left), Inches(top), Inches(x1 - x0), Inches(y1 - y0))
         if shape.name:
-            textbox.name = f"{shape.name} text {i}"
+            textbox.name = f"{name_prefix}{shape.name} text {i}"
         text_frame = textbox.text_frame
         text_frame.word_wrap = False
         text_frame.margin_left = text_frame.margin_right = 0
@@ -592,8 +606,9 @@ def find_settings_file(target_path: str, explicit: str | None = None) -> str | N
     `explicit` (`--settings FILE`) if given -- an error if it doesn't
     exist, and nothing is then looked for beside `target_path` -- else
     `<name>.theme.pik` beside `target_path`, or `None` if there isn't
-    one. `target_path` is whatever `--template`/`--into` names; the path
-    rules of SS3.6 (`include`'s containment) do not apply to either case,
+    one. `target_path` is whatever `--template` names, or the OUTPUT deck
+    a diagram is being inserted into; the path rules of SS3.6 (`include`'s
+    containment) do not apply to either case,
     since this is the tool finding its own file, or the caller naming one
     directly, never a `.pik` naming one itself."""
     if explicit is not None:
@@ -727,7 +742,7 @@ def write_pptx_from_template(
     made from the *right* slide layout (`layout_name`, SS3.8) of
     `template_path` itself, so its symbols resolve against that
     template's own theme once the file is reopened, the same way
-    `insert_into_pptx()`'s do against an `--into` deck's.
+    `insert_into_pptx()`'s do against the deck it inserts into.
 
     The output slide is still sized to the diagram, not the template's
     own slide size (SS4.1): only the theme (via the resolved layout's
@@ -748,54 +763,44 @@ def write_pptx_from_template(
             os.remove(tmp_path)
 
 
-def _add_all_shapes(container, shapes: list[Shape], tf: _Transform) -> None:
+def _add_all_shapes(container, shapes: list[Shape], tf: _Transform, name_prefix: str = "") -> None:
     """Draw every shape in `shapes` into `container` (a Slide, for
-    `write_pptx()`, or a group, for `insert_into_pptx()` or a nested
-    block, below -- all expose the same `.shapes.add_X()` API, checked,
-    so this needs no branching on which one it got).
+    `write_pptx()`, `write_pptx_from_template()`, or `insert_into_pptx()`
+    alike -- all expose the same `.shapes.add_X()` API, checked, so this
+    needs no branching on which one it got).
 
-    A "block" shape (docs/spec.md SS3.1, ext: "Blocks are groups") becomes
-    a nested PowerPoint group of its own -- recursively, so nesting is
-    preserved -- named like any other shape (`_layout_statements()` has
-    already given every shape, block or not, a name: its label, or a
-    default "<class> <n>"). Its children are positioned with a fresh
-    `_LocalTransform` scoped to the block's own bounding box, since they
+    pikslide never creates a PowerPoint group anywhere in its own output
+    (ext): PowerPoint's own group-resize math was found to silently
+    distort a group's *children*'s sizes. A "block" shape (docs/spec.md
+    SS3.1: "Blocks are groups" at the *pik* language level) is therefore
+    flattened here -- recursed straight into the same `container`/`tf`,
+    not nested inside a group of its own -- so its children land as
+    ordinary, individually-selectable top-level shapes, each still
+    keeping its own name (`_layout_statements()` has already given every
+    shape, block or not, one: its label, or a default "<class> <n>"); the
+    block shape itself has no PowerPoint shape representing it at all. No
+    local/nested transform is needed either: a block's children already
     sit in the *same* global pik coordinate space as everything else
-    (`_translate()`, at layout time, already placed them there), not one
-    relative to the block -- exactly the same idea as `insert_into_pptx()`
-    scoping one to the whole diagram's bbox, just nested here."""
+    (`_translate()`, at layout time, already placed them there), so `tf`
+    -- the one already in effect for this whole call -- maps them
+    correctly without adjustment.
+
+    `name_prefix`, non-empty only for `insert_into_pptx()` (docs/spec.md
+    SS4.2, ext), is prepended to every shape's own name there, so a later
+    re-run can find and remove exactly (and only) what a previous run
+    under the same prefix placed, leaving anything else on the slide --
+    including an edit a person made by hand since -- untouched."""
     for shape in shapes:
         if shape.kind == "block":
-            group = container.shapes.add_group_shape()
-            if shape.name:
-                group.name = shape.name
-            # Add children first: a python-pptx group's own off/ext (and
-            # chOff/chExt, its children's local coordinate frame) are
-            # recalculated from its actual contents on every add (checked
-            # against python-pptx's own source), so setting .left/.top
-            # *before* any children exist just gets overwritten by that.
-            _add_all_shapes(group, shape.sublist, _LocalTransform(shape.bbox))
-            # Reposition by the *delta* to where this block belongs in the
-            # parent's frame, not a replacement: after the above, off ==
-            # chOff (still), so a plain assignment would silently assume
-            # the block's own children never extend past its geometric
-            # bbox's top-left corner -- true for shapes, but not always for
-            # a line's floating label (_LocalTransform(shape.bbox), unlike
-            # the top-level _Transform via _content_bbox(), does not pad
-            # for that). Left untouched, .width/.height already match the
-            # real content (including any such overhang), so no separate
-            # floor/replacement is needed for them either.
-            target_left, target_top, _w, _h = tf.rect(shape)
-            group.left = Inches(target_left) + group.left
-            group.top = Inches(target_top) + group.top
+            _add_all_shapes(container, shape.sublist, tf, name_prefix)
         elif shape.kind in NOT_RENDERED:
             continue
         elif shape.kind in ("line", "arrow", "spline", "arc"):
-            _add_line_shape(container, shape, tf)
+            _add_line_shape(container, shape, tf, name_prefix)
         elif shape.kind == "image":
-            _add_image_shape(container, shape, tf)
+            _add_image_shape(container, shape, tf, name_prefix)
         else:
-            _add_block_shape(container, shape, tf)
+            _add_block_shape(container, shape, tf, name_prefix)
 
 
 # ---------------------------------------------------------------------------
@@ -818,18 +823,35 @@ def _shape_rect_inches(shape) -> tuple[float, float, float, float]:
     return shape.left.inches, shape.top.inches, shape.width.inches, shape.height.inches
 
 
+def _shapes_union_rect(shapes: list) -> tuple[float, float, float, float]:
+    """(left, top, width, height) in inches of the smallest rectangle
+    covering every shape in `shapes` (non-empty) -- used in place of a
+    single group's own rect now that a diagram's shapes are never
+    wrapped in one (see `_add_all_shapes`)."""
+    lefts, tops, rights, bottoms = zip(
+        *(
+            (sh.left.inches, sh.top.inches, sh.left.inches + sh.width.inches, sh.top.inches + sh.height.inches)
+            for sh in shapes
+        )
+    )
+    left, top = min(lefts), min(tops)
+    return left, top, max(rights) - left, max(bottoms) - top
+
+
 def _resolve_region(
     slide,
     region: str | None,
     rect: tuple[float, float, float, float] | None,
-    group_name: str,
+    previous: list,
     content_area: tuple[float, float, float, float] | None,
 ):
     """Return ((left, top, width, height) in inches, the shape to delete
     afterward if it was an empty placeholder or else None) for
     `--region`/`--rect` (docs/spec.md SS4.2). With neither, `content_area`
     (a settings file's `content_left`/etc., SS3.8) is the default target;
-    with none of the three, an error."""
+    with none of the three, an error. `previous` is whatever shapes a
+    prior run of `insert_into_pptx()` under the same prefix placed on
+    this slide (possibly none), used as a fallback below."""
     if region is not None and rect is not None:
         raise LayoutError("--region and --rect are mutually exclusive")
     if region is not None:
@@ -837,12 +859,11 @@ def _resolve_region(
         if shape is None:
             # Idempotent re-runs (SS4.2): the *first* run already deleted
             # an empty placeholder used as the region, so it can't be
-            # found by name a second time. Fall back to the group this
-            # tool placed there before, if there is one -- its own
-            # position is exactly "where the diagram lives now".
-            existing_group = _find_shape_by_name(slide, group_name)
-            if existing_group is not None:
-                return _shape_rect_inches(existing_group), None
+            # found by name a second time. Fall back to the extent of
+            # whatever this tool placed there before, if anything -- its
+            # own union rect is exactly "where the diagram lives now".
+            if previous:
+                return _shapes_union_rect(previous), None
             names = [sh.name for sh in slide.shapes if sh.name]
             raise LayoutError(f"no shape named {region!r} on this slide{_did_you_mean(region, names)}")
         to_delete = shape if _is_empty_placeholder(shape) else None
@@ -885,38 +906,51 @@ def insert_into_pptx(
     rect: tuple[float, float, float, float] | None = None,
     group_id: str = "diagram",
     align: str = "top-left",
+    prefix: str | None = None,
 ) -> Presentation:
     """Insert `result` into slide `slide_no` (1-based) of the deck at
-    `deck_path`, as one top-level group named `pikslide:<group_id>`
-    (docs/spec.md SS4.2). Returns the modified `Presentation` -- the
-    caller saves it, to a copy or in place; unlike `write_pptx()`, this
-    doesn't save directly, since there's an existing file whose path (a
-    copy, or the same one) is the caller's call, not this function's.
+    `deck_path` (docs/spec.md SS4.2). Returns the modified `Presentation`
+    -- the caller saves it, to a copy or in place; unlike `write_pptx()`,
+    this doesn't save directly, since there's an existing file whose path
+    (a copy, or the same one) is the caller's call, not this function's.
+
+    Every shape is added directly to the slide, named `<prefix><shape's
+    own name>` -- never wrapped in a PowerPoint group (ext: see
+    `_add_all_shapes`). `prefix` defaults to `pik:<group_id>`; pass it
+    explicitly (`--prefix`) to override that outright, when `group_id`
+    alone (e.g. a short, ordinary-looking id like "arch") would risk
+    colliding with a real shape name already on the slide.
 
     A diagram is never scaled (SS4.2): one larger than its region is an
     error, not silently shrunk. A smaller one sits at the region's
     top-left by default; `align` (one of `ALIGN_CHOICES`) overrides.
-    Running this again against the same `deck_path`/`slide_no`/`group_id`
-    replaces the group in place, keeping its z-order position, rather
-    than adding a second copy.
+    Running this again against the same `deck_path`/`slide_no`/`prefix`
+    finds every shape whose name starts with `prefix`, removes exactly
+    those (keeping their former z-order position for the replacements),
+    and adds the new ones -- so a second run replaces what pikslide
+    itself placed, rather than adding a second copy, while anything else
+    on the slide (including an edit a person made by hand since the last
+    run) is left completely untouched.
 
     With neither `region` nor `rect`, `result.content_area` (a settings
     file's content area, SS3.8) is the default target.
 
-    Text is drawn with `result.typeface` (SS3.3): empty, the common case,
-    means a symbolic theme font reference (`+mn-lt` etc., see
-    `_apply_run_font`) rather than a literal name -- which needs no theme
-    file of its own to be read here at all, since the reference resolves
-    against whatever theme `deck_path`'s own slide master already uses
-    once the file is back open in PowerPoint (SS3.3 rule 1)."""
+    Text is drawn with each shape's own `.typeface`/`.text_sizes`
+    (docs/spec.md SS3.3, ext): empty typeface, the common case, means a
+    symbolic theme font reference (`+mn-lt` etc., see `_apply_run_font`)
+    rather than a literal name -- which needs no theme file of its own to
+    be read here at all, since the reference resolves against whatever
+    theme `deck_path`'s own slide master already uses once the file is
+    back open in PowerPoint (SS3.3 rule 1)."""
     prs = Presentation(deck_path)
     if not 1 <= slide_no <= len(prs.slides):
         raise LayoutError(f"--slide {slide_no} is out of range: this deck has {len(prs.slides)} slide(s)")
     slide = prs.slides[slide_no - 1]
-    group_name = f"pikslide:{group_id}"
+    name_prefix = prefix if prefix is not None else f"pik:{group_id}"
+    previous = [sh for sh in slide.shapes if sh.name and sh.name.startswith(name_prefix)]
 
     (region_left, region_top, region_w, region_h), to_delete = _resolve_region(
-        slide, region, rect, group_name, result.content_area
+        slide, region, rect, previous, result.content_area
     )
 
     bbox = _content_bbox(result)
@@ -930,21 +964,22 @@ def insert_into_pptx(
     dx, dy = _align_offset(align, region_w, region_h, diagram_w, diagram_h)
 
     spTree = slide.shapes._spTree
-    existing_group = _find_shape_by_name(slide, group_name)
     insert_index = None
-    if existing_group is not None:
-        insert_index = list(spTree).index(existing_group._element)
-        spTree.remove(existing_group._element)
+    if previous:
+        insert_index = min(list(spTree).index(sh._element) for sh in previous)
+        for sh in previous:
+            spTree.remove(sh._element)
 
-    group = slide.shapes.add_group_shape()
-    group.name = group_name
-    _add_all_shapes(group, result.shapes, _LocalTransform(bbox))
-    group.left, group.top = Inches(region_left + dx), Inches(region_top + dy)
-    group.width, group.height = Inches(max(diagram_w, 0.01)), Inches(max(diagram_h, 0.01))
+    before = set(spTree)
+    tf = _PlacedTransform(bbox, (region_left + dx, region_top + dy))
+    _add_all_shapes(slide, result.shapes, tf, name_prefix)
+    added = [el for el in spTree if el not in before]
 
     if insert_index is not None:
-        spTree.remove(group._element)
-        spTree.insert(insert_index, group._element)
+        for el in added:
+            spTree.remove(el)
+        for offset, el in enumerate(added):
+            spTree.insert(insert_index + offset, el)
 
     if to_delete is not None:
         spTree.remove(to_delete._element)

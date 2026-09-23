@@ -245,17 +245,19 @@ def test_line_label_textbox_naming(tmp_path: pathlib.Path):
     assert boxes["Top"] != boxes["Bottom"]
 
 
-def test_block_becomes_a_named_powerpoint_group(tmp_path: pathlib.Path):
+def test_block_is_flattened_not_grouped(tmp_path: pathlib.Path):
+    # A "block" ([ ... ], docs/spec.md SS3.1) is never rendered as a
+    # PowerPoint group (ext: PowerPoint's own group-resize math was found
+    # to silently distort a group's children's sizes) -- its children
+    # become ordinary, individually-selectable top-level shapes instead;
+    # the block's own label ("Outer") has no PowerPoint shape of its own.
     prs = render('Outer: [ A: box "x"; B: box "y" ]\n', tmp_path)
     top = prs.slides[0].shapes
-    assert len(top) == 1
-    group = top[0]
-    assert group.shape_type == MSO_SHAPE_TYPE.GROUP
-    assert group.name == "Outer"
-    assert [s.name for s in group.shapes] == ["A", "B"]
+    assert [s.name for s in top] == ["A", "B"]
+    assert all(s.shape_type != MSO_SHAPE_TYPE.GROUP for s in top)
 
 
-def test_nested_blocks_become_nested_groups_positioned_correctly(tmp_path: pathlib.Path):
+def test_nested_blocks_are_flattened_with_correct_positions(tmp_path: pathlib.Path):
     prs = render(
         'box "before"\n'
         'Outer: [\n'
@@ -264,16 +266,18 @@ def test_nested_blocks_become_nested_groups_positioned_correctly(tmp_path: pathl
         ']\n',
         tmp_path,
     )
-    before, outer = prs.slides[0].shapes
-    assert outer.name == "Outer"
-    a, inner = outer.shapes
-    assert inner.shape_type == MSO_SHAPE_TYPE.GROUP
-    assert inner.name == "Inner"
-    # Outer starts exactly where "before" ends -- proves the block's
-    # position was translated into the *parent* frame, not left at its
-    # post-recalculate_extents() local-frame position (checked: this was
-    # wrong -- (0, 0) -- before repositioning by delta, not replacement).
-    assert outer.left.inches == pytest.approx(before.left.inches + before.width.inches, abs=0.01)
+    top = prs.slides[0].shapes
+    # No group anywhere, at any nesting depth -- every shape, however
+    # deeply nested in the source, ends up a flat, top-level sibling.
+    assert [s.name for s in top] == ["box 1", "A", "D"]
+    assert all(s.shape_type != MSO_SHAPE_TYPE.GROUP for s in top)
+    before, a, d = top
+    # "a"/"d" sit where the layout placed them in the shared, global pik
+    # coordinate space -- to the right of "before", not at some
+    # block-local origin (there is no local frame to translate out of
+    # anymore, since there's no group to have positioned them relative to).
+    assert a.left.inches > before.left.inches + before.width.inches - 0.01
+    assert d.left.inches > before.left.inches + before.width.inches - 0.01
 
 
 def test_behind_places_the_shape_earlier_in_z_order(tmp_path: pathlib.Path):
@@ -436,21 +440,32 @@ def test_insert_into_an_empty_placeholder_region(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     prs = _insert('box "Web"\n', deck, slide_no=1, region="Content Placeholder 2", group_id="arch")
     names = [s.name for s in prs.slides[0].shapes]
-    assert names == ["Title 1", "Figure", "pikslide:arch"]  # placeholder gone, title/other shapes untouched
+    assert names == ["Title 1", "Figure", "pik:archbox 1"]  # placeholder gone, title/other shapes untouched
 
 
 def test_insert_into_an_ordinary_named_shape_is_not_deleted(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     prs = _insert('box "Web"\n', deck, slide_no=1, region="Figure", group_id="arch")
     names = [s.name for s in prs.slides[0].shapes]
-    assert names == ["Title 1", "Content Placeholder 2", "Figure", "pikslide:arch"]
+    assert names == ["Title 1", "Content Placeholder 2", "Figure", "pik:archbox 1"]
+
+
+def test_insert_never_creates_a_powerpoint_group(tmp_path: pathlib.Path):
+    # ext: PowerPoint's own group-resize math was found to silently
+    # distort a group's children's sizes, so pikslide never wraps an
+    # inserted diagram in one -- each shape lands directly on the slide.
+    deck = _existing_deck(tmp_path)
+    prs = _insert('Outer: [ A: box "x"; B: box "y" ]\n', deck, slide_no=1, region="Content Placeholder 2", group_id="arch")
+    assert all(s.shape_type != MSO_SHAPE_TYPE.GROUP for s in prs.slides[0].shapes)
+    names = [s.name for s in prs.slides[0].shapes]
+    assert names == ["Title 1", "Figure", "pik:archA", "pik:archB"]
 
 
 def test_insert_with_explicit_rect(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     prs = _insert('box "Web"\n', deck, slide_no=1, rect=(0.5, 0.5, 3, 3), group_id="arch")
-    group = prs.slides[0].shapes[-1]
-    assert (group.left.inches, group.top.inches) == pytest.approx((0.5, 0.5))
+    shape = prs.slides[0].shapes[-1]
+    assert (shape.left.inches, shape.top.inches) == pytest.approx((0.5, 0.5))
 
 
 def _insert_with_settings(text: str, deck: pathlib.Path, settings_text: str, **kwargs):
@@ -465,33 +480,33 @@ def test_content_area_is_the_default_region(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     settings = "content_left = 1in\ncontent_top = 1in\ncontent_right = 4in\ncontent_bottom = 4in\n"
     prs = _insert_with_settings('box "Web"\n', deck, settings, slide_no=1, group_id="arch")
-    group = prs.slides[0].shapes[-1]
-    assert (group.left.inches, group.top.inches) == pytest.approx((1.0, 1.0))
+    shape = prs.slides[0].shapes[-1]
+    assert (shape.left.inches, shape.top.inches) == pytest.approx((1.0, 1.0))
 
 
 def test_explicit_region_overrides_the_content_area(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     settings = "content_left = 1in\ncontent_top = 1in\ncontent_right = 4in\ncontent_bottom = 4in\n"
     prs = _insert_with_settings('box "Web"\n', deck, settings, slide_no=1, region="Figure", group_id="arch")
-    group = prs.slides[0].shapes[-1]
-    assert (group.left.inches, group.top.inches) == pytest.approx((6.0, 5.0))  # Figure's own position
+    shape = prs.slides[0].shapes[-1]
+    assert (shape.left.inches, shape.top.inches) == pytest.approx((6.0, 5.0))  # Figure's own position
 
 
 def test_align_center_places_a_smaller_diagram_in_the_middle_of_its_region(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     prs = _insert('box "Web"\n', deck, slide_no=1, rect=(0.0, 0.0, 4.0, 4.0), group_id="arch", align="center")
-    group = prs.slides[0].shapes[-1]
-    expected_left = (4.0 - group.width.inches) / 2
-    expected_top = (4.0 - group.height.inches) / 2
-    assert (group.left.inches, group.top.inches) == pytest.approx((expected_left, expected_top), abs=0.01)
+    shape = prs.slides[0].shapes[-1]
+    expected_left = (4.0 - shape.width.inches) / 2
+    expected_top = (4.0 - shape.height.inches) / 2
+    assert (shape.left.inches, shape.top.inches) == pytest.approx((expected_left, expected_top), abs=0.01)
 
 
 def test_align_bottom_right(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     prs = _insert('box "Web"\n', deck, slide_no=1, rect=(0.0, 0.0, 4.0, 4.0), group_id="arch", align="bottom-right")
-    group = prs.slides[0].shapes[-1]
-    assert group.left.inches == pytest.approx(4.0 - group.width.inches, abs=0.01)
-    assert group.top.inches == pytest.approx(4.0 - group.height.inches, abs=0.01)
+    shape = prs.slides[0].shapes[-1]
+    assert shape.left.inches == pytest.approx(4.0 - shape.width.inches, abs=0.01)
+    assert shape.top.inches == pytest.approx(4.0 - shape.height.inches, abs=0.01)
 
 
 def test_unknown_align_is_an_error(tmp_path: pathlib.Path):
@@ -500,33 +515,83 @@ def test_unknown_align_is_an_error(tmp_path: pathlib.Path):
         _insert('box "Web"\n', deck, slide_no=1, rect=(0, 0, 4, 4), align="upper-middle")
 
 
+def test_default_prefix_is_pik_plus_the_id(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    prs = _insert('box "Web"\n', deck, slide_no=1, region="Figure", group_id="arch")
+    assert prs.slides[0].shapes[-1].name == "pik:archbox 1"
+
+
+def test_explicit_prefix_overrides_the_id_derived_default(tmp_path: pathlib.Path):
+    # "arch" alone would be too generic -- risks colliding with a real,
+    # unrelated shape name already on the slide (docs/spec.md SS4.2, ext).
+    deck = _existing_deck(tmp_path)
+    prs = _insert('box "Web"\n', deck, slide_no=1, region="Figure", group_id="arch", prefix="diagram-42:")
+    assert prs.slides[0].shapes[-1].name == "diagram-42:box 1"
+
+
 def test_insert_is_idempotent(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     out1 = tmp_path / "out1.pptx"
     _insert('box "Web"\n', deck, slide_no=1, region="Content Placeholder 2", group_id="arch").save(str(out1))
     prs = _insert('box "Web2"\n', out1, slide_no=1, region="Content Placeholder 2", group_id="arch")
-    # No duplicate group; the same one was found (by falling back to the
-    # existing pikslide group once the placeholder it replaced is gone)
-    # and replaced with the new content, at the same z-order position.
+    # No duplicate shape; the prior one was found (by name prefix) and
+    # replaced with the new content, at the same z-order position.
     names = [s.name for s in prs.slides[0].shapes]
-    assert names == ["Title 1", "Figure", "pikslide:arch"]
-    inner = prs.slides[0].shapes[-1].shapes[0]
-    assert inner.text_frame.text == "Web2"
+    assert names == ["Title 1", "Figure", "pik:archbox 1"]
+    assert prs.slides[0].shapes[-1].text_frame.text == "Web2"
+
+
+def test_insert_does_not_touch_content_added_by_hand_since_the_last_run(tmp_path: pathlib.Path):
+    # A person may edit the slide pikslide created (add a title, a note,
+    # another shape) between runs; re-running must only replace what this
+    # tool itself previously placed, never anything else on the slide.
+    deck = _existing_deck(tmp_path)
+    out1 = tmp_path / "out1.pptx"
+    _insert('box "Web"\n', deck, slide_no=1, region="Content Placeholder 2", group_id="arch").save(str(out1))
+    prs1 = Presentation(str(out1))
+    prs1.slides[0].shapes.title.text = "Architecture"
+    note = prs1.slides[0].shapes.add_textbox(Inches(0), Inches(6), Inches(2), Inches(1))
+    note.name = "MyNote"
+    note.text_frame.text = "hand-written note"
+    prs1.save(str(out1))
+
+    prs2 = _insert('box "Web2"\n', out1, slide_no=1, region="Content Placeholder 2", group_id="arch")
+    slide = prs2.slides[0]
+    assert slide.shapes.title.text == "Architecture"
+    note2 = next(s for s in slide.shapes if s.name == "MyNote")
+    assert note2.text_frame.text == "hand-written note"
+    diagram = next(s for s in slide.shapes if s.name.startswith("pik:arch"))
+    assert diagram.text_frame.text == "Web2"
+
+
+def test_insert_replaces_every_shape_from_a_multi_shape_diagram(tmp_path: pathlib.Path):
+    deck = _existing_deck(tmp_path)
+    out1 = tmp_path / "out1.pptx"
+    _insert('A: box "a"\nB: box "b"\n', deck, slide_no=1, rect=(0.5, 0.5, 4, 4), group_id="arch").save(str(out1))
+    names1 = [s.name for s in Presentation(str(out1)).slides[0].shapes]
+    assert names1[-2:] == ["pik:archA", "pik:archB"]
+
+    prs2 = _insert('C: box "c"\n', out1, slide_no=1, rect=(0.5, 0.5, 4, 4), group_id="arch")
+    names2 = [s.name for s in prs2.slides[0].shapes]
+    # Both prior shapes are gone; exactly the new one takes their place.
+    assert "pik:archA" not in names2
+    assert "pik:archB" not in names2
+    assert names2[-1] == "pik:archC"
 
 
 def test_insert_preserves_z_order_position_on_replace(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     out1 = tmp_path / "out1.pptx"
     _insert('box "Web"\n', deck, slide_no=1, rect=(0.5, 0.5, 3, 3), group_id="arch").save(str(out1))
-    # Add a shape *after* the diagram group, so the group is no longer last.
+    # Add a shape *after* the diagram shape, so it's no longer last.
     prs1 = Presentation(str(out1))
     marker = prs1.slides[0].shapes.add_textbox(Inches(0), Inches(0), Inches(1), Inches(1))
     marker.name = "AfterMarker"
     prs1.save(str(out1))
     prs2 = _insert('box "Web2"\n', out1, slide_no=1, rect=(0.5, 0.5, 3, 3), group_id="arch")
     names = [s.name for s in prs2.slides[0].shapes]
-    # the replaced group stays *before* AfterMarker, matching where it was.
-    assert names.index("pikslide:arch") < names.index("AfterMarker")
+    # the replaced shape stays *before* AfterMarker, matching where it was.
+    assert names.index("pik:archbox 1") < names.index("AfterMarker")
 
 
 def test_diagram_larger_than_region_is_an_error(tmp_path: pathlib.Path):

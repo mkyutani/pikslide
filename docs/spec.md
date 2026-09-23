@@ -165,8 +165,8 @@ box "Outline"  fill bg1 color text1
 on the command line; the language never names a theme file.
 
 1. `--template FILE` (`.pptx` or `.potx`): the theme of the master that owns
-   the slide layout its settings file names with `layout` (§3.8), or of its
-   first master when there is none.
+   the slide layout named by `--layout` or its settings file's `layout`
+   (§3.8), or of its first master when there is none.
 2. Otherwise the built-in Office theme, with a warning that colors and
    fonts are stand-ins.
 
@@ -413,6 +413,9 @@ warning       = accent5    # any further names the template wants
   found wins. A name that no layout has is an error that lists the names it
   does have. `layout` can be set only in a settings file: assigning it in a
   program is an error, because a `.pik` never chooses the deck's structure.
+  The caller can also name it with `--layout NAME`, which overrides the
+  settings file's (so a script choosing a layout per template needs no
+  settings file written for it); it needs `--template`.
 - **Strings.** A variable can hold a string, written as in text
   (`typeface = "…"`). A string is not a number and cannot be used in an
   expression; in v1 strings serve settings only, and a string variable is not
@@ -428,7 +431,7 @@ A `.pik` never names a deck, slide or theme file. Those come from the command
 line or the caller, so the same diagram can be reused in any deck.
 
 ```sh
-pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--settings FILE] [--png [PATH]] [--pdf [PATH]] [--renderer R]
+pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--layout NAME] [--settings FILE] [--png [PATH]] [--pdf [PATH]] [--renderer R]
 ```
 
 `OUTPUT` omitted, the parsed tree is dumped instead of writing anything

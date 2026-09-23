@@ -98,7 +98,10 @@ uv run pikslide diagram.pik diagram.pptx --template corporate.potx
 ```
 
 (OUTPUT may be omitted when `--template` is given: it then defaults to
-INPUT's own path with its extension changed to `.pptx`.)
+INPUT's own path with its extension changed to `.pptx`.) The new slide is
+made from the template's first blank layout, unless its settings file
+names one with `layout`, or `--layout NAME` does (which wins over the
+settings file).
 
 `--check` parses and lays out a source without writing anything, and
 `--format json` emits diagnostics as one JSON object instead of plain

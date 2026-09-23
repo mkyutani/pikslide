@@ -143,6 +143,39 @@ def test_explicit_settings_flag_overrides_the_beside_file(monkeypatch, tmp_path)
     assert run.font.name == "Georgia"
 
 
+def test_layout_flag_picks_the_slide_layout(monkeypatch, tmp_path):
+    tmpl = _template_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--template", str(tmpl), "--layout", "Title Only"])
+    assert Presentation(str(out)).slides[0].slide_layout.name == "Title Only"
+
+
+def test_layout_flag_overrides_the_settings_file(monkeypatch, tmp_path):
+    tmpl = _template_deck(tmp_path)
+    _write(tmp_path, "tmpl.theme.pik", 'layout = "Title and Content"\n')
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    out = tmp_path / "d.pptx"
+    _run(monkeypatch, [str(src), str(out), "--template", str(tmpl), "--layout", "Title Only"])
+    assert Presentation(str(out)).slides[0].slide_layout.name == "Title Only"
+
+
+def test_unknown_layout_flag_lists_the_known_ones(monkeypatch, capsys, tmp_path):
+    tmpl = _template_deck(tmp_path)
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [str(src), str(tmp_path / "d.pptx"), "--template", str(tmpl), "--layout", "Nope"])
+    assert exc.value.code == 1
+    assert "Title Only" in capsys.readouterr().err
+
+
+def test_layout_flag_without_template_is_an_error(monkeypatch, tmp_path):
+    src = _write(tmp_path, "d.pik", 'box "Web"\n')
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [str(src), str(tmp_path / "d.pptx"), "--layout", "Title Only"])
+    assert exc.value.code == 2
+
+
 def test_missing_explicit_settings_file_is_an_error(monkeypatch, tmp_path):
     tmpl = _template_deck(tmp_path)
     src = _write(tmp_path, "d.pik", 'box "Web"\n')

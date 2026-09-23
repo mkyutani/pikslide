@@ -45,6 +45,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="a template's settings file (docs/spec.md SS3.8); default: <template name>.theme.pik beside it, if any",
     )
     parser.add_argument(
+        "--layout", metavar="NAME", default=None,
+        help="the --template slide layout to make the new slide from, overriding the settings file's "
+        "`layout` (docs/spec.md SS3.8)",
+    )
+    parser.add_argument(
         "--include-path", metavar="DIR", action="append", default=None,
         help="an extra directory to search for `include \"path\"` (may be given more than once)",
     )
@@ -72,6 +77,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     # is given: INPUT's own path with its extension changed to .pptx.
     if args.output is None and args.template is not None:
         args.output = _with_extension(args.input, "pptx")
+    if args.layout is not None and args.template is None:
+        parser.error("--layout names a slide layout of --template, so it needs --template")
 
     # --png/--pdf (docs/spec.md SS4): rendered from the deck just written,
     # so they need one to be written at all.
@@ -204,7 +211,8 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
     warnings = []
     if args.template is not None:
         try:
-            write_pptx_from_template(result, args.template, out_path, layout_name=result.layout_name)
+            layout_name = args.layout if args.layout is not None else result.layout_name
+            write_pptx_from_template(result, args.template, out_path, layout_name=layout_name)
         except LayoutError as e:
             _fail_layout(args, e)
             return

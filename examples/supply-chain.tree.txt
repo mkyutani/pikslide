@@ -1,0 +1,494 @@
+Document
+  statements:
+    ObjectStatement
+      label: 'Supplier'
+      base:
+        ClassBase
+          classname: 'ellipse'
+      attributes:
+        TextAttribute
+          text: 'Supplier'
+          flags: []
+        Fit()
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'arrow'
+      attributes:
+        TextAttribute
+          text: 'materials'
+          flags: []
+        TextAttribute
+          text: ''
+          flags: []
+        Fit()
+    ObjectStatement
+      label: 'Procurement'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        TextAttribute
+          text: 'Procurement'
+          flags: []
+        Fit()
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'arrow'
+      attributes: []
+    ObjectStatement
+      label: 'Production'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        TextAttribute
+          text: 'Production'
+          flags: []
+        Fit()
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'arrow'
+      attributes: []
+    ObjectStatement
+      label: 'Warehouse'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        TextAttribute
+          text: 'Warehouse'
+          flags: []
+        Fit()
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'arrow'
+      attributes:
+        TextAttribute
+          text: 'products'
+          flags: []
+        TextAttribute
+          text: ''
+          flags: []
+        Fit()
+    ObjectStatement
+      label: 'Distributor'
+      base:
+        ClassBase
+          classname: 'ellipse'
+      attributes:
+        TextAttribute
+          text: 'Distributor'
+          flags: []
+        Fit()
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'arrow'
+      attributes:
+        TextAttribute
+          text: 'delivery'
+          flags: []
+        TextAttribute
+          text: ''
+          flags: []
+        Fit()
+    ObjectStatement
+      label: 'Consumer'
+      base:
+        ClassBase
+          classname: 'ellipse'
+      attributes:
+        TextAttribute
+          text: 'Consumer'
+          flags: []
+        Fit()
+    ObjectStatement
+      label: 'Finance'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        TextAttribute
+          text: 'Finance'
+          flags: []
+        At
+          position:
+            XYFromPositions
+              x_from:
+                Between
+                  fraction:
+                    BinOp
+                      op: '/'
+                      left:
+                        Num
+                          value: 1.0
+                      right:
+                        Num
+                          value: 2.0
+                  p1:
+                    PlacePosition
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Procurement'
+                          edge: None
+                  p2:
+                    PlacePosition
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Warehouse'
+                          edge: None
+              y_from:
+                DirectionOffset
+                  direction: 'below'
+                  distance:
+                    Num
+                      value: 1.0
+                  base:
+                    Between
+                      fraction:
+                        BinOp
+                          op: '/'
+                          left:
+                            Num
+                              value: 1.0
+                          right:
+                            Num
+                              value: 2.0
+                      p1:
+                        PlacePosition
+                          place:
+                            ObjectEdge
+                              obj:
+                                NameRef
+                                  path:
+                                    'Procurement'
+                              edge: None
+                      p2:
+                        PlacePosition
+                          place:
+                            ObjectEdge
+                              obj:
+                                NameRef
+                                  path:
+                                    'Warehouse'
+                              edge: None
+        NumProperty
+          name: 'width'
+          value:
+            RelExpr
+              abs:
+                BinOp
+                  op: '-'
+                  left:
+                    PlaceCoord
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Warehouse'
+                          edge: 'e'
+                      axis: 'x'
+                  right:
+                    PlaceCoord
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Procurement'
+                          edge: 'w'
+                      axis: 'x'
+              percent: None
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'arrow'
+      attributes:
+        ArrowDirection
+          kind: 'both'
+        From_
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Finance'
+                  edge: None
+        To
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Procurement'
+                  edge: None
+        Chop()
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'arrow'
+      attributes:
+        ArrowDirection
+          kind: 'both'
+        From_
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Finance'
+                  edge: None
+        To
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Production'
+                  edge: None
+        Chop()
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'arrow'
+      attributes:
+        ArrowDirection
+          kind: 'both'
+        From_
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Finance'
+                  edge: None
+        To
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Warehouse'
+                  edge: None
+        Chop()
+    ObjectStatement
+      label: 'Company'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        NumProperty
+          name: 'height'
+          value:
+            RelExpr
+              abs:
+                BinOp
+                  op: '+'
+                  left:
+                    BinOp
+                      op: '-'
+                      left:
+                        PlaceCoord
+                          place:
+                            ObjectEdge
+                              obj:
+                                NameRef
+                                  path:
+                                    'Procurement'
+                              edge: 'n'
+                          axis: 'y'
+                      right:
+                        PlaceCoord
+                          place:
+                            ObjectEdge
+                              obj:
+                                NameRef
+                                  path:
+                                    'Finance'
+                              edge: 's'
+                          axis: 'y'
+                  right:
+                    Num
+                      value: 0.6
+              percent: None
+        NumProperty
+          name: 'width'
+          value:
+            RelExpr
+              abs:
+                BinOp
+                  op: '+'
+                  left:
+                    BinOp
+                      op: '-'
+                      left:
+                        PlaceCoord
+                          place:
+                            ObjectEdge
+                              obj:
+                                NameRef
+                                  path:
+                                    'Warehouse'
+                              edge: 'e'
+                          axis: 'x'
+                      right:
+                        PlaceCoord
+                          place:
+                            ObjectEdge
+                              obj:
+                                NameRef
+                                  path:
+                                    'Procurement'
+                              edge: 'w'
+                          axis: 'x'
+                  right:
+                    Num
+                      value: 0.6
+              percent: None
+        At
+          position:
+            XYFromPositions
+              x_from:
+                Between
+                  fraction:
+                    BinOp
+                      op: '/'
+                      left:
+                        Num
+                          value: 1.0
+                      right:
+                        Num
+                          value: 2.0
+                  p1:
+                    PlacePosition
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Procurement'
+                          edge: None
+                  p2:
+                    PlacePosition
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Warehouse'
+                          edge: None
+              y_from:
+                Between
+                  fraction:
+                    BinOp
+                      op: '/'
+                      left:
+                        Num
+                          value: 1.0
+                      right:
+                        Num
+                          value: 2.0
+                  p1:
+                    PlacePosition
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Procurement'
+                          edge: None
+                  p2:
+                    PlacePosition
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Finance'
+                          edge: None
+        ColorProperty
+          name: 'fill'
+          value:
+            HexColor
+              rgb: 16119285
+        Behind
+          obj:
+            NameRef
+              path:
+                'Supplier'
+    ObjectStatement
+      label: None
+      base:
+        TextBase
+          text: 'Company'
+          flags:
+            'bold'
+      attributes:
+        At
+          position:
+            DirectionOffset
+              direction: 'below'
+              distance:
+                Num
+                  value: 0.17
+              base:
+                Between
+                  fraction:
+                    BinOp
+                      op: '/'
+                      left:
+                        Num
+                          value: 1.0
+                      right:
+                        Num
+                          value: 2.0
+                  p1:
+                    PlacePosition
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Company'
+                          edge: 'nw'
+                  p2:
+                    PlacePosition
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Company'
+                          edge: 'ne'
+  macros: []

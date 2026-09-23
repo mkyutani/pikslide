@@ -353,6 +353,18 @@ class Shape:
     """Like `text_sizes`, but for the `typeface` variable (docs/spec.md
     SS3.3): this object's own text renders in the family that was in
     effect when it was written, not the document's final one."""
+    fit: bool = False
+    """Set by `_autosize_text()` (explicit `fit`, docs/spec.md SS3.3, or
+    the implicit case -- no size given at all, ext): this shape's own
+    `.w`/`.h` were computed to exactly hold `.texts` at the size a
+    renderer will actually draw it, using real font metrics where
+    available (`PilFontMetrics`). A renderer should therefore *not* also
+    word-wrap this shape's text (ext): wrapping is for a *fixed*,
+    author-chosen size that text may legitimately overflow, which this
+    isn't -- and word-wrap masks a `fit` measurement that came out too
+    small (the measuring font substitute isn't metrically identical to
+    whatever the real theme font turns out to be) as silent, layout-
+    changing reflow instead of a visible (and diagnosable) overflow."""
 
     def offset(self, edge: str | None) -> tuple[float, float]:
         return _edge_offset(self, edge)
@@ -1098,7 +1110,24 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
         # A diamond's text sits well inside its points, so needs extra room.
         shape.w *= 1.6
         shape.h *= 1.6
+    elif shape.kind in ("circle", "ellipse", "oval"):
+        # The largest axis-aligned rectangle inscribed in an ellipse of
+        # full width/height (W, H) is (W/sqrt(2)) x (H/sqrt(2)) -- so to
+        # give the text box that exact size, the ellipse's own bounding
+        # box (what shape.w/.h become) must be sqrt(2) times bigger in
+        # each dimension, the same idea as diamond's correction above.
+        shape.w *= math.sqrt(2)
+        shape.h *= math.sqrt(2)
+    elif shape.kind == "cylinder":
+        # A cylinder's top end is drawn as an ellipse dipping into the
+        # shape from the top, so the usable (rectangular) text area is
+        # shorter than the full bounding height -- checked empirically
+        # (rendered, at a few heights): the fit-computed height needs
+        # about this much more before text clears the end's curve. Only
+        # height is affected -- the end doesn't narrow the usable width.
+        shape.h *= 1.5
     _apply_circle_constraint(shape)
+    shape.fit = True
 
 
 def _size_image(shape: Shape, ctx: _Ctx) -> None:

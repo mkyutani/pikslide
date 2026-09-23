@@ -36,13 +36,10 @@ Document
                   value: 0.10416666666666667
               percent: None
         TextAttribute
-          text: 'Markdown'
+          text: 'pikslide'
           flags: []
         TextAttribute
           text: 'Formatter'
-          flags: []
-        TextAttribute
-          text: '(markdown.c)'
           flags: []
         Fit()
     ObjectStatement
@@ -61,7 +58,7 @@ Document
                   value: 200.0
           even_with: None
         TextAttribute
-          text: 'HTML+SVG'
+          text: 'PPTX'
           flags: []
         TextAttribute
           text: 'Output'
@@ -73,7 +70,7 @@ Document
           classname: 'arrow'
       attributes:
         ArrowDirection
-          kind: 'both'
+          kind: 'left'
         GoDirection
           direction: 'down'
           amount:
@@ -98,18 +95,13 @@ Document
       label: None
       base:
         ClassBase
-          classname: 'box'
+          classname: 'cylinder'
       attributes:
-        Same
-          obj: None
         TextAttribute
-          text: 'Pikchr'
+          text: 'pikslide'
           flags: []
         TextAttribute
-          text: 'Formatter'
-          flags: []
-        TextAttribute
-          text: '(pikchr.c)'
+          text: 'language'
           flags: []
         Fit()
   macros: []

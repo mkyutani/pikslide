@@ -354,7 +354,10 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
     if not shape.texts:
         return
     tf = pptx_shape.text_frame
-    tf.word_wrap = True
+    # A `fit` shape's own box was already sized to hold this text with no
+    # wrapping needed (docs/spec.md SS3.3, ext -- see Shape.fit); word-wrap
+    # is for a fixed, author-chosen size instead, which this isn't.
+    tf.word_wrap = not shape.fit
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     # PowerPoint's default autoshape text margins (~0.1in sides, ~0.05in
     # top/bottom) eat into the box width _autosize_text() already sized to
@@ -450,7 +453,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform, name_prefix: str =
         return
     textbox = container.shapes.add_textbox(Inches(left), Inches(top), Inches(w), Inches(h))
     text_frame = textbox.text_frame
-    text_frame.word_wrap = True
+    text_frame.word_wrap = not shape.fit
     text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
     text_frame.margin_left = text_frame.margin_right = 0
     text_frame.margin_top = text_frame.margin_bottom = 0

@@ -106,24 +106,25 @@ text — see `pikslide --help` for every flag.
 
 With no arguments, `pikslide` just prints a hello-world message.
 
-Render a `.pptx` to a PNG or a PDF with `scripts/pptx_to_png.sh` /
-`scripts/pptx_to_pdf.sh`:
+`--png` / `--pdf` also render the deck just written to a PNG or a PDF —
+beside OUTPUT with the extension changed, or at an explicit path:
 
 ```sh
-scripts/pptx_to_png.sh diagram.pptx diagram.png
-scripts/pptx_to_pdf.sh diagram.pptx diagram.pdf
+uv run pikslide diagram.pik diagram.pptx --png --pdf
+uv run pikslide diagram.pik diagram.pptx --png images/diagram.png
 ```
 
-Each uses PowerPoint COM automation (`scripts/pptx_to_png.ps1` /
-`pptx_to_pdf.ps1`, via `powershell.exe`) when one is reachable — Windows, or
-WSL with a Windows PowerPoint install — since that's the actual renderer
-pikslide's output is meant for, not just a stand-in for it; otherwise it
-falls back to LibreOffice (`soffice`), a different rendering engine, good
-for a quick look but not for verifying exact layout or text fit against
-real PowerPoint. Since pikslide sizes its slide exactly to the diagram, the
-PNG is an image of just the diagram, no separate cropping needed. (The
-`.ps1` scripts also run on their own directly from Windows PowerShell, with
-no wrapper needed.)
+(Give OUTPUT before `--png`/`--pdf`, since their PATH is optional.) This
+uses PowerPoint itself, through COM automation (via `powershell.exe`),
+when it's reachable — Windows, or WSL with a Windows PowerPoint install —
+since that's the actual renderer pikslide's output is meant for; otherwise
+it falls back to LibreOffice (`soffice`) with a warning: a different
+rendering engine, good for a quick look but not for verifying exact layout
+or text fit against real PowerPoint (`--strict` refuses the fallback).
+Since pikslide sizes its slide exactly to the diagram, the PNG is an image
+of just the diagram, no separate cropping needed. The PowerShell scripts
+behind this (`src/pikslide/ps/*.ps1`) also run on their own from Windows
+PowerShell.
 
 ### Example
 

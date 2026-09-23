@@ -8,19 +8,10 @@
     (plus a small margin), so exporting the whole slide already gives an
     image of just the diagram -- no separate cropping step is needed.
 
-.EXAMPLE
-    From WSL, convert Linux paths to Windows paths with wslpath first:
+    pikslide runs this itself for `--png` (src/pikslide/render.py). It
+    also runs on its own from Windows PowerShell:
 
-        WIN_PPTX=$(wslpath -w ./examples/pipeline.pptx)
-        WIN_PNG=$(wslpath -w ./examples/pipeline.png)
-        powershell.exe -NoProfile -ExecutionPolicy Bypass \
-            -File "$(wslpath -w ./scripts/pptx_to_png.ps1)" \
-            -PptxPath "$WIN_PPTX" -PngPath "$WIN_PNG"
-
-.EXAMPLE
-    From Windows PowerShell directly:
-
-        .\scripts\pptx_to_png.ps1 -PptxPath .\examples\pipeline.pptx -PngPath .\examples\pipeline.png
+        .\pptx_to_png.ps1 -PptxPath .\diagram.pptx -PngPath .\diagram.png
 #>
 param(
     [Parameter(Mandatory=$true)][string]$PptxPath,
@@ -31,7 +22,7 @@ param(
 # Default: a failure inside the try block below (e.g. PowerPoint isn't
 # installed, so New-Object -ComObject can't find it) is a *non-terminating*
 # error under -File invocation -- powershell.exe still exits 0, which would
-# make a caller's own PowerPoint-vs-fallback branch (scripts/pptx_to_png.sh)
+# make a caller's own PowerPoint-vs-fallback branch (render.py)
 # never actually detect the failure (checked). -Stop plus the explicit
 # `exit 1` below is what makes the exit code trustworthy.
 $ErrorActionPreference = "Stop"

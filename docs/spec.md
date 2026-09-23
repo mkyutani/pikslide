@@ -428,7 +428,7 @@ A `.pik` never names a deck, slide or theme file. Those come from the command
 line or the caller, so the same diagram can be reused in any deck.
 
 ```sh
-pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--settings FILE]
+pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--settings FILE] [--png [PATH]] [--pdf [PATH]]
 ```
 
 `OUTPUT` omitted, the parsed tree is dumped instead of writing anything
@@ -441,6 +441,17 @@ omitted but `--template` is given, it defaults to `INPUT` with its extension
 changed to `.pptx` (`diagram.pik` → `diagram.pptx`).
 
 A diagram is never scaled: the text sizes and line widths are the author's.
+
+`OUTPUT` is always a `.pptx`. `--png` and `--pdf` are a post-processing
+step on top of it: after the deck is written, its slide is also rendered
+to a PNG or a PDF, at `PATH`, or when `PATH` is omitted at `OUTPUT` with
+its extension changed (`diagram.pptx` → `diagram.png`). Both need a deck
+to be written, so they are errors with no `OUTPUT` (and no `--template`)
+or with `--check`, and `PATH` must end in `.png`/`.pdf`. Rendering uses
+PowerPoint through COM automation when it is reachable (Windows, or WSL
+with a Windows PowerPoint install), since that is the renderer the output
+is meant for; otherwise LibreOffice, with a **warning** that its rendering
+is not PowerPoint's (§5). With neither, it is an error.
 
 ## 5. Diagnostics
 

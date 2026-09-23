@@ -7,6 +7,7 @@ from .pik import PikSyntaxError, dump, format_syntax_error, parse
 from .pik.layout import LayoutError
 from .pik.tokens import column_at
 from .pptx_writer import find_settings_file, resolve_for_pptx, write_pptx, write_pptx_from_template
+from .render import FORMATS, RenderError, render_deck
 
 
 def main() -> None:
@@ -47,6 +48,12 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "--include-path", metavar="DIR", action="append", default=None,
         help="an extra directory to search for `include \"path\"` (may be given more than once)",
     )
+    for fmt in FORMATS:
+        parser.add_argument(
+            f"--{fmt}", metavar="PATH", nargs="?", const="", default=None,
+            help=f"also render the written deck to a {fmt.upper()} at PATH (default: OUTPUT with its "
+            f"extension changed to .{fmt}), via PowerPoint, else LibreOffice",
+        )
     parser.add_argument("--strict", action="store_true", help="turn warnings into errors")
     parser.add_argument("--check", action="store_true", help="parse and lay out the source without writing any output")
     parser.add_argument(
@@ -59,16 +66,33 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     # OUTPUT's own default (docs/spec.md SS4), when omitted but --template
     # is given: INPUT's own path with its extension changed to .pptx.
     if args.output is None and args.template is not None:
-        args.output = _default_output_path(args.input)
+        args.output = _with_extension(args.input, "pptx")
+
+    # --png/--pdf (docs/spec.md SS4): rendered from the deck just written,
+    # so they need one to be written at all.
+    for fmt in FORMATS:
+        path = getattr(args, fmt)
+        if path is None:
+            continue
+        if path and not path.lower().endswith(f".{fmt}"):
+            # Also catches `pikslide d.pik --png d.pptx`, where the
+            # optional PATH swallowed what was meant as OUTPUT.
+            parser.error(f"--{fmt} PATH must end in .{fmt} (got {path!r}); give OUTPUT before --{fmt}")
+        if args.output is None or args.check:
+            parser.error(f"--{fmt} renders the written OUTPUT deck, so it needs an OUTPUT and no --check")
+        if path == "":
+            path = _with_extension(args.output, fmt)
+        setattr(args, fmt, path)
 
     return args
 
 
-def _default_output_path(input_path: str) -> str:
+def _with_extension(path: str, ext: str) -> str:
     """`diagram.pik` -> `diagram.pptx` (docs/spec.md SS4, ext): OUTPUT's
-    own default when it's omitted but --template is given."""
-    stem, dot, _ext = input_path.rpartition(".")
-    return f"{stem}.pptx" if dot else f"{input_path}.pptx"
+    own default when it's omitted but --template is given, and --png/--pdf's
+    from OUTPUT the same way."""
+    stem, dot, _ext = path.rpartition(".")
+    return f"{stem}.{ext}" if dot and "/" not in _ext and os.sep not in _ext else f"{path}.{ext}"
 
 
 # ---------------------------------------------------------------------------
@@ -167,21 +191,33 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
         _fail(args, f"unsupported output format: {out_path}")
         return
 
+    warnings = []
     if args.template is not None:
         try:
             write_pptx_from_template(result, args.template, out_path, layout_name=result.layout_name)
         except LayoutError as e:
             _fail_layout(args, e)
             return
-        _succeed(args, f"wrote {out_path}", output=out_path)
-        return
+    else:
+        # No --template (docs/spec.md SS3.3 rule 2): the built-in Office
+        # theme stands in for a real one, which --strict makes fatal
+        # rather than just noted.
+        warning = "no --template given: colors and fonts are stand-ins from the built-in Office theme (docs/spec.md SS3.3)"
+        if args.strict:
+            _fail(args, warning)
+            return
+        warnings.append(warning)
+        write_pptx(result, out_path)
 
-    # No --template (docs/spec.md SS3.3 rule 2): the built-in Office theme
-    # stands in for a real one, which --strict makes fatal rather than
-    # just noted.
-    warning = "no --template given: colors and fonts are stand-ins from the built-in Office theme (docs/spec.md SS3.3)"
-    if args.strict:
-        _fail(args, warning)
-        return
-    write_pptx(result, out_path)
-    _succeed(args, f"wrote {out_path}", warnings=[warning], output=out_path)
+    written = {"output": out_path}
+    for fmt in FORMATS:
+        path = getattr(args, fmt)
+        if path is None:
+            continue
+        try:
+            warnings += render_deck(out_path, path, fmt, allow_fallback=not args.strict)
+        except RenderError as e:
+            _fail(args, f"could not render {path}: {e}")
+            return
+        written[fmt] = path
+    _succeed(args, "\n".join(f"wrote {p}" for p in written.values()), warnings=warnings, **written)

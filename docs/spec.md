@@ -224,7 +224,7 @@ shape wedgeRectCallout "Note" fit
   | `circle`, `ellipse`, `oval`, `dot` | `ellipse` |
   | `diamond` | `diamond` |
   | `cylinder` | `can` |
-  | `file` | `flowChartDocument` (a document with a wavy bottom edge; chosen after comparing `snip1Rect` and `foldedCorner` rendered in PowerPoint) |
+  | `file` | `foldedCorner` (a page with a corner folded down) |
   | `text` | text box (no fill, no outline) |
 
 ### 3.5 Images and icons: `image`

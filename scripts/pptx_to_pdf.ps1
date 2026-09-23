@@ -30,6 +30,8 @@ param(
 # `exit 1` below is what makes the exit code trustworthy.
 $ErrorActionPreference = "Stop"
 
+$app = $null
+$pres = $null
 try {
     $ppSaveAsPDF = 32  # PpSaveAsFileType.ppSaveAsPDF
 
@@ -37,11 +39,27 @@ try {
     $pres = $app.Presentations.Open($PptxPath, $true, $true, $false)
     $pres.SaveAs($PdfPath, $ppSaveAsPDF)
 
-    $pres.Close()
-    $app.Quit()
-
     Write-Output "wrote $PdfPath"
 } catch {
     Write-Error $_
     exit 1
+} finally {
+    # Always torn down, success or failure (checked: -Stop above means a
+    # mid-try failure used to skip straight to `catch` and leave `$app`
+    # running -- a failed run left PowerPoint's own COM instance behind,
+    # for the *next* run's New-Object -ComObject to attach to instead of
+    # a fresh one, which is exactly the kind of state a later run can't
+    # tell apart from a real failure. Explicit ReleaseComObject + GC
+    # because Quit() alone doesn't guarantee the RCW -- and so the
+    # out-of-process POWERPNT.EXE -- actually lets go this run.
+    if ($pres) {
+        $pres.Close()
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($pres) | Out-Null
+    }
+    if ($app) {
+        $app.Quit()
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($app) | Out-Null
+    }
+    [System.GC]::Collect()
+    [System.GC]::WaitForPendingFinalizers()
 }

@@ -95,13 +95,13 @@ Document
       label: None
       base:
         ClassBase
-          classname: 'cylinder'
+          classname: 'file'
       attributes:
         TextAttribute
           text: 'pikslide'
           flags: []
         TextAttribute
-          text: 'language'
+          text: 'Language'
           flags: []
         Fit()
   macros: []

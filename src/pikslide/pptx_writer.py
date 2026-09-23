@@ -5,9 +5,9 @@ y pointing up (pikchr's convention); PowerPoint slides use EMU with y
 pointing down from the top-left, so this module flips y and adds a margin
 around the diagram's bounding box.
 
-Shape-kind to PowerPoint mapping is necessarily approximate for a few
-classes (cylinder, file) since python-pptx's autoshape set doesn't have
-an exact equivalent; see the per-kind comments below.
+Shape-kind to PowerPoint mapping is necessarily approximate for `cylinder`
+(python-pptx's autoshape set has no exact equivalent); see the per-kind
+comments below.
 """
 
 from __future__ import annotations
@@ -183,7 +183,7 @@ _AUTOSHAPE = {
     "oval": MSO_SHAPE.OVAL,
     "diamond": MSO_SHAPE.DIAMOND,
     "cylinder": MSO_SHAPE.CAN,  # closest built-in equivalent
-    "file": MSO_SHAPE.FLOWCHART_DOCUMENT,  # closest built-in equivalent
+    "file": MSO_SHAPE.FOLDED_CORNER,  # the folded-top-right-corner page icon
     "dot": MSO_SHAPE.OVAL,
     "text": MSO_SHAPE.RECTANGLE,  # rendered with no fill/outline, see below
 }

@@ -530,7 +530,6 @@ Humans and LLMs both need errors they can act on.
   block, per the placement decision.
 - The diagram is written as native shapes directly, so a caller need not
   render a PNG, or convert a rendered diagram to shapes afterwards.
-  `scripts/pptx_to_png.ps1` remains as the way to check the result.
 
 ## 7. Not in v1
 

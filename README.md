@@ -117,11 +117,24 @@ text — see `pikslide --help` for every flag.
 
 With no arguments, `pikslide` just prints a hello-world message.
 
-On Windows (or WSL with a Windows PowerPoint install), render a `.pptx` to a
-PNG via `scripts/pptx_to_png.ps1` (PowerPoint COM automation; see that
-script's header for usage from WSL vs. Windows PowerShell directly). Since
-pikslide sizes its slide exactly to the diagram, this gives an image of just
-the diagram, no separate cropping needed.
+Render a `.pptx` to a PNG or a PDF with `scripts/pptx_to_png.sh` /
+`scripts/pptx_to_pdf.sh`:
+
+```sh
+scripts/pptx_to_png.sh diagram.pptx diagram.png
+scripts/pptx_to_pdf.sh diagram.pptx diagram.pdf
+```
+
+Each uses PowerPoint COM automation (`scripts/pptx_to_png.ps1` /
+`pptx_to_pdf.ps1`, via `powershell.exe`) when one is reachable — Windows, or
+WSL with a Windows PowerPoint install — since that's the actual renderer
+pikslide's output is meant for, not just a stand-in for it; otherwise it
+falls back to LibreOffice (`soffice`), a different rendering engine, good
+for a quick look but not for verifying exact layout or text fit against
+real PowerPoint. Since pikslide sizes its slide exactly to the diagram, the
+PNG is an image of just the diagram, no separate cropping needed. (The
+`.ps1` scripts also run on their own directly from Windows PowerShell, with
+no wrapper needed.)
 
 ### Example
 

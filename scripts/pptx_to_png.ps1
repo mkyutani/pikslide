@@ -28,18 +28,31 @@ param(
     [int]$Dpi = 200
 )
 
-$app = New-Object -ComObject PowerPoint.Application
-$pres = $app.Presentations.Open($PptxPath, $true, $true, $false)
-$slide = $pres.Slides.Item(1)
+# Default: a failure inside the try block below (e.g. PowerPoint isn't
+# installed, so New-Object -ComObject can't find it) is a *non-terminating*
+# error under -File invocation -- powershell.exe still exits 0, which would
+# make a caller's own PowerPoint-vs-fallback branch (scripts/pptx_to_png.sh)
+# never actually detect the failure (checked). -Stop plus the explicit
+# `exit 1` below is what makes the exit code trustworthy.
+$ErrorActionPreference = "Stop"
 
-$widthIn = $pres.PageSetup.SlideWidth / 72.0
-$heightIn = $pres.PageSetup.SlideHeight / 72.0
-$widthPx = [int]($widthIn * $Dpi)
-$heightPx = [int]($heightIn * $Dpi)
+try {
+    $app = New-Object -ComObject PowerPoint.Application
+    $pres = $app.Presentations.Open($PptxPath, $true, $true, $false)
+    $slide = $pres.Slides.Item(1)
 
-$slide.Export($PngPath, "PNG", $widthPx, $heightPx)
+    $widthIn = $pres.PageSetup.SlideWidth / 72.0
+    $heightIn = $pres.PageSetup.SlideHeight / 72.0
+    $widthPx = [int]($widthIn * $Dpi)
+    $heightPx = [int]($heightIn * $Dpi)
 
-$pres.Close()
-$app.Quit()
+    $slide.Export($PngPath, "PNG", $widthPx, $heightPx)
 
-Write-Output "wrote $PngPath ($widthPx x $heightPx)"
+    $pres.Close()
+    $app.Quit()
+
+    Write-Output "wrote $PngPath ($widthPx x $heightPx)"
+} catch {
+    Write-Error $_
+    exit 1
+}

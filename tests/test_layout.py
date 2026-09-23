@@ -390,6 +390,34 @@ def test_fit_measurement_tracks_a_medium_override_at_the_objects_own_position():
     assert calls[0]["medium"] == pytest.approx(30 / 72)
 
 
+def test_above_and_below_offset_text_from_the_objects_center():
+    # A single above string sits with its bottom on the center (half a
+    # line up), a below one with its top there; the object stays centered
+    # on its `at` point and grows by the offset on both sides.
+    class FixedMetrics:
+        def text_width(self, text, flags=(), text_sizes=None):
+            return 1.0
+
+        def line_height(self, flags=(), text_sizes=None):
+            return 0.2
+
+    def shapes(text):
+        return resolve_layout(parse(text), metrics=FixedMetrics()).shapes
+
+    plain, above, below = shapes('text "p" at (0, 0)\ntext "a" above at (0, 0)\ntext "b" below at (0, 0)\n')
+    assert plain.text_dy == 0.0
+    assert above.text_dy == pytest.approx(0.1)
+    assert below.text_dy == pytest.approx(-0.1)
+    assert (above.cx, above.cy) == (0.0, 0.0)
+    assert above.h == pytest.approx(plain.h + 0.2)
+
+    # Balanced strings (split above/below, or explicitly so) don't shift.
+    assert shapes('box "a" "b"\n')[0].text_dy == 0.0
+    assert shapes('box "a" above "b" below\n')[0].text_dy == 0.0
+    # Two above strings stack both lines above the center.
+    assert shapes('text "a" above "b" above\n')[0].text_dy == pytest.approx(0.2)
+
+
 # ---------------------------------------------------------------------------
 # Template settings files (docs/spec.md SS3.8, ext)
 # ---------------------------------------------------------------------------

@@ -356,6 +356,13 @@ class Shape:
     small (the measuring font substitute isn't metrically identical to
     whatever the real theme font turns out to be) as silent, layout-
     changing reflow instead of a visible (and diagnosable) overflow."""
+    text_dy: float = 0.0
+    """How far (inches, y-up) this closed object's text block sits above
+    its center, from its strings' above/below slots -- see
+    `_text_offset()`. A single `above` string sits with its bottom on the
+    center, a single `below` string with its top there. Lines don't use
+    this: their labels are placed per string instead (pptx_writer's
+    `_line_label_rects()`)."""
 
     def offset(self, edge: str | None) -> tuple[float, float]:
         return _edge_offset(self, edge)
@@ -1068,6 +1075,21 @@ def _apply_circle_constraint(shape: Shape) -> None:
     shape.rad = 0.5 * d
 
 
+def _text_offset(shape: Shape, ctx: _Ctx) -> float:
+    """The vertical offset of `shape.texts`, drawn as one stacked block:
+    half the height of the lines slotted above the center, less half of
+    those slotted below (assign_text_slots()). Balanced text -- one
+    un-flagged string, or `"a" "b"` split above/below -- gives 0."""
+    up = down = 0.0
+    for (_text, flags), slot in zip(shape.texts, assign_text_slots(shape.texts)):
+        lh = ctx.metrics.line_height(flags, shape.text_sizes)
+        if slot.startswith("above"):
+            up += lh
+        elif slot.startswith("below"):
+            down += lh
+    return (up - down) / 2
+
+
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     """Size a "fit" object to its text using ctx.metrics: the pptx
     backend's PilFontMetrics measures actual glyph widths; only the fallback _ApproxMetrics estimates from flat constants.
@@ -1083,6 +1105,10 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     sizes = shape.text_sizes
     shape.w = max((m.text_width(text, flags, sizes) for text, flags in shape.texts), default=0.0)
     shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 0.75 * m.line_height([], sizes)
+    # The object stays centered on its own position with the text shifted
+    # off that center, so it grows by the shift on both sides (as pikchr's
+    # own size-to-fit does), keeping .n/.s clear of the text.
+    shape.h += 2 * abs(_text_offset(shape, ctx))
     if shape.kind == "diamond":
         # A diamond's text sits well inside its points, so needs extra room.
         shape.w *= 1.6
@@ -1463,6 +1489,8 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
             _size_image(shape, ctx)
         elif (shape.w <= 0.0 or shape.h <= 0.0) and shape.texts:
             _autosize_text(shape, ctx)
+        if shape.texts:
+            shape.text_dy = _text_offset(shape, ctx)
         ofst = shape.offset(with_edge)
         shape.cx = with_pos[0] - ofst[0]
         shape.cy = with_pos[1] - ofst[1]

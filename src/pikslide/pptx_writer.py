@@ -352,6 +352,12 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
     # folded into _autosize_text()'s width/height estimate.
     tf.margin_left = tf.margin_right = 0
     tf.margin_top = tf.margin_bottom = 0
+    # above/below (Shape.text_dy): the text is still middle-anchored, but
+    # in an area cut short on the far side, so its middle moves by text_dy.
+    if shape.text_dy > 0:
+        tf.margin_bottom = Inches(2 * shape.text_dy)
+    elif shape.text_dy < 0:
+        tf.margin_top = Inches(-2 * shape.text_dy)
     for i, (text, flags) in enumerate(shape.texts):
         para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         para.alignment = (

@@ -66,6 +66,28 @@ def test_arrow_labels_render_as_textboxes_above_and_below(tmp_path: pathlib.Path
     assert top_box.top < bottom_box.top
 
 
+def test_above_and_below_text_clear_a_line_through_its_anchor(tmp_path: pathlib.Path):
+    # Issue #4: `text "x" above at P` is middle-anchored in an area cut
+    # short at the bottom, so its middle sits above P (the arrow's y), and
+    # `below` the mirror image -- not both centered on the line.
+    prs = render(
+        'A: box at (0, 0)\nB: box at (3, 0)\narrow from A.e to B.w\n'
+        'text "up" above at (1.5, 0)\ntext "down" below at (1.5, 0)\n',
+        tmp_path,
+    )
+    slide = prs.slides[0]
+    line_y = next(s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.LINE).top
+
+    def text_middle(label):
+        shape = next(s for s in slide.shapes if s.has_text_frame and s.text_frame.text == label)
+        tf = shape.text_frame
+        return shape.top + tf.margin_top + (shape.height - tf.margin_top - tf.margin_bottom) / 2
+
+    # slide y grows downward.
+    assert text_middle("up") < line_y < text_middle("down")
+    assert line_y - text_middle("up") == pytest.approx(text_middle("down") - line_y, abs=2)
+
+
 def test_rounded_box_gets_rounded_rectangle_with_scaled_corner(tmp_path: pathlib.Path):
     prs = render("box rad 0.1 width 1 height 1\n", tmp_path)
     shape = prs.slides[0].shapes[0]

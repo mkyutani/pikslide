@@ -222,6 +222,22 @@ def test_line_label_and_image_caption_also_get_the_theme_font(tmp_path: pathlib.
 # ---------------------------------------------------------------------------
 
 
+def test_no_shape_inherits_the_theme_effect_style(tmp_path: pathlib.Path):
+    # python-pptx's <p:style> points each shape at a theme effect style
+    # (effectRef idx 2 for a shape, 1 for a connector), which in many real
+    # templates is a drop shadow; an empty <a:effectLst/> in spPr, placed
+    # after <a:ln> per the schema, overrides it.
+    slide = render('box "A"\narrow\nline right then down\ntext "t"\n', tmp_path).slides[0]
+    styled = [s for s in slide.shapes if s._element.find(qn("p:style")) is not None]
+    assert len(styled) == 4
+    for s in styled:
+        sp_pr = s._element.spPr
+        tags = [child.tag for child in sp_pr]
+        assert qn("a:effectLst") in tags, s.name
+        assert len(sp_pr.find(qn("a:effectLst"))) == 0
+        assert tags.index(qn("a:effectLst")) > tags.index(qn("a:ln"))
+
+
 def test_shape_names_are_set_on_the_saved_pptx_shapes(tmp_path: pathlib.Path):
     prs = render('box "a"\nWeb: box "b"\n', tmp_path)
     names = [s.name for s in prs.slides[0].shapes]

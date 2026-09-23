@@ -278,6 +278,19 @@ def _set_arrowheads(line, larrow: bool, rarrow: bool) -> None:
         el.set("type", "triangle" if present else "none")
 
 
+def _no_theme_effects(pptx_shape) -> None:
+    """Stop `pptx_shape` inheriting its theme's effects (a drop shadow,
+    typically). python-pptx gives every autoshape, connector and freeform
+    a `<p:style>` whose `effectRef` (idx 2 for a shape, 1 for a connector,
+    checked) points into the theme's effect styles, and many real
+    templates' "moderate" style there has an `outerShdw` -- so every shape
+    came out shadowed under such a `--template`. An empty `<a:effectLst/>`
+    in the shape's own `spPr`, which is what `shadow.inherit = False`
+    writes, overrides the style's effects outright. Fill and line need no
+    such treatment: pikslide always sets both explicitly."""
+    pptx_shape.shadow.inherit = False
+
+
 def _apply_line_style(line, shape: Shape) -> None:
     if shape.sw < 0:
         line.fill.background()
@@ -456,6 +469,7 @@ def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
     elif shape.kind == "box" and shape.rad > 0:
         autoshape_type = MSO_SHAPE.ROUNDED_RECTANGLE
     pptx_shape = container.shapes.add_shape(autoshape_type, Inches(left), Inches(top), Inches(w), Inches(h))
+    _no_theme_effects(pptx_shape)
     if shape.name:
         pptx_shape.name = shape.name
     if autoshape_type == MSO_SHAPE.ROUNDED_RECTANGLE and shape.rad > 0:
@@ -487,6 +501,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
     if len(points) == 2:
         (x1, y1), (x2, y2) = points
         connector = container.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
+        _no_theme_effects(connector)
         if shape.name:
             connector.name = shape.name
         _apply_line_style(connector.line, shape)
@@ -496,6 +511,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
         builder = container.shapes.build_freeform(Inches(x0), Inches(y0))
         builder.add_line_segments([(Inches(x), Inches(y)) for x, y in points[1:]], close=shape.closed)
         freeform = builder.convert_to_shape()
+        _no_theme_effects(freeform)
         if shape.name:
             freeform.name = shape.name
         freeform.fill.background()

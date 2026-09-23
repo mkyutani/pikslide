@@ -1,0 +1,24 @@
+down
+ManagingDirector: box "Managing Director" fit
+line 0.4
+ProjectManager: box same "Project Manager" fit
+
+right
+Development: box "Development" "Team" fit at (ProjectManager.x - 1.7, ProjectManager.s.y - 0.8)
+move
+Test: box same "Test" "Team"
+move
+Migration: box same "Migration" "Team"
+move
+Technical: box same "Technical" "Team"
+
+PMO: box "PMO" fit at (Technical.e.x + 0.5, ProjectManager.s.y - 0.2)
+
+line from ProjectManager.s down 0.2 then right to PMO.w
+
+busY = ProjectManager.s.y - 0.4
+line from ProjectManager.s to (ProjectManager.x, busY) then to (Development.x, busY) then to Development.n
+line from ProjectManager.s to (ProjectManager.x, busY) then to (Test.x, busY) then to Test.n
+line from ProjectManager.s to (ProjectManager.x, busY) then to (Migration.x, busY) then to Migration.n
+line from ProjectManager.s to (ProjectManager.x, busY) then to (Technical.x, busY) then to Technical.n
+

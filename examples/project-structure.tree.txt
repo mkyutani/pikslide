@@ -1,0 +1,497 @@
+Document
+  statements:
+    DirectionStatement
+      direction: 'down'
+    ObjectStatement
+      label: 'ManagingDirector'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        TextAttribute
+          text: 'Managing Director'
+          flags: []
+        Fit()
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'line'
+      attributes:
+        LeadingDirection
+          amount:
+            RelExpr
+              abs:
+                Num
+                  value: 0.4
+              percent: None
+    ObjectStatement
+      label: 'ProjectManager'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        Same
+          obj: None
+        TextAttribute
+          text: 'Project Manager'
+          flags: []
+        Fit()
+    DirectionStatement
+      direction: 'right'
+    ObjectStatement
+      label: 'Development'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        TextAttribute
+          text: 'Development'
+          flags: []
+        TextAttribute
+          text: 'Team'
+          flags: []
+        Fit()
+        At
+          position:
+            Coord
+              x:
+                BinOp
+                  op: '-'
+                  left:
+                    PlaceCoord
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'ProjectManager'
+                          edge: None
+                      axis: 'x'
+                  right:
+                    Num
+                      value: 1.7
+              y:
+                BinOp
+                  op: '-'
+                  left:
+                    PlaceCoord
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'ProjectManager'
+                          edge: 's'
+                      axis: 'y'
+                  right:
+                    Num
+                      value: 0.8
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'move'
+      attributes: []
+    ObjectStatement
+      label: 'Test'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        Same
+          obj: None
+        TextAttribute
+          text: 'Test'
+          flags: []
+        TextAttribute
+          text: 'Team'
+          flags: []
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'move'
+      attributes: []
+    ObjectStatement
+      label: 'Migration'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        Same
+          obj: None
+        TextAttribute
+          text: 'Migration'
+          flags: []
+        TextAttribute
+          text: 'Team'
+          flags: []
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'move'
+      attributes: []
+    ObjectStatement
+      label: 'Technical'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        Same
+          obj: None
+        TextAttribute
+          text: 'Technical'
+          flags: []
+        TextAttribute
+          text: 'Team'
+          flags: []
+    ObjectStatement
+      label: 'PMO'
+      base:
+        ClassBase
+          classname: 'box'
+      attributes:
+        TextAttribute
+          text: 'PMO'
+          flags: []
+        Fit()
+        At
+          position:
+            Coord
+              x:
+                BinOp
+                  op: '+'
+                  left:
+                    PlaceCoord
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'Technical'
+                          edge: 'e'
+                      axis: 'x'
+                  right:
+                    Num
+                      value: 0.5
+              y:
+                BinOp
+                  op: '-'
+                  left:
+                    PlaceCoord
+                      place:
+                        ObjectEdge
+                          obj:
+                            NameRef
+                              path:
+                                'ProjectManager'
+                          edge: 's'
+                      axis: 'y'
+                  right:
+                    Num
+                      value: 0.2
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'line'
+      attributes:
+        From_
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'ProjectManager'
+                  edge: 's'
+        GoDirection
+          direction: 'down'
+          amount:
+            RelExpr
+              abs:
+                Num
+                  value: 0.2
+              percent: None
+          even_with: None
+        Then()
+        GoDirection
+          direction: 'right'
+          amount:
+            RelExpr
+              abs: None
+              percent: None
+          even_with: None
+        To
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'PMO'
+                  edge: 'w'
+    AssignStatement
+      name: 'busY'
+      op: '='
+      value:
+        BinOp
+          op: '-'
+          left:
+            PlaceCoord
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'ProjectManager'
+                  edge: 's'
+              axis: 'y'
+          right:
+            Num
+              value: 0.4
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'line'
+      attributes:
+        From_
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'ProjectManager'
+                  edge: 's'
+        To
+          position:
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'ProjectManager'
+                      edge: None
+                  axis: 'x'
+              y:
+                Var
+                  name: 'busY'
+        Then()
+        To
+          position:
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Development'
+                      edge: None
+                  axis: 'x'
+              y:
+                Var
+                  name: 'busY'
+        Then()
+        To
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Development'
+                  edge: 'n'
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'line'
+      attributes:
+        From_
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'ProjectManager'
+                  edge: 's'
+        To
+          position:
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'ProjectManager'
+                      edge: None
+                  axis: 'x'
+              y:
+                Var
+                  name: 'busY'
+        Then()
+        To
+          position:
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Test'
+                      edge: None
+                  axis: 'x'
+              y:
+                Var
+                  name: 'busY'
+        Then()
+        To
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Test'
+                  edge: 'n'
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'line'
+      attributes:
+        From_
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'ProjectManager'
+                  edge: 's'
+        To
+          position:
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'ProjectManager'
+                      edge: None
+                  axis: 'x'
+              y:
+                Var
+                  name: 'busY'
+        Then()
+        To
+          position:
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Migration'
+                      edge: None
+                  axis: 'x'
+              y:
+                Var
+                  name: 'busY'
+        Then()
+        To
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Migration'
+                  edge: 'n'
+    ObjectStatement
+      label: None
+      base:
+        ClassBase
+          classname: 'line'
+      attributes:
+        From_
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'ProjectManager'
+                  edge: 's'
+        To
+          position:
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'ProjectManager'
+                      edge: None
+                  axis: 'x'
+              y:
+                Var
+                  name: 'busY'
+        Then()
+        To
+          position:
+            Coord
+              x:
+                PlaceCoord
+                  place:
+                    ObjectEdge
+                      obj:
+                        NameRef
+                          path:
+                            'Technical'
+                      edge: None
+                  axis: 'x'
+              y:
+                Var
+                  name: 'busY'
+        Then()
+        To
+          position:
+            PlacePosition
+              place:
+                ObjectEdge
+                  obj:
+                    NameRef
+                      path:
+                        'Technical'
+                  edge: 'n'
+  macros: []

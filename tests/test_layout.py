@@ -75,6 +75,13 @@ def test_circle_and_ellipse_defaults():
     assert (oval.w, oval.h) == (1.0, 0.5)
 
 
+@pytest.mark.parametrize("src", ["circle width 1", "circle height 1",
+                                 "circle radius 0.5", "circle diameter 1"])
+def test_circle_size_attributes_keep_it_round(src):
+    circle = layout(src + "\n").shapes[0]
+    assert (circle.w, circle.h, circle.rad) == (1.0, 1.0, 0.5)
+
+
 # ---------------------------------------------------------------------------
 # at / with / from / to / same / chop
 # ---------------------------------------------------------------------------

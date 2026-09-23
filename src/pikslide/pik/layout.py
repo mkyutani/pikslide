@@ -1218,8 +1218,12 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         value = _resolve_rel_current(attr.value, current, ctx)
         if attr.name == "width":
             shape.w = value
+            if shape.kind == "circle":
+                shape.h, shape.rad = value, value / 2
         elif attr.name == "height":
             shape.h = value
+            if shape.kind == "circle":
+                shape.w, shape.rad = value, value / 2
         elif attr.name == "radius":
             shape.rad = value
             if shape.kind == "circle":

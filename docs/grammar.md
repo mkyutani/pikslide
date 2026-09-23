@@ -400,7 +400,7 @@ or through a block (`Outer.Inner`), and points on them by edge (`Web.ne`,
 | Class | Default size | Notes |
 |---|---|---|
 | `box` | `boxwid` × `boxht` (0.75 × 0.5) | corner radius `boxrad` (0) |
-| `circle` | diameter `2 × circlerad` (0.5) | |
+| `circle` | diameter `2 × circlerad` (0.5) | `width`/`height`/`radius`/`diameter` all keep it round |
 | `ellipse` | `ellipsewid` × `ellipseht` (0.75 × 0.5) | |
 | `oval` | `ovalwid` × `ovalht` (1 × 0.5) | |
 | `diamond` | `diamondwid` × `diamondht` (1 × 0.75) | |

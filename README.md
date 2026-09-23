@@ -64,6 +64,20 @@ true Bézier curves, shape adjustment handles, arithmetic on colors.
 - Python 3.14+
 - [uv](https://docs.astral.sh/uv/)
 
+## Install
+
+Every example below runs `pikslide` through `uv run`, which needs no install
+step. To get a standalone `pikslide` command instead (placed in
+`~/.local/bin`, no `uv run` prefix needed), install it as a uv tool from the
+project root:
+
+```sh
+uv tool install .
+```
+
+If `~/.local/bin` isn't on your `PATH` yet, run `uv tool update-shell`. To
+remove it later: `uv tool uninstall pikslide`.
+
 ## Usage
 
 Dump the parsed tree for a `.pik` file (useful for inspecting how a script was

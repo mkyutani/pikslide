@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from pikslide.markdown import MarkdownDiagramError, PikBlock, extract_pik_blocks
+from pikslide.markdown import MarkdownDiagramError, PikBlock, extract_pikslide_blocks
 from pikslide.pik import parse
 
 
@@ -20,41 +20,34 @@ def test_extracts_pikslide_fences():
         "circle\n"
         "```\n"
     )
-    blocks = extract_pik_blocks(text)
+    blocks = extract_pikslide_blocks(text)
     assert [b.text for b in blocks] == ["box\n", "circle\n"]
     assert [b.name for b in blocks] == ["one", "two"]
 
 
-def test_pik_and_pikchr_fences_are_not_recognized():
-    # Only ```pikslide``` is (docs/spec.md SS6) -- these used to be
-    # accepted as synonyms; they no longer are.
-    text = "```pik\nbox\n```\n\n```pikchr\ncircle\n```\n\n```pikslide\narrow\n```\n"
-    assert [b.text for b in extract_pik_blocks(text)] == ["arrow\n"]
-
-
 def test_ignores_other_language_fences():
     text = "```python\nprint('hi')\n```\n\n```pikslide\nbox\n```\n"
-    assert [b.text for b in extract_pik_blocks(text)] == ["box\n"]
+    assert [b.text for b in extract_pikslide_blocks(text)] == ["box\n"]
 
 
 def test_ignores_unlabeled_fences():
     text = "```\nbox\n```\n"
-    assert extract_pik_blocks(text) == []
+    assert extract_pikslide_blocks(text) == []
 
 
 def test_tilde_fences_are_recognized():
     text = "~~~pikslide\nbox\n~~~\n"
-    assert [b.text for b in extract_pik_blocks(text)] == ["box\n"]
+    assert [b.text for b in extract_pikslide_blocks(text)] == ["box\n"]
 
 
 def test_lang_tag_is_case_insensitive():
     text = "```PIKSLIDE\nbox\n```\n"
-    assert [b.text for b in extract_pik_blocks(text)] == ["box\n"]
+    assert [b.text for b in extract_pikslide_blocks(text)] == ["box\n"]
 
 
 def test_extracted_block_parses_as_pik():
     text = "```pikslide\nA: box \"hi\"\narrow right\nB: box \"there\"\n```\n"
-    (block,) = extract_pik_blocks(text)
+    (block,) = extract_pikslide_blocks(text)
     doc = parse(block.text)
     assert len(doc.statements) == 3
 
@@ -66,36 +59,36 @@ def test_extracted_block_parses_as_pik():
 
 def test_single_unnamed_block_needs_no_name():
     text = "```pikslide\nbox\n```\n"
-    (block,) = extract_pik_blocks(text)
+    (block,) = extract_pikslide_blocks(text)
     assert block == PikBlock(None, "box\n")
 
 
 def test_named_block_is_captured():
     text = "```pikslide architecture\nbox\n```\n"
-    (block,) = extract_pik_blocks(text)
+    (block,) = extract_pikslide_blocks(text)
     assert block.name == "architecture"
     assert block.text == "box\n"
 
 
 def test_multiple_named_blocks_are_fine():
     text = "```pikslide one\nbox\n```\n\n```pikslide two\ncircle\n```\n"
-    blocks = extract_pik_blocks(text)
+    blocks = extract_pikslide_blocks(text)
     assert [b.name for b in blocks] == ["one", "two"]
 
 
 def test_multiple_blocks_without_a_name_is_an_error():
     text = "```pikslide\nbox\n```\n\n```pikslide\ncircle\n```\n"
     with pytest.raises(MarkdownDiagramError):
-        extract_pik_blocks(text)
+        extract_pikslide_blocks(text)
 
 
 def test_multiple_blocks_one_unnamed_is_an_error():
     text = "```pikslide one\nbox\n```\n\n```pikslide\ncircle\n```\n"
     with pytest.raises(MarkdownDiagramError):
-        extract_pik_blocks(text)
+        extract_pikslide_blocks(text)
 
 
 def test_duplicate_names_is_an_error():
     text = "```pikslide dup\nbox\n```\n\n```pikslide dup\ncircle\n```\n"
     with pytest.raises(MarkdownDiagramError):
-        extract_pik_blocks(text)
+        extract_pikslide_blocks(text)

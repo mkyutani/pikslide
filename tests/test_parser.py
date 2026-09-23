@@ -1,8 +1,7 @@
-"""Tests for the pikchr (.pik) parser: pikslide.pik.parse().
+"""Tests for the parser: pikslide.pik.parse().
 
-Fixtures under tests/fixtures/examples/ are pikchr's own official example
-scripts (https://pikchr.org/home/doc/tip/doc/examples.md), used here as a
-"does this parse without error" regression net across real-world syntax.
+Fixtures under tests/fixtures/examples/ are real-world example diagrams,
+used here as a "does this parse without error" regression net.
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ EXAMPLE_FILES = sorted(FIXTURES_DIR.glob("*.pik"))
 
 
 # ---------------------------------------------------------------------------
-# Real-world regression: pikchr's own official examples
+# Real-world regression: example diagrams
 # ---------------------------------------------------------------------------
 
 
@@ -51,8 +50,7 @@ def test_simple_box():
 
 
 def test_lowercase_color_name_is_an_ordinary_variable():
-    # Unlike pikchr, a color name is not special in the grammar: pikslide
-    # is not aiming for pikchr compatibility (docs/spec.md SS2), and a
+    # A color name is not special in the grammar (docs/spec.md SS2): a
     # capitalized PLACENAME is always an object reference, never a color
     # -- "darkblue" is an ordinary Var, resolved against the prelude
     # (docs/spec.md SS3.7) at evaluation time, not parse time.
@@ -88,7 +86,7 @@ def test_string_escapes():
 
 
 # ---------------------------------------------------------------------------
-# Numeric literals and units (pik_atof port)
+# Numeric literals and units
 # ---------------------------------------------------------------------------
 
 
@@ -264,7 +262,7 @@ def test_leading_bare_percentage_is_current_direction():
 
 def test_expr_precedence():
     # NOTE: 'x' and 'y' are reserved keywords (used in "place.x"/"place.y"),
-    # so -- just as in upstream pikchr -- they cannot be used as plain
+    # so they cannot be used as plain
     # variable names; hence "foo"/"bar" here instead.
     doc = parse("foo = 1 + 2 * 3\n")
     value = doc.statements[0].value
@@ -338,9 +336,8 @@ def test_macro_expansion_with_positional_args():
 
 
 def test_macro_invocation_requires_adjacent_parens():
-    # A space before '(' means "invoke with no args", per upstream pikchr:
-    # pik_parse_macro_args() is only tried on text immediately following
-    # the macro name token, so "(...)" with a preceding space is left as
+    # A space before '(' means "invoke with no args": arguments are only
+    # parsed from text immediately following the macro name token, so "(...)" with a preceding space is left as
     # ordinary tokens rather than being consumed as the argument list.
     tokens, _ = expand_macros("define one { box } one (ignored)\n")
     kinds = [t.type for t in tokens]
@@ -359,7 +356,7 @@ def test_recursive_macro_raises():
 
 
 def test_string_literal_dollar_is_not_substituted():
-    # Matches upstream pikchr: a STRING token is opaque to macro expansion,
+    # A STRING token is opaque to macro expansion,
     # so "$1" typed inside quotes is never substituted.
     tokens, _ = expand_macros('define m { box "$1" }\nm(hello)\n')
     doc = Parser(tokens).parse_document()

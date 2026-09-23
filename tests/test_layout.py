@@ -1,11 +1,9 @@
 """Tests for pikslide.pik.layout: resolving a parsed AST into concrete geometry.
 
-This engine is a deliberately pragmatic subset of pikchr's own layout
-engine -- see the module docstring in layout.py for what is and isn't
-faithfully reproduced. These tests check the mechanics that *are* ported
-(default sizes, sequential chaining, at/with/from/to/same/chop, direction
-changes, nested blocks, nth/last including the by-text-content fallback)
-rather than pixel-perfect agreement with upstream pikchr's own renderer.
+These tests check the layout mechanics (default sizes, sequential
+chaining, at/with/from/to/same/chop, direction changes, nested blocks,
+nth/last including the by-text-content fallback) -- see the module
+docstring in layout.py for what is deliberately left out.
 """
 
 from __future__ import annotations
@@ -115,10 +113,9 @@ def test_chop_trims_line_to_box_boundary():
 
 
 def test_name_resolves_by_text_content_when_unlabeled():
-    # Ported straight from pikchr's own pik_find_byname() fallback: an
-    # object with no explicit "NAME: " label can still be referenced by
-    # the exact text it contains (two of pikchr's own official examples
-    # rely on exactly this).
+    # An object with no explicit "NAME: " label can still be referenced by
+    # the exact text it contains (two of the example fixtures rely on
+    # exactly this).
     result = layout('box "Foo"\narrow from Foo.e to Foo.e+(1,0)\n')
     box, arrow = result.shapes
     assert arrow.path[0] == pytest.approx(box.edge_point("e"))
@@ -136,7 +133,7 @@ def test_then_forces_separate_path_points():
 
 
 def test_consecutive_perpendicular_moves_merge_into_one_diagonal_point():
-    # No "then" between them: matches pik_add_direction()'s point-merging.
+    # No "then" between them, so the two moves merge into one point.
     result = layout("line right 1 up 1\n")
     line = result.shapes[0]
     assert line.path == [pytest.approx((0, 0)), pytest.approx((1, 1))]
@@ -156,7 +153,7 @@ def test_go_until_even_with():
 
 
 def test_from_after_movement_rebases_the_whole_path():
-    # Matches pik_set_from(): a "from" appearing *after* a movement
+    # A "from" appearing *after* a movement
     # attribute shifts every already-recorded point, it doesn't discard them.
     result = layout("line right 1 from (10,10)\n")
     line = result.shapes[0]
@@ -173,7 +170,7 @@ def test_unlabeled_objects_get_default_class_n_names():
     assert [s.name for s in result.shapes] == ["box 1", "box 2", "circle 1"]
 
 
-def test_labeled_object_keeps_its_pik_label_as_its_name():
+def test_labeled_object_keeps_its_label_as_its_name():
     result = layout('box "a"\nWeb: box "b"\nbox "c"\n')
     assert [s.name for s in result.shapes] == ["box 1", "Web", "box 3"]
 
@@ -295,7 +292,7 @@ def test_prelude_defines_css_color_names_as_variables():
 
 
 def test_color_name_is_overridable_like_any_variable():
-    # Unlike pikchr's own color-name table, a prelude color is an
+    # A prelude color is an
     # ordinary variable: a later assignment wins.
     result = layout('red = 0x00FF00\nbox fill red\n')
     assert result.shapes[0].fill == Color(rgb=0x00FF00)
@@ -319,7 +316,7 @@ def test_unknown_theme_slot_is_an_error():
 
 
 def test_arithmetic_on_a_color_is_an_error():
-    # "x"/"y" are reserved (pikchr's own .x/.y coordinate access), so this
+    # "x"/"y" are reserved (.x/.y coordinate access), so this
     # uses an ordinary name instead.
     with pytest.raises(LayoutError):
         layout('myvar = red + 1\nbox\n')

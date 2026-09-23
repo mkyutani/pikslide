@@ -56,7 +56,7 @@ def test_two_point_arrow_becomes_a_connector(tmp_path: pathlib.Path):
 def test_arrow_labels_render_as_textboxes_above_and_below(tmp_path: pathlib.Path):
     # A connector shape has no text_frame of its own in python-pptx, so an
     # arrow's text must show up as separate floating textboxes -- and two
-    # un-flagged texts split above/below the line (pik_txt_vertical_layout()).
+    # un-flagged texts split above/below the line (assign_text_slots()).
     prs = render('arrow right "Top" "Bottom"\n', tmp_path)
     slide = prs.slides[0]
     textboxes = [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX]
@@ -91,9 +91,8 @@ def test_slide_size_matches_diagram_bbox_plus_margin(tmp_path: pathlib.Path):
 
 
 def test_fill_color_is_applied(tmp_path: pathlib.Path):
-    # Unlike pikchr, a color name is an ordinary lowercase variable,
-    # defined by the prelude (docs/spec.md SS2, SS3.7) -- not a capitalized
-    # PLACENAME the way pikchr's own color-name shorthand works.
+    # A color name is an ordinary lowercase variable, defined by the
+    # prelude (docs/spec.md SS2, SS3.7) -- not a capitalized PLACENAME.
     prs = render("box fill red\n", tmp_path)
     shape = prs.slides[0].shapes[0]
     assert shape.fill.fore_color.rgb == RGBColor(0xFF, 0x00, 0x00)
@@ -515,7 +514,7 @@ def test_unknown_align_is_an_error(tmp_path: pathlib.Path):
         _insert('box "Web"\n', deck, slide_no=1, rect=(0, 0, 4, 4), align="upper-middle")
 
 
-def test_default_prefix_is_pik_plus_the_id(tmp_path: pathlib.Path):
+def test_default_prefix_is_derived_from_the_id(tmp_path: pathlib.Path):
     deck = _existing_deck(tmp_path)
     prs = _insert('box "Web"\n', deck, slide_no=1, region="Figure", group_id="arch")
     assert prs.slides[0].shapes[-1].name == "pik:archbox 1"

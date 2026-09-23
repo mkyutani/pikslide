@@ -16,14 +16,14 @@ restyle and move after the fact. (pikslide's own design traces back
 through two earlier languages; see Acknowledgments, §8.)
 
 The target is one *diagram*, not a deck. Deck structure (titles, ordering,
-body text) belongs to whatever assembles the deck; pikslide places a diagram
-into a slide that already exists.
+body text) belongs to whatever assembles the deck; pikslide writes a diagram
+as a one-slide deck, sized to it, whose shapes are copied or moved into the
+real deck from there.
 
 ### Scope of v1
 
 v1 covers theme colors and fonts (§3.3), an editable structure of shape
-names, groups and z-order (§3.1), insertion into an existing slide (§4.2),
-preset shapes (§3.4), and images and icons (§3.5). What v1 leaves out is
+names, groups and z-order (§3.1), preset shapes (§3.4), and images and icons (§3.5). What v1 leaves out is
 listed in §7.
 
 Placement is sequential and relative: objects are placed one after another
@@ -161,25 +161,19 @@ box "Outline"  fill bg1 color text1
   a string carries more than one size flag, the last one wins. `fit` sizing
   measures with the size in effect.
 
-**Where the theme comes from.** The tool reads it straight out of the file
-the diagram is going into; the language never names a theme file.
+**Where the theme comes from.** The tool reads it from the template named
+on the command line; the language never names a theme file.
 
-1. `pikslide diagram.pik deck.pptx --slide N`, OUTPUT already existing
-   (§4.2): the theme of slide N's master (slide → layout → master → theme
-   part). A deck with several masters has several themes, and the slide's
-   own master decides.
-2. Otherwise `--template FILE` (`.pptx` or `.potx`): the theme of the master
-   that owns the slide layout its settings file names with `layout` (§3.8),
-   or of its first master when there is none. `--template` always starts a
-   *new* deck (§4.1), even if OUTPUT already exists, since the deck it names
-   is already the template.
-3. Otherwise the built-in Office theme, with a warning that colors and
+1. `--template FILE` (`.pptx` or `.potx`): the theme of the master that owns
+   the slide layout its settings file names with `layout` (§3.8), or of its
+   first master when there is none.
+2. Otherwise the built-in Office theme, with a warning that colors and
    fonts are stand-ins.
 
 Facts this rests on (checked): a valid theme always defines all 12 color
 slots (`dk1 lt1 dk2 lt2 accent1`–`6 hlink folHlink`) and both the major and
 minor font, so **a valid slot name is never undefined**. What can go wrong
-is only (a) no theme was supplied → rule 3; (b) a name is not defined, e.g.
+is only (a) no theme was supplied → rule 2; (b) a name is not defined, e.g.
 `accent7` → an ordinary undefined-variable error, with a "did you mean
 `accent1`?" hint; (c) `theme "accent7"` names no slot → an error that lists
 the slots the tool knows.
@@ -187,12 +181,12 @@ the slots the tool knows.
 Colors and fonts are both emitted as symbolic references (`schemeClr`,
 `+mn-lt`/`+mj-lt`, …), never resolved here, so no theme file's *content*
 ever needs reading for either to be correct: PowerPoint itself resolves
-the reference once the diagram sits inside a real deck (rule 1) or a
-`--template`'s own theme (rule 2). Writing is the one place a `.potx`
-needs touching directly: python-pptx refuses one as-is (it raises
-`ValueError`, checked), so a `.potx` used as a `--template` base is first
-normalized to a presentation content type and stripped of its sample
-slides.
+the reference once the diagram sits inside a `--template`'s own theme
+(rule 1), or inside a real deck its shapes are copied into. Writing is
+the one place a `.potx` needs touching directly: python-pptx refuses one
+as-is (it raises `ValueError`, checked), so a `.potx` used as a
+`--template` base is first normalized to a presentation content type and
+stripped of its sample slides.
 
 `fit` sizing measures with a fixed substitute font file on the machine,
 independent of the theme (whose actual font *name* is never read), so
@@ -235,7 +229,7 @@ Logo: image "logo.png" width 0.6in
 ```
 
 - A new class. The string is a **path relative to the
-  source file** (for Markdown, the `.md` file).
+  source file**.
 - Size: `width` and/or `height` given → the missing one follows the aspect
   ratio; both given → stretched; neither → fit inside `boxwid × boxht`,
   aspect preserved.
@@ -280,8 +274,8 @@ define card { rad 8px color text1 }
   visible from the `include` line onward, exactly as if written there.
 - **House colors are variables** holding colors (§3.3); macros are for
   bundles of attributes such as `card`.
-- **Resolution.** The path is relative to the file containing the `include`
-  (for a Markdown fence: to the `.md` file), then to each `--include-path DIR`.
+- **Resolution.** The path is relative to the file containing the `include`,
+  then to each `--include-path DIR`.
 - **Local and contained.** Only local files are read, never URLs. The
   resolved path must lie under the including file's directory or under an
   `--include-path` directory: absolute paths and `..` escapes are rejected.
@@ -372,9 +366,8 @@ emphasis   = accent1
 Which theme, which slide layout and which accent colors suit a diagram
 depend on the template it goes into, and so do sensible text sizes. These
 choices therefore belong to the template, not to the diagram and not to the
-tool. Each `.potx` or `.pptx` used with `--template`, or as OUTPUT when it
-already exists (§4.2), can have a **settings file**, found beside it or named
-with `--settings FILE`, which holds:
+tool. Each `.potx` or `.pptx` used with `--template` can have a **settings
+file**, found beside it or named with `--settings FILE`, which holds:
 
 - the slide layout for a new slide (`layout`), which also fixes the master
   and so the theme (§3.3);
@@ -382,16 +375,14 @@ with `--settings FILE`, which holds:
 - the accent colors: which of the theme's colors the diagram uses for
   emphasis. `primary` and `emphasis` are the standard names (§3.7); a
   template may define others;
-- the default text sizes (`small`, `medium`, `large`, §3.7);
-- the content area: the rectangle of a slide that a diagram may use, which is
-  the default target when inserting into an existing deck (§4.2).
+- the default text sizes (`small`, `medium`, `large`, §3.7).
 
 The settings file is read after the prelude and before the program, so its
 definitions override the prelude's, and the program's override its own. A
 template without one gets the prelude's defaults and its first master's blank
 layout. A
-`.pik` still never names the file: the tool finds it from the template or
-deck the diagram goes into, or the caller names it (§4).
+`.pik` still never names the file: the tool finds it from the template, or
+the caller names it (§4).
 
 ```pikslide
 # corporate.theme.pik (beside corporate.potx)
@@ -401,27 +392,21 @@ medium        = 12pt       # this template's diagram text size
 primary       = text2      # the standard accent-color names
 emphasis      = accent1
 warning       = accent5    # any further names the template wants
-content_left   = 15pt       # where a diagram may go on a slide
-content_top    = 37.5pt
-content_right  = 944.9pt
-content_bottom = 534.6pt
 ```
 
 - **Format.** The prelude's own: a file of definitions only, as in §3.6. It
   is read by the tool, not through `include`, so the path rules of §3.6 do not
   apply to finding it; the definitions-only rule does apply to its content.
-- **Location.** Beside the template or deck by default. `--settings FILE`
+- **Location.** Beside the template by default. `--settings FILE`
   names it explicitly, wherever it is (a shared folder, say); nothing is then
   looked for beside the template. The caller names it, so the path rules of
   §3.6 do not apply. A named file that does not exist is an error.
   `--settings` also works when no template is given, to set text sizes and
   accent colors for the built-in theme.
-- **Name.** `<template name>.theme.pik` beside the template or deck
+- **Name.** `<template name>.theme.pik` beside the template
   (`corporate.potx` → `corporate.theme.pik`).
 - **`layout`** is the name of a slide layout, used when pikslide makes a new
-  slide from the template (inserting into an existing deck's slide has no use
-  for it, since that slide already has its layout).
-  A layout belongs to one master, so naming it also chooses the master and
+  slide from the template. A layout belongs to one master, so naming it also chooses the master and
   the theme. The prelude gives it the empty string, which means the first
   layout of type `blank` in the first master, or that master's first layout
   if it has none. If two masters have a layout of that name, the first one
@@ -439,65 +424,23 @@ content_bottom = 534.6pt
 
 ## 4. Output model
 
-A `.pik` never names a deck, slide, region or theme file. Those come from the
-command line or the caller, so the same diagram can be reused in any deck.
+A `.pik` never names a deck, slide or theme file. Those come from the command
+line or the caller, so the same diagram can be reused in any deck.
 
 ```sh
-pikslide diagram.pik [OUTPUT] [--template FILE] [--slide N] [--region NAME | --rect X,Y,W,H]
+pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--settings FILE]
 ```
 
-`OUTPUT` decides everything: omitted, the parsed tree is dumped instead of
-writing anything (unless `--template` is given, see below); missing on disk,
-a new deck is created there; already existing, the diagram is inserted into
-it. `OUTPUT` is always the file written to, in place — there is no separate
-`-o`/`--in-place` distinction.
+`OUTPUT` omitted, the parsed tree is dumped instead of writing anything
+(unless `--template` is given, see below). Otherwise a new one-slide
+presentation is written there, sized to the diagram plus a margin, and an
+existing file is overwritten. `--template deck.pptx` (or a `.potx`) starts
+from that file's theme instead of the built-in Office theme, so theme colors
+and fonts resolve the way the real deck will (see §3.3); when `OUTPUT` is
+omitted but `--template` is given, it defaults to `INPUT` with its extension
+changed to `.pptx` (`diagram.pik` → `diagram.pptx`).
 
-### 4.1 Creating a new deck
-
-If `OUTPUT` doesn't exist yet, a new one-slide presentation is created there,
-sized to the diagram plus a margin. `--template deck.pptx` (or a `.potx`)
-starts from that file's theme instead of the built-in Office theme, so theme
-colors and fonts resolve the way the real deck will (see §3.3). `--template`
-always starts a fresh deck this way, even when `OUTPUT` already exists (so
-that re-running the same `--template` command just keeps overwriting it,
-rather than switching into inserting); when `OUTPUT` is omitted but
-`--template` is given, it defaults to `INPUT` with its extension changed to
-`.pptx` (`diagram.pik` → `diagram.pptx`).
-
-### 4.2 Insert into an existing deck
-
-```sh
-pikslide diagram.pik deck.pptx --slide 5 --region "Figure"
-```
-
-- `--slide` is 1-based, and required whenever `OUTPUT` already exists.
-  `--region` is the name of a shape or placeholder on that slide whose
-  rectangle is the target; `--rect x,y,w,h` (inches) is the explicit
-  alternative. With neither, the target is the content area from the
-  settings file (§3.8), and with none of the three it is an error. When
-  the region is an *empty placeholder*, it is
-  deleted after the diagram is placed (an empty prompt left behind is clutter
-  in edit view); any other shape used as a region is left alone. The theme is
-  the deck's own (§3.3).
-- **No scaling.** A diagram is placed at its natural size and is never
-  scaled: the text sizes and line widths are the author's, and an automatic
-  reduction could leave text too small to read. A diagram that is larger than
-  its region is an **error** that reports both sizes (the diagram's bounding
-  box, line labels included, and the region's); the source is then adjusted.
-  A smaller diagram is placed at the region's top-left, under the slide title
-  and in line with body text; `--align` overrides.
-- **No group.** Every shape is added directly to the slide (never wrapped in
-  a PowerPoint group, §3.1) and named `pik:<id><shape's own name>` (`<id>` =
-  `--id`, else the diagram's name in a Markdown fence (§6), else the source
-  file's stem; `--prefix` overrides the whole `pik:<id>` prefix outright,
-  when `<id>` alone risks colliding with a real shape name already on the
-  slide).
-- **Idempotent.** Running again finds every shape whose name starts with
-  that prefix, removes exactly those (keeping their former z-order position
-  for the replacements), and adds the new ones — so a second run replaces
-  what pikslide itself placed, without adding a second copy, while anything
-  else on the slide, including an edit made by hand since the last run, is
-  left completely untouched.
+A diagram is never scaled: the text sizes and line widths are the author's.
 
 ## 5. Diagnostics
 
@@ -506,34 +449,22 @@ Humans and LLMs both need errors they can act on.
 - Every error carries `file:line:column`, the source line, and a caret; the
   file is the included one when the error is inside an `include` (§3.6).
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
-- A diagram larger than its region is an **error** (§4.2).
-- Unknown names (color, theme slot, preset, image path, region) are
+- Unknown names (color, theme slot, preset, image path) are
   **errors with suggestions**, not silent fallbacks. `--strict` turns
   warnings into errors.
 - A `define` naming an already-defined variable is an **error** (§3.6).
 - `--check` parses and lays out without writing; `--format json` emits
   diagnostics as JSON for tooling.
 
-## 6. Use from Markdown and from other tools
+## 6. Use from other tools
 
-- **Markdown fence tag: `pikslide`.** Only a ` ```pikslide ` fence is
-  recognized; a toolchain that also sends diagrams elsewhere tags each
-  fence for the tool it's meant for.
-- **Diagram names.** A fence may name its diagram with the word after the
-  language tag: ` ```pikslide architecture `. A Markdown file with more than
-  one diagram must name every one of them; a missing or duplicate name is an
-  error. A file with a single diagram needs no name. Names use letters,
-  digits, `-` and `_`. The name is the diagram's id (§4.2), and `--block NAME`
-  selects one diagram of the file, which inserting into an existing deck or
-  `--template` each need, since they place exactly one diagram.
-- Slide and region come from the caller (command-line options), not from the
-  block, per the placement decision.
 - The diagram is written as native shapes directly, so a caller need not
   render a PNG, or convert a rendered diagram to shapes afterwards.
 
 ## 7. Not in v1
 
-Connectors (a future `connector` class, §3.2) · SVG *output* (SVG *images*
+Inserting into an existing deck's slide · ` ```pikslide ` blocks in
+Markdown · connectors (a future `connector` class, §3.2) · SVG *output* (SVG *images*
 are supported, §3.5) · auto-layout and declarative graph syntax (a large
 piece of work of its own) · tables, charts, SmartArt · animation,
 transitions, speaker notes · multi-slide or whole-deck authoring · true

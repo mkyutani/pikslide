@@ -240,9 +240,7 @@ typeface = ""
 # --- Slide layout (docs/spec.md SS3.8) --------------------------------------
 # Empty means "the first `blank`-type layout of the template's first
 # master, or that master's first layout if it has none" -- used only when
-# pikslide makes a *new* slide from a `--template` (inserting into an
-# existing deck's slide, the slide already has its layout). Settings-file
-# only: a program assigning this is an error, since a .pik never chooses
+# pikslide makes a new slide from a `--template`. Settings-file only: a program assigning this is an error, since a .pik never chooses
 # the deck's structure.
 
 layout = ""

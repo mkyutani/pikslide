@@ -405,17 +405,8 @@ class LayoutResult:
     means "the first blank-type layout of the template's first master, or
     that master's own first layout if it has none"; settable only by the
     prelude or a settings file, never a program (`_eval_assignment()`
-    enforces this) -- used only when making a *new* slide from a
-    `--template` (inserting into an existing deck's slide, that slide
-    already has its layout)."""
-    content_area: tuple[float, float, float, float] | None = None
-    """(left, top, width, height) in inches, from a settings file's
-    `content_left`/`content_top`/`content_right`/`content_bottom` (docs/
-    spec.md SS3.8) -- the default target region (SS4.2) when inserting
-    into an existing deck and neither `--region` nor `--rect` is given.
-    `None` unless a settings file defines all four (there is no prelude
-    default for them: without a template, there is no "the slide" to
-    place a default region on)."""
+    enforces this) -- used only when making a new slide from a
+    `--template`."""
 
 
 # Edge/offset/chop geometry for box/ellipse/diamond
@@ -804,7 +795,7 @@ def _did_you_mean(name: str, candidates) -> str:
     `candidates`, or "" if nothing is close enough (docs/spec.md SS5:
     "unknown names ... are errors with suggestions, not silent
     fallbacks") -- shared so every "unknown name" error (an undefined
-    variable, an image file, a region) gives one the same way, not just
+    variable, an image file) gives one the same way, not just
     `_resolve_preset_name()`, which is where this pattern started."""
     suggestions = difflib.get_close_matches(name, candidates, n=3)
     return f"; did you mean {', '.join(suggestions)}?" if suggestions else ""
@@ -1598,9 +1589,6 @@ def flatten_shapes(shapes: list[Shape]) -> list[Shape]:
     return out
 
 
-_CONTENT_AREA_VARS = ("content_left", "content_top", "content_right", "content_bottom")
-
-
 def resolve_layout(
     doc: ast.Document,
     metrics: FontMetrics | None = None,
@@ -1642,10 +1630,4 @@ def resolve_layout(
     text_sizes = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
     typeface = _as_string(ctx.vars.get("typeface", ""), "typeface")
     layout_name = _as_string(ctx.vars.get("layout", ""), "layout")
-    content_area = None
-    if all(name in ctx.vars for name in _CONTENT_AREA_VARS):
-        left, top, right, bottom = (_as_number(ctx.vars[name], name) for name in _CONTENT_AREA_VARS)
-        content_area = (left, top, right - left, bottom - top)
-    return LayoutResult(
-        shapes=shapes, bbox=bbox, text_sizes=text_sizes, typeface=typeface, layout_name=layout_name, content_area=content_area
-    )
+    return LayoutResult(shapes=shapes, bbox=bbox, text_sizes=text_sizes, typeface=typeface, layout_name=layout_name)

@@ -416,27 +416,6 @@ def test_settings_file_must_be_definitions_only():
         resolve_layout(parse('box\n'), settings_text='box "not allowed here"\n')
 
 
-def test_settings_file_content_area_becomes_content_area():
-    settings = (
-        "content_left = 1in\ncontent_top = 2in\ncontent_right = 9in\ncontent_bottom = 7in\n"
-    )
-    result = resolve_layout(parse('box\n'), settings_text=settings)
-    assert result.content_area == pytest.approx((1.0, 2.0, 8.0, 5.0))
-
-
-def test_no_settings_file_means_no_content_area():
-    result = layout('box\n')
-    assert result.content_area is None
-
-
-def test_partial_content_area_is_not_enough():
-    # All four sides are required (docs/spec.md SS3.8) -- three don't
-    # define a rectangle.
-    settings = "content_left = 1in\ncontent_top = 2in\ncontent_right = 9in\n"
-    result = resolve_layout(parse('box\n'), settings_text=settings)
-    assert result.content_area is None
-
-
 def test_layout_can_be_set_in_a_settings_file():
     result = resolve_layout(parse('box\n'), settings_text='layout = "Title Slide"\n')
     assert result.layout_name == "Title Slide"

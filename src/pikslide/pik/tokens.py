@@ -319,10 +319,7 @@ def format_syntax_error(err: PikSyntaxError, main_path: str, main_text: str) -> 
     again here for its own source line -- not cached anywhere, since a
     diagnostic is the rare path, not a hot one.
 
-    `main_path` is only a display name for `err.file is None` -- for a
-    Markdown source, line/column are still relative to the *extracted
-    fenced block*, not the .md file's own lines (pre-existing, since
-    parsing already only ever saw the block's own text, not the file's)."""
+    `main_path` is only a display name for `err.file is None`."""
     if err.file is None:
         path, text = main_path, main_text
     else:

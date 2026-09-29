@@ -43,13 +43,10 @@ from .pik.layout import (
     flatten_shapes,
     rasterize_svg,
     resolve_layout,
+    slot_step,
 )
 
 EMU_PER_INCH = 914400
-
-# Vertical offset (in line-steps, positive = up in pik's y-up space) for
-# each text slot assign_text_slots() can assign.
-_SLOT_STEP = {"above2": 2, "above": 1, "center": 0, "below": -1, "below2": -2}
 
 # What "fit" sizing actually measures text *with* (a real installed font
 # file, via Pillow) is necessarily independent of the font family the
@@ -553,7 +550,7 @@ def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, flo
     cy = (by0 + by1) / 2
     out = []
     for (text, flags), slot in zip(shape.texts, assign_text_slots(shape.texts)):
-        dy = _SLOT_STEP.get(slot, 0) * label_step
+        dy = slot_step(slot) * label_step
         box_w = max(len(text) * base_size_pt / 72.0 * 0.7, 0.3)
         y = cy + dy
         out.append(((cx - box_w / 2, y - label_box_h / 2, cx + box_w / 2, y + label_box_h / 2), text, flags))

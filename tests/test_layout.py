@@ -14,7 +14,13 @@ import pathlib
 import pytest
 
 from pikslide.pik import parse
-from pikslide.pik.layout import Color, LayoutError, flatten_shapes, resolve_layout
+from pikslide.pik.layout import (
+    Color,
+    LayoutError,
+    assign_text_slots,
+    flatten_shapes,
+    resolve_layout,
+)
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "examples"
 EXAMPLE_FILES = sorted(FIXTURES_DIR.glob("*.pik"))
@@ -402,6 +408,28 @@ def test_fit_measurement_tracks_a_medium_override_at_the_objects_own_position():
     resolve_layout(doc, metrics=RecordingMetrics())
     assert calls, "text_width was never called"
     assert calls[0]["medium"] == pytest.approx(30 / 72)
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [
+        ([[], [], []], ["above", "center", "below"]),
+        ([[], [], [], []], ["above2", "above", "below", "below2"]),
+        ([[]] * 6, ["above3", "above2", "above", "below", "below2", "below3"]),
+        ([["above"], ["above"], ["above"], []], ["above3", "above2", "above", "below"]),
+        ([["below"], [], [], ["below"], []], ["below", "above2", "above", "below2", "center"]),
+    ],
+)
+def test_assign_text_slots_has_a_slot_for_every_string(flags, expected):
+    assert assign_text_slots([("t", f) for f in flags]) == expected
+
+
+def test_text_with_many_strings_lays_out():
+    # Issue #6: more strings than pikchr's five slots used to raise StopIteration.
+    strings = " ".join(f'"s{i}" small' for i in range(20))
+    for src in (f"text {strings} at (1, 1)\n", f"arrow {strings}\n"):
+        shape = layout(src).shapes[0]
+        assert len(shape.texts) == 20
 
 
 def test_above_and_below_offset_text_from_the_objects_center():

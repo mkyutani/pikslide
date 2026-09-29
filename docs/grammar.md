@@ -440,6 +440,11 @@ one of three sizes: `small`, `medium` (the default), and `large` or
 `medium = 10.5pt` and `large = 12pt`. The last size flag on a string wins.
 See [spec.md](spec.md) §3.3.
 
+A flag belongs to the `STRING` right before it, and to no other: to set
+the size of every string, flag each one (`"a" small "b" small`). An object
+may carry any number of strings; ones not flagged `above`/`below`/`center`
+are stacked evenly above and below its center.
+
 **Why some words are reserved and others aren't.** A word is reserved
 exactly when the grammar needs it as a literal token somewhere — an object
 class, a statement, an attribute, a text flag, a modifier — regardless of

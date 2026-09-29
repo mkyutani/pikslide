@@ -228,7 +228,12 @@ def assign_text_slots(texts: list[tuple[str, list[str]]]) -> list[str]:
     """Decide, for each text item that
     has no explicit above/below/center flag, which vertical slot it goes
     in -- e.g. two un-flagged texts split "above" / "below" the object's
-    reference point/line, not both centered on it."""
+    reference point/line, not both centered on it.
+
+    Slots are "center", then "above", "above2", "above3", ... going up and
+    "below", "below2", ... going down (slot_step()); as many as the texts
+    need, so there is no limit on how many strings an object carries. Up
+    to five texts get pikchr's own five slots, above2 through below2."""
     n = len(texts)
     if n == 0:
         return []
@@ -249,41 +254,47 @@ def assign_text_slots(texts: list[tuple[str, list[str]]]) -> list[str]:
     if n == 1:
         return [slots[0] or "center"]
 
-    seen = False
+    # Stack explicit above strings upwards from the last one, and below
+    # strings downwards from the first, so none share a slot.
+    k = 0
     for i in range(n - 1, -1, -1):
         if slots[i] == "above":
-            if not seen:
-                seen = True
-            else:
-                slots[i] = "above2"
-                break
-    seen = False
+            k += 1
+            slots[i] = _slot_name("above", k)
+    k = 0
     for i in range(n):
         if slots[i] == "below":
-            if not seen:
-                seen = True
-            else:
-                slots[i] = "below2"
-                break
+            k += 1
+            slots[i] = _slot_name("below", k)
 
     used = {s for s in slots if s is not None}
     if n == 2 and {justs[0], justs[1]} == {"ljust", "rjust"}:
         free = ["center", "center"]
     else:
-        free = []
-        if n >= 4 and "above2" not in used:
-            free.append("above2")
-        if "above" not in used:
-            free.append("above")
+        # n // 2 slots each side, plus center when n is odd: n in all, so
+        # at least as many free ones as un-flagged texts.
+        half = n // 2
+        free = [_slot_name("above", k) for k in range(half, 0, -1)]
         if n % 2 != 0:
             free.append("center")
-        if "below" not in used:
-            free.append("below")
-        if n >= 4 and "below2" not in used:
-            free.append("below2")
+        free += [_slot_name("below", k) for k in range(1, half + 1)]
+        free = [s for s in free if s == "center" or s not in used]
 
     it = iter(free)
     return [s if s is not None else next(it) for s in slots]
+
+
+def _slot_name(side: str, k: int) -> str:
+    return side if k == 1 else f"{side}{k}"
+
+
+def slot_step(slot: str) -> int:
+    """A text slot's offset in line-steps, positive = up: 0 for "center",
+    1 for "above", 2 for "above2", -1 for "below", and so on."""
+    if slot == "center":
+        return 0
+    side, k = slot[:5], int(slot[5:] or 1)
+    return k if side == "above" else -k
 
 
 class LayoutError(Exception):

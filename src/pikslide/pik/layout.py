@@ -498,7 +498,11 @@ def _ellipse_chop(shape: Shape, from_pt: tuple[float, float]) -> tuple[float, fl
     s = shape.h / shape.w
     dq = dx * s
     dist = math.hypot(dq, dy)
-    if dist < shape.h:
+    # Only a point inside the ellipse (dist, scaled to a circle of
+    # diameter h, under its radius) has no boundary crossing to chop to.
+    # Not `dist < h`: that also caught a point just outside -- e.g. a
+    # neighbouring circle's near edge -- and ended the line at the center.
+    if dist < shape.h / 2:
         return (shape.cx, shape.cy)
     return (shape.cx + 0.5 * dq * shape.h / (dist * s), shape.cy + 0.5 * dy * shape.h / dist)
 

@@ -112,6 +112,20 @@ def test_chop_trims_line_to_box_boundary():
     assert arrow.path[-1] == pytest.approx((4.0, 0.0))
 
 
+def test_chop_between_close_circles_stops_at_the_near_edge():
+    # Issue #5: the line starts 0.1in from B, closer than B's diameter but
+    # outside it -- still chopped to B's boundary, not B's center.
+    result = layout(
+        "r = 0.24\n"
+        "A: circle diameter r at (2.66, 4.03)\n"
+        "B: circle diameter r at (2.32, 4.03)\n"
+        "arrow from A.w to B.e chop\n"
+    )
+    arrow = result.shapes[2]
+    assert arrow.path[0] == pytest.approx((2.54, 4.03))
+    assert arrow.path[-1] == pytest.approx((2.44, 4.03))
+
+
 def test_name_resolves_by_text_content_when_unlabeled():
     # An object with no explicit "NAME: " label can still be referenced by
     # the exact text it contains (two of the example fixtures rely on

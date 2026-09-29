@@ -10,6 +10,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL_TYPE, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
+from pptx.enum.text import PP_ALIGN
 from pptx.oxml.ns import qn
 
 from pikslide.pik import parse
@@ -64,6 +65,21 @@ def test_arrow_labels_render_as_textboxes_above_and_below(tmp_path: pathlib.Path
     bottom_box = next(tb for tb in textboxes if tb.text_frame.text == "Bottom")
     # slide y grows downward, so the "above the line" label has the smaller top.
     assert top_box.top < bottom_box.top
+
+
+@pytest.mark.parametrize(("flag", "align"), [("ljust", PP_ALIGN.LEFT), ("rjust", PP_ALIGN.RIGHT), ("center", PP_ALIGN.CENTER)])
+def test_arrow_labels_line_up_with_each_other(tmp_path: pathlib.Path, flag: str, align: PP_ALIGN):
+    # ljust/rjust/center line an object's strings up with each other; a
+    # line's labels are separate textboxes, so they share one box width
+    # and align within it, centered on the line.
+    prs = render(f'arrow right 2 "a" {flag} above "a much longer line" {flag} below\n', tmp_path)
+    slide = prs.slides[0]
+    line = next(s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.LINE)
+    boxes = [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX]
+    assert len(boxes) == 2
+    assert boxes[0].left == boxes[1].left and boxes[0].width == boxes[1].width
+    assert all(b.text_frame.paragraphs[0].alignment == align for b in boxes)
+    assert boxes[0].left + boxes[0].width / 2 == pytest.approx(line.left + line.width / 2, abs=2)
 
 
 def test_above_and_below_text_clear_a_line_through_its_anchor(tmp_path: pathlib.Path):

@@ -365,9 +365,7 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
         para = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         if i == first_below:
             para.space_before = Inches(shape.text_split)
-        para.alignment = (
-            PP_ALIGN.LEFT if "ljust" in flags else PP_ALIGN.RIGHT if "rjust" in flags else PP_ALIGN.CENTER
-        )
+        para.alignment = _alignment(flags)
         run = para.add_run()
         run.text = text
         _apply_run_font(run, flags, shape.typeface)
@@ -532,6 +530,22 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
     _add_line_text(container, shape, tf)
 
 
+_label_metrics_cache: PilFontMetrics | None = None
+
+
+def _label_metrics() -> PilFontMetrics:
+    global _label_metrics_cache
+    if _label_metrics_cache is None:
+        _label_metrics_cache = PilFontMetrics()
+    return _label_metrics_cache
+
+
+def _alignment(flags: list[str]) -> PP_ALIGN:
+    """A string's paragraph alignment: ljust/rjust line an object's
+    strings up on their left/right edges, otherwise they're centered."""
+    return PP_ALIGN.LEFT if "ljust" in flags else PP_ALIGN.RIGHT if "rjust" in flags else PP_ALIGN.CENTER
+
+
 def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, float], str, list[str]]]:
     """Compute each text label's (x0, y0, x1, y1) rect in pik space (y-up,
     unmargined), alongside its text/flags -- shared by _add_line_text()
@@ -548,10 +562,16 @@ def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, flo
     bx0, by0, bx1, by1 = shape.bbox
     cx = (bx0 + bx1) / 2
     cy = (by0 + by1) / 2
+    # Every label gets the same width, the widest one's, so that aligning
+    # each within its box (_alignment()) lines the labels up with each
+    # other: ljust ones on a shared left edge, rjust ones on a shared
+    # right edge. Measured as "fit" measures, so the lined-up block stays
+    # centered on the line.
+    metrics = _label_metrics()
+    box_w = max(max(metrics.text_width(text, flags, shape.text_sizes), 0.3) for text, flags in shape.texts)
     out = []
     for (text, flags), slot in zip(shape.texts, assign_text_slots(shape.texts)):
         dy = slot_step(slot) * label_step
-        box_w = max(len(text) * base_size_pt / 72.0 * 0.7, 0.3)
         y = cy + dy
         out.append(((cx - box_w / 2, y - label_box_h / 2, cx + box_w / 2, y + label_box_h / 2), text, flags))
     return out
@@ -573,7 +593,7 @@ def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
         text_frame.margin_left = text_frame.margin_right = 0
         text_frame.margin_top = text_frame.margin_bottom = 0
         para = text_frame.paragraphs[0]
-        para.alignment = PP_ALIGN.CENTER
+        para.alignment = _alignment(flags)
         run = para.add_run()
         run.text = text
         _apply_run_font(run, flags, shape.typeface)

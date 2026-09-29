@@ -155,8 +155,9 @@ default object sizes, sequential chaining,
 edge geometry are all there, but a few things are simplified:
 
 - spline/arc curves are drawn as straight polylines,
-- `fit` text sizing uses real font metrics when rendering to PowerPoint, but
-  falls back to a flat per-character estimate otherwise,
+- `fit` text sizing measures with the deck's own fonts when rendering to
+  PowerPoint (docs/spec.md §3.3), but falls back to a flat per-character
+  estimate otherwise,
 - chopping against diamond/cylinder/file shapes uses a rectangle-like
   approximation rather than each shape's true outline.
 

@@ -48,10 +48,13 @@ class FontMetrics(Protocol):
     caller with no particular object in mind) falls back to whatever this
     metrics implementation would otherwise use."""
 
-    def text_width(self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
-        """Width, in inches, of one line of `text` at this flags' size,
-        including whatever margin this metrics considers standard (one
-        charWidth)."""
+    def text_width(
+        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
+    ) -> float:
+        """Width, in inches, of one line of `text` itself, at this flags'
+        size -- no margin (that's `textmargin`, added by _autosize_text()).
+        `typeface` is the object's own `Shape.typeface`: a literal family
+        to measure with, or empty for the theme's font."""
         ...
 
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
@@ -355,6 +358,13 @@ class Shape:
     """Like `text_sizes`, but for the `typeface` variable (docs/spec.md
     SS3.3): this object's own text renders in the family that was in
     effect when it was written, not the document's final one."""
+    text_margin: float = 0.0
+    """Like `text_sizes`, but for `textmargin` (docs/spec.md SS3.3): the
+    space between the text and the object's left and right sides."""
+    label_width: float = 0.0
+    """A line's labels' shared width (docs/spec.md SS3.1): its widest
+    label's, measured as `fit` measures, so that ljust/rjust labels line
+    up on a common edge and the lined-up block stays centered on the line."""
     fit: bool = False
     """Set by `_autosize_text()` (explicit `fit`, docs/spec.md SS3.3, or
     the implicit case -- no size given at all, ext): this shape's own
@@ -429,6 +439,9 @@ class LayoutResult:
     prelude or a settings file, never a program (`_eval_assignment()`
     enforces this) -- used only when making a new slide from a
     `--template`."""
+    warnings: list[str] = field(default_factory=list)
+    """Problems a renderer found that didn't stop it (e.g. a font that
+    isn't installed, so `fit` measured with a substitute)."""
 
 
 # Edge/offset/chop geometry for box/ellipse/diamond
@@ -571,13 +584,15 @@ class _ApproxMetrics:
     def __init__(self, ctx: "_Ctx"):
         self._ctx = ctx
 
-    def text_width(self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
+    def text_width(
+        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
+    ) -> float:
         # Reads ctx.vars live, at call time -- always the object's own
         # (never stale, unlike PilFontMetrics below, so the explicit
         # `text_sizes` override this Protocol method accepts is unneeded
-        # here and ignored.
+        # here and ignored, as is `typeface`: every family is charwid wide.
         charw = self._ctx.vars["charwid"] * _font_scale(flags, self._ctx)
-        return charw * len(text) + charw
+        return charw * len(text)
 
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
         return self._ctx.vars["charht"] * _font_scale(flags, self._ctx)
@@ -1144,7 +1159,8 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
         return
     m = ctx.metrics
     sizes = shape.text_sizes
-    shape.w = max((m.text_width(text, flags, sizes) for text, flags in shape.texts), default=0.0)
+    widest = max((m.text_width(text, flags, sizes, shape.typeface) for text, flags in shape.texts), default=0.0)
+    shape.w = widest + 2 * shape.text_margin
     shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 0.75 * m.line_height([], sizes)
     # The object stays centered on its own position with the text shifted
     # off that center, so it grows by the shift on both sides (as pikchr's
@@ -1461,6 +1477,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
     # point a later object's own override may already have changed them.
     text_sizes_now = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
     typeface_now = _as_string(ctx.vars.get("typeface", ""), "typeface")
+    text_margin_now = _as_number(ctx.vars.get("textmargin", 0.0), "textmargin")
 
     if isinstance(base, ast.BlockBase):
         ctx.scope_stack.append({})
@@ -1500,6 +1517,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
 
     shape.text_sizes = text_sizes_now
     shape.typeface = typeface_now
+    shape.text_margin = text_margin_now
     shape.in_dir = direction
     shape.out_dir = direction
 
@@ -1556,6 +1574,10 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
                 build.path[0] = chop_point(build.from_obj, build.path[1])
         if shape.closed and build.path[0] != build.path[-1]:
             build.path.append(build.path[0])
+        shape.label_width = max(
+            (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface) for text, flags in shape.texts),
+            default=0.0,
+        )
         shape.path = build.path
         shape.enter, shape.exit = build.path[0], build.path[-1]
         x0, y0, x1, y1 = shape.bbox

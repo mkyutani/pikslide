@@ -180,7 +180,8 @@ the slots the tool knows.
 
 Colors and fonts are both emitted as symbolic references (`schemeClr`,
 `+mn-lt`/`+mj-lt`, …), never resolved here, so no theme file's *content*
-ever needs reading for either to be correct: PowerPoint itself resolves
+needs reading for either to be drawn correctly (only `fit` reads the
+theme's font names, to measure with, below): PowerPoint itself resolves
 the reference once the diagram sits inside a `--template`'s own theme
 (rule 1), or inside a real deck its shapes are copied into. Writing is
 the one place a `.potx` needs touching directly: python-pptx refuses one
@@ -188,9 +189,34 @@ as-is (it raises `ValueError`, checked), so a `.potx` used as a
 `--template` base is first normalized to a presentation content type and
 stripped of its sample slides.
 
-`fit` sizing measures with a fixed substitute font file on the machine,
-independent of the theme (whose actual font *name* is never read), so
-widths are approximate for a face that is not installed.
+**What `fit` measures with.** `fit` sizes an object to its text as the
+deck will actually draw it, so it measures with the same fonts: the
+object's `typeface` if set, otherwise the theme's body font (its heading
+font for `major`). The theme is the one the slide is made in — the
+`--template` master that owns the slide layout (§3.8), or the built-in
+Office theme. As in PowerPoint, East Asian characters (kana, CJK
+ideographs, Hangul, full-width forms) use the theme's East Asian font and
+all others its Latin one; an empty East Asian font means the theme's
+Japanese (`Jpan`) choice. `bold` and `italic` use those faces.
+
+- **Fonts are found by name** among the fonts installed on the machine,
+  including a localized name such as `游ゴシック`. Under WSL the Windows
+  fonts are searched too, since PowerPoint draws with those. The names are
+  read from the font files once and cached (`~/.cache/pikslide/fonts.json`).
+- **A font that is not installed** is measured with a substitute, with a
+  warning naming it; the object may then come out too wide or too narrow.
+- **Text containing East Asian characters is marked Japanese** (`lang`),
+  as PowerPoint marks Japanese input. Unmarked, PowerPoint draws it in its
+  own default Japanese font instead of the theme's, which is not the font
+  `fit` measured with.
+
+**Space around the text.** `textmargin` (prelude: `0.1`, inches) is the
+space between an object's text and its left and right sides: the text
+frame's side insets, so justified text (`ljust`, `rjust`) stops that far
+from the outline. `fit` makes an object as wide as its widest line plus
+`textmargin` on each side. Top and bottom have no inset; a `fit` object's
+height is its lines plus three quarters of a line. Like the text sizes,
+each object uses the value in effect where it is written.
 
 ### 3.4 Preset shapes: `shape`
 
@@ -335,9 +361,9 @@ emphasis   = accent1
   `bg1`, `bg2`, `link` and `followed`, with `theme` (§3.3). They are ordinary
   variables, so a template's settings file can redefine or add them.
 - **It defines the built-in defaults.** Default object sizes and drawing
-  style (`boxwid`, `linewid`, `charwid`, `thickness`, `fill`, `color`, and
-  so on) are defined here, so the defaults are readable and changeable in
-  one place.
+  style (`boxwid`, `linewid`, `charwid`, `textmargin`, `thickness`, `fill`,
+  `color`, and so on) are defined here, so the defaults are readable and
+  changeable in one place.
 - **It defines the three text sizes** (§3.3). Lengths are inches internally,
   so `9pt` is 9/72 in; the PowerPoint writer converts back to points.
 - **It defines `layout` and `typeface`**, both empty strings: the slide layout

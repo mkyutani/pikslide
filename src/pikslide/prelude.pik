@@ -213,6 +213,7 @@ movewid = 0.5
 ovalht = 0.5
 ovalwid = 1.0
 scale = 1.0
+textmargin = 0.1
 textht = 0.5
 textwid = 0.75
 thickness = 0.015

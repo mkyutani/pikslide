@@ -30,6 +30,7 @@ from pptx.oxml.xmlchemy import OxmlElement
 from pptx.parts.image import ImagePart
 from pptx.util import Emu, Inches, Pt
 
+from .fonts import FontIndex, ThemeFonts, installed_fonts, theme_fonts_from_xml
 from .pik import ast
 from .pik.layout import (
     NOT_RENDERED,
@@ -48,21 +49,11 @@ from .pik.layout import (
 
 EMU_PER_INCH = 914400
 
-# What "fit" sizing actually measures text *with* (a real installed font
-# file, via Pillow) is necessarily independent of the font family the
-# .pptx itself requests: by default that's a symbolic theme reference,
-# not a literal name at all (docs/spec.md SS3.3, see _apply_run_font()
-# below), so there is no one "the requested font" to look up a substitute
-# for even in principle. PilFontMetrics instead tries a few widely-
-# available, metrically-reasonable substitutes, in order.
-#
-# A Latin-only substitute (Liberation/DejaVu/Arial) silently *undersizes*
-# any CJK text: missing-glyph fallback advances are far narrower than a
-# real ideograph, so "fit" shapes come out too small and the text overflows
-# them once PowerPoint actually renders it with a CJK-capable font. A Noto
-# Sans CJK file, where present, covers Latin *and* CJK correctly, so it's
-# tried first; the Latin-only substitutes remain as a fallback chain for
-# machines without it (where only non-CJK text will still measure well).
+# Where a font the deck asks for isn't installed here, "fit" measures with
+# the first of these that is instead (and warns). A Noto Sans CJK file
+# covers Latin *and* CJK, so it's tried first: a Latin-only substitute
+# silently undersizes CJK text, its missing-glyph advances being far
+# narrower than a real ideograph.
 _MEASURE_FONT_CANDIDATES = [
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttf",
@@ -85,31 +76,76 @@ def _find_measure_font() -> str | None:
     return None
 
 
-class PilFontMetrics:
-    """A pikslide.pik.layout.FontMetrics backed by real glyph widths (via
-    Pillow), so a "fit" object's size tracks its actual text content --
-    unlike a fixed per-character-width guess, this gets more (not less)
-    accurate as text gets longer or more varied.
+# Measuring at this many times the point size, in pixels, keeps Pillow's
+# whole-pixel font sizes (10.5pt) and rounding from skewing the widths.
+_MEASURE_SCALE = 8
 
-    Measures with whatever font this machine actually has installed among
-    _MEASURE_FONT_CANDIDATES -- an approximation independent of what the
-    .pptx itself actually requests, which by default is a symbolic theme
-    font reference, not a literal name at all (docs/spec.md SS3.3, see
-    _apply_run_font() below), so on a viewer whose theme font isn't
-    metrically close to the substitute, "fit" sizing can disagree with
-    what's actually rendered. This still generalizes correctly across
-    different text content, unlike a flat estimate.
+
+def _is_east_asian(ch: str) -> bool:
+    """Whether PowerPoint draws `ch` with a run's East Asian font rather
+    than its Latin one: CJK ideographs, kana, Hangul, CJK punctuation and
+    full-width forms."""
+    o = ord(ch)
+    return (
+        0x1100 <= o <= 0x11FF
+        or 0x2E80 <= o <= 0x9FFF
+        or 0xA960 <= o <= 0xA97F
+        or 0xAC00 <= o <= 0xD7FF
+        or 0xF900 <= o <= 0xFAFF
+        or 0xFE30 <= o <= 0xFE4F
+        or 0xFF00 <= o <= 0xFFEF
+        or 0x20000 <= o <= 0x3FFFF
+    )
+
+
+def _script_runs(text: str) -> list[tuple[bool, str]]:
+    """`text` split into runs of East Asian and other characters."""
+    runs: list[tuple[bool, str]] = []
+    for ch in text:
+        ea = _is_east_asian(ch)
+        if runs and runs[-1][0] == ea:
+            runs[-1] = (ea, runs[-1][1] + ch)
+        else:
+            runs.append((ea, ch))
+    return runs
+
+
+def default_theme_fonts() -> ThemeFonts:
+    """The built-in Office theme's fonts: python-pptx's default template,
+    what write_pptx() starts a deck from."""
+    prs = Presentation()
+    return _master_theme_fonts(prs.slide_masters[0])
+
+
+def _master_theme_fonts(master) -> ThemeFonts:
+    return theme_fonts_from_xml(master.part.part_related_by(RT.THEME).blob)
+
+
+class PilFontMetrics:
+    """A pikslide.pik.layout.FontMetrics that measures with the fonts the
+    deck will actually be drawn in (docs/spec.md SS3.3), via Pillow: the
+    object's `typeface`, else the theme's body font (its heading font for
+    `major`) -- the Latin one for Latin text and the East Asian one for
+    CJK, as PowerPoint picks per character -- in the bold/italic face the
+    flags ask for. Each is looked up among this machine's installed fonts
+    (pikslide.fonts); one that isn't installed is measured with a
+    substitute instead (_MEASURE_FONT_CANDIDATES), and named in `.missing`.
     """
 
     def __init__(
         self,
         text_sizes: dict[str, float] | None = None,
-        font_path: str | None = None,
+        theme_fonts: ThemeFonts | None = None,
+        font_index: FontIndex | None = None,
     ):
         # inches, keyed "small"/"medium"/"large" -- docs/spec.md SS3.3/SS3.7.
         self._text_sizes = text_sizes if text_sizes is not None else default_text_sizes()
-        self._font_path = font_path if font_path is not None else _find_measure_font()
-        self._cache: dict[int, ImageFont.FreeTypeFont] = {}
+        self._theme_fonts = theme_fonts if theme_fonts is not None else default_theme_fonts()
+        self._index = font_index if font_index is not None else installed_fonts()
+        self.substitute = _find_measure_font()
+        self._cache: dict[tuple, ImageFont.FreeTypeFont | None] = {}
+        self.missing: set[str] = set()
+        """Family names asked for but not installed here."""
 
     def _size_pt(self, flags: list[str], text_sizes: dict[str, float] | None) -> float:
         # An explicit override (a specific object's own Shape.text_sizes,
@@ -121,28 +157,44 @@ class PilFontMetrics:
         inches = sizes.get(_text_size_name(flags), medium)
         return inches * 72.0
 
-    def _font(
-        self, flags: list[str], text_sizes: dict[str, float] | None
-    ) -> tuple[ImageFont.FreeTypeFont | None, float]:
-        size_pt = self._size_pt(flags, text_sizes)
-        size_px = max(1, round(size_pt))
-        if size_px not in self._cache:
-            self._cache[size_px] = ImageFont.truetype(self._font_path, size_px) if self._font_path else None
-        return self._cache[size_px], size_pt
+    def _families(self, flags: list[str], typeface: str) -> tuple[str, str]:
+        if typeface:
+            return typeface, typeface
+        t = self._theme_fonts
+        if "major" in flags:
+            return t.major_latin, t.major_ea or t.major_latin
+        return t.minor_latin, t.minor_ea or t.minor_latin
 
-    def text_width(self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
-        font, size_pt = self._font(flags, text_sizes)
-        if font is not None:
-            px = font.getlength(text) if text else 0.0
-        else:
-            # No real font file found on this machine at all: fall back to
-            # a flat estimate rather than failing outright.
-            px = len(text) * size_pt * 0.55
-        return px / 72.0 + (size_pt * 0.5) / 72.0
+    def _font(self, family: str, bold: bool, italic: bool, size_px: int) -> ImageFont.FreeTypeFont | None:
+        key = (family, bold, italic, size_px)
+        if key not in self._cache:
+            face = self._index.find(family, bold, italic) if family else None
+            if face is not None:
+                font = ImageFont.truetype(face.path, size_px, index=face.index)
+            else:
+                if family:
+                    self.missing.add(family)
+                font = ImageFont.truetype(self.substitute, size_px) if self.substitute else None
+            self._cache[key] = font
+        return self._cache[key]
+
+    def text_width(
+        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
+    ) -> float:
+        size_pt = self._size_pt(flags, text_sizes)
+        size_px = max(1, round(size_pt * _MEASURE_SCALE))
+        latin, ea = self._families(flags, typeface)
+        bold, italic = "bold" in flags, "italic" in flags
+        px = 0.0
+        for is_ea, run in _script_runs(text):
+            font = self._font(ea if is_ea else latin, bold, italic, size_px)
+            # No font file at all on this machine: a flat estimate rather
+            # than failing outright.
+            px += font.getlength(run) if font is not None else len(run) * size_px * 0.55
+        return px / _MEASURE_SCALE / 72.0
 
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
-        _font, size_pt = self._font(flags, text_sizes)
-        return size_pt / 72.0
+        return self._size_pt(flags, text_sizes) / 72.0
 
 
 def resolve_for_pptx(
@@ -150,20 +202,51 @@ def resolve_for_pptx(
     base_dir: str = ".",
     settings_text: str | None = None,
     settings_base_dir: str = ".",
+    template_path: str | None = None,
+    layout_name: str | None = None,
+    font_index: FontIndex | None = None,
 ) -> LayoutResult:
-    """resolve_layout(), using real font metrics so "fit" objects are
-    sized to match what write_pptx() will actually draw. Text sizes come
-    from the prelude's own small/medium/large (docs/spec.md SS3.7), not a
-    caller-supplied constant; write_pptx() then reads the *same* sizes
+    """resolve_layout(), measuring "fit" text with the fonts the deck
+    will actually be drawn in (PilFontMetrics), so objects are sized to
+    what write_pptx()/write_pptx_from_template() will draw. Text sizes
+    come from the prelude's own small/medium/large (docs/spec.md SS3.7),
+    not a caller-supplied constant; the writer then reads the *same* sizes
     back from the returned LayoutResult, so the two always agree.
+
+    The theme is `template_path`'s -- that of the master owning the slide
+    layout `layout_name` (--layout), or else the settings file's `layout`
+    (docs/spec.md SS3.8) -- or the built-in Office theme with no template.
+    A font the deck asks for that isn't installed is reported in the
+    result's `warnings`.
 
     `base_dir` is the source file's own directory, against which an
     `image` object's path resolves (docs/spec.md SS3.5). `settings_text`/
     `settings_base_dir` are a template's settings file (docs/spec.md
     SS3.8), if any -- see find_settings_file()."""
-    return resolve_layout(
-        doc, metrics=PilFontMetrics(), base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir
+    if template_path is None:
+        theme_fonts = default_theme_fonts()
+    else:
+        if layout_name is None:
+            # `layout` can only be set by the prelude or the settings file,
+            # never the program, so resolving those alone gives its value.
+            layout_name = resolve_layout(
+                ast.Document(statements=[]), settings_text=settings_text, settings_base_dir=settings_base_dir
+            ).layout_name
+        prs, tmp_path = _open_template_base(template_path)
+        try:
+            theme_fonts = _master_theme_fonts(_resolve_template_layout(prs, layout_name).slide_master)
+        finally:
+            if tmp_path is not None:
+                os.remove(tmp_path)
+    metrics = PilFontMetrics(theme_fonts=theme_fonts, font_index=font_index)
+    result = resolve_layout(
+        doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir
     )
+    substitute = os.path.basename(metrics.substitute) if metrics.substitute else "a flat estimate"
+    result.warnings += [
+        f"font not installed: {family}; `fit` measured it with {substitute} instead" for family in sorted(metrics.missing)
+    ]
+    return result
 
 
 def _font_size(flags: list[str], text_sizes: dict[str, float]) -> Pt:
@@ -312,7 +395,14 @@ def _apply_run_font(run, flags: list[str], typeface: str) -> None:
     and East Asian slots.
 
     python-pptx's `Font.name` only ever touches `<a:latin>` -- `<a:ea>` has
-    no public API at all (checked), so it's set directly on the run's `rPr`."""
+    no public API at all (checked), so it's set directly on the run's `rPr`.
+
+    A run with East Asian characters in it is marked Japanese (`lang`),
+    as PowerPoint marks text typed in Japanese: with no language, PowerPoint
+    draws it in its own default Japanese font rather than the theme's
+    Japanese one (an empty `<a:ea>` defers to its `Jpan` font, checked),
+    which is not the one `fit` measured with (PilFontMetrics). Call this
+    after setting `run.text`."""
     major = "major" in flags
     if typeface:
         latin_val = ea_val = typeface
@@ -326,6 +416,9 @@ def _apply_run_font(run, flags: list[str], typeface: str) -> None:
         ea = OxmlElement("a:ea")
         rPr.find(qn("a:latin")).addnext(ea)  # <a:ea> must follow <a:latin> in schema order
     ea.set("typeface", ea_val)
+    if any(_is_east_asian(ch) for ch in run.text):
+        rPr.set("lang", "ja-JP")
+        rPr.set("altLang", "en-US")
 
 
 def _apply_text(pptx_shape, shape: Shape) -> None:
@@ -342,12 +435,11 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
     # is for a fixed, author-chosen size instead, which this isn't.
     tf.word_wrap = not shape.fit
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    # PowerPoint's default autoshape text margins (~0.1in sides, ~0.05in
-    # top/bottom) eat into the box width _autosize_text() already sized to
-    # the text, which can force unwanted wrapping. The charwid-based
-    # padding is the only margin that's meant to apply, and that's already
-    # folded into _autosize_text()'s width/height estimate.
-    tf.margin_left = tf.margin_right = 0
+    # The side margins are `textmargin` (docs/spec.md SS3.3), which
+    # _autosize_text() already added to a `fit` box's width -- not
+    # PowerPoint's own defaults. Top and bottom have none: a `fit` box's
+    # height already has room above and below the lines.
+    tf.margin_left = tf.margin_right = Inches(shape.text_margin)
     tf.margin_top = tf.margin_bottom = 0
     # above/below (Shape.text_dy): the text is still middle-anchored, but
     # in an area cut short on the far side, so its middle moves by text_dy.
@@ -530,16 +622,6 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
     _add_line_text(container, shape, tf)
 
 
-_label_metrics_cache: PilFontMetrics | None = None
-
-
-def _label_metrics() -> PilFontMetrics:
-    global _label_metrics_cache
-    if _label_metrics_cache is None:
-        _label_metrics_cache = PilFontMetrics()
-    return _label_metrics_cache
-
-
 def _alignment(flags: list[str]) -> PP_ALIGN:
     """A string's paragraph alignment: ljust/rjust line an object's
     strings up on their left/right edges, otherwise they're centered."""
@@ -562,13 +644,11 @@ def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, flo
     bx0, by0, bx1, by1 = shape.bbox
     cx = (bx0 + bx1) / 2
     cy = (by0 + by1) / 2
-    # Every label gets the same width, the widest one's, so that aligning
+    # Every label gets the same width (Shape.label_width), so that aligning
     # each within its box (_alignment()) lines the labels up with each
     # other: ljust ones on a shared left edge, rjust ones on a shared
-    # right edge. Measured as "fit" measures, so the lined-up block stays
-    # centered on the line.
-    metrics = _label_metrics()
-    box_w = max(max(metrics.text_width(text, flags, shape.text_sizes), 0.3) for text, flags in shape.texts)
+    # right edge.
+    box_w = max(shape.label_width, 0.3)
     out = []
     for (text, flags), slot in zip(shape.texts, assign_text_slots(shape.texts)):
         dy = slot_step(slot) * label_step

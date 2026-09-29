@@ -5,6 +5,7 @@ from __future__ import annotations
 import pathlib
 import zipfile
 
+import pptx
 import pytest
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -12,6 +13,7 @@ from pptx.enum.dml import MSO_FILL_TYPE, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.oxml.ns import qn
+from pptx.util import Inches
 
 from pikslide.pik import parse
 from pikslide.pik.layout import LayoutError
@@ -294,6 +296,72 @@ def test_line_and_image_shapes_are_named_too(tmp_path: pathlib.Path):
     prs = render('arrow right\nimage "logo.png" width 1\n', tmp_path, name="named.pptx")
     names = [s.name for s in prs.slides[0].shapes]
     assert names == ["arrow 1", "image 1"]
+
+
+def test_text_frame_side_insets_are_textmargin(tmp_path: pathlib.Path):
+    prs = render('box "a" width 2\ntextmargin = 0.2\nbox "b" width 2\n', tmp_path)
+    a, b = (s for s in prs.slides[0].shapes if s.has_text_frame)
+    assert (a.text_frame.margin_left, a.text_frame.margin_right) == (Inches(0.1), Inches(0.1))
+    assert (b.text_frame.margin_left, b.text_frame.margin_right) == (Inches(0.2), Inches(0.2))
+    assert a.text_frame.margin_top == a.text_frame.margin_bottom == 0
+
+
+def test_east_asian_text_is_marked_japanese(tmp_path: pathlib.Path):
+    # Unmarked, PowerPoint draws it in its default Japanese font, not the
+    # theme's one that `fit` measured with.
+    prs = render('box "日本語" "latin"\narrow "ラベル"\n', tmp_path)
+    runs = {r.text: r for s in prs.slides[0].shapes if s.has_text_frame for p in s.text_frame.paragraphs for r in p.runs}
+    assert runs["日本語"].font._rPr.get("lang") == "ja-JP"
+    assert runs["ラベル"].font._rPr.get("lang") == "ja-JP"
+    assert runs["latin"].font._rPr.get("lang") is None
+
+
+def _template_with_fonts(tmp_path: pathlib.Path, latin: str, jpan: str) -> pathlib.Path:
+    src = pathlib.Path(pptx.__file__).parent / "templates" / "default.pptx"
+    out = tmp_path / "template.pptx"
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "ppt/theme/theme1.xml":
+                data = (
+                    data.decode("utf-8")
+                    .replace('<a:latin typeface="Calibri"/>', f'<a:latin typeface="{latin}"/>')
+                    .replace('<a:font script="Jpan" typeface="ＭＳ Ｐゴシック"/>', f'<a:font script="Jpan" typeface="{jpan}"/>')
+                    .encode("utf-8")
+                )
+            zout.writestr(item, data)
+    return out
+
+
+def test_fit_measures_with_the_templates_theme_fonts(tmp_path: pathlib.Path):
+    class RecordingIndex:
+        def __init__(self):
+            self.asked = []
+
+        def find(self, family, bold=False, italic=False):
+            self.asked.append((family, bold))
+            return None
+
+    template = _template_with_fonts(tmp_path, "Latin Theme Font", "和文テーマフォント")
+    index = RecordingIndex()
+    result = resolve_for_pptx(parse('box "a 和" "b" bold fit\n'), template_path=str(template), font_index=index)
+    assert set(index.asked) == {("Latin Theme Font", False), ("和文テーマフォント", False), ("Latin Theme Font", True)}
+    # Not installed: measured with a substitute, and said so.
+    assert any("Latin Theme Font" in w for w in result.warnings)
+    assert any("和文テーマフォント" in w for w in result.warnings)
+
+
+def test_fit_measures_with_typeface_over_the_theme(tmp_path: pathlib.Path):
+    class RecordingIndex:
+        asked = set()
+
+        def find(self, family, bold=False, italic=False):
+            self.asked.add(family)
+            return None
+
+    index = RecordingIndex()
+    resolve_for_pptx(parse('typeface = "Some Face"\nbox "a 和" fit\n'), font_index=index)
+    assert index.asked == {"Some Face"}
 
 
 def test_line_label_textbox_naming(tmp_path: pathlib.Path):

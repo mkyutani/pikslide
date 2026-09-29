@@ -195,7 +195,14 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
                 if settings_text is None:
                     _fail(args, f"could not read settings file: {settings_path}")
                 settings_base_dir = os.path.dirname(os.path.abspath(settings_path))
-        result = resolve_for_pptx(doc, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir)
+        result = resolve_for_pptx(
+            doc,
+            base_dir=base_dir,
+            settings_text=settings_text,
+            settings_base_dir=settings_base_dir,
+            template_path=args.template,
+            layout_name=args.layout,
+        )
     except LayoutError as e:
         _fail_layout(args, e)
         return
@@ -208,7 +215,7 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
         _fail(args, f"unsupported output format: {out_path}")
         return
 
-    warnings = []
+    warnings = list(result.warnings)
     if args.template is not None:
         try:
             layout_name = args.layout if args.layout is not None else result.layout_name

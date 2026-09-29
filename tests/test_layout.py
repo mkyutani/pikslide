@@ -397,7 +397,7 @@ def test_fit_measurement_tracks_a_medium_override_at_the_objects_own_position():
     calls = []
 
     class RecordingMetrics:
-        def text_width(self, text, flags=(), text_sizes=None):
+        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
             calls.append(dict(text_sizes))
             return 1.0
 
@@ -432,13 +432,31 @@ def test_text_with_many_strings_lays_out():
         assert len(shape.texts) == 20
 
 
+def test_fit_width_is_the_widest_line_plus_textmargin_each_side():
+    class FixedMetrics:
+        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+            return 0.1 * len(text)
+
+        def line_height(self, flags=(), text_sizes=None):
+            return 0.2
+
+    def box(src):
+        return resolve_layout(parse(src), metrics=FixedMetrics()).shapes[-1]
+
+    assert box('box "abc" "abcdef" fit\n').w == pytest.approx(0.6 + 2 * 0.1)
+    assert box('box "abc" "abcdef" fit\n').text_margin == 0.1
+    # Each object uses the value in effect where it is written.
+    shape = box('textmargin = 0.25\nbox "abc" fit\n')
+    assert (shape.w, shape.text_margin) == pytest.approx((0.3 + 0.5, 0.25))
+
+
 def test_above_and_below_offset_text_from_the_objects_center():
     # A single above string sits half a line up plus a quarter-line gap
     # (_TEXT_SIDE_GAP), so its bottom clears the center; a below one the
     # mirror image. The object stays centered on its `at` point and grows
     # by the offset on both sides.
     class FixedMetrics:
-        def text_width(self, text, flags=(), text_sizes=None):
+        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
             return 1.0
 
         def line_height(self, flags=(), text_sizes=None):

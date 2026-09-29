@@ -7,8 +7,8 @@ direction, and refer to earlier objects by name. A diagram becomes
 **native, editable PowerPoint objects** — shapes a person can select,
 restyle and move afterwards.
 
-The language is specified in [docs/spec.md](docs/spec.md) and defined, in
-BNF, in [docs/grammar.md](docs/grammar.md). (pikslide's own design traces
+The language is specified in [docs/spec.md](src/pikslide/docs/spec.md) and defined, in
+BNF, in [docs/grammar.md](src/pikslide/docs/grammar.md). (pikslide's own design traces
 back through two earlier languages; see Acknowledgments, below.)
 
 ## Status
@@ -107,7 +107,13 @@ settings file).
 `--format json` emits diagnostics as one JSON object instead of plain
 text — see `pikslide --help` for every flag.
 
-With no arguments, `pikslide` just prints a hello-world message.
+`pikslide --help TOPIC` is the language reference: a keyword (`--help box`
+gives its synopsis, attributes and defaults), a list (`colors`, `shapes`,
+`keywords`, …), or a manual (`grammar`, `spec`). `pikslide --help` lists
+the topics.
+
+With no arguments, `pikslide` prints its usage and points to
+`pikslide --help intro`, the language in one page.
 
 `--png` / `--pdf` also render the deck just written to a PNG or a PDF —
 beside OUTPUT with the extension changed, or at an explicit path:

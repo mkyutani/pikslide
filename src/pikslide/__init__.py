@@ -7,14 +7,33 @@ from .pik import PikSyntaxError, dump, format_syntax_error, parse
 from .pik.layout import LayoutError
 from .pik.tokens import column_at
 from .pptx_writer import find_settings_file, resolve_for_pptx, write_pptx, write_pptx_from_template
+from .help import hint as help_hint
+from .help import layout_error_topics, syntax_error_topics
+from .help import show as show_help
+from .help import topics_text as help_topics_text
 from .render import FORMATS, RENDERERS, RenderError, render_deck
 
 
 def main() -> None:
     argv = sys.argv[1:]
     if not argv:
-        print("Hello from pikslide!")
-        return
+        # The first thing to try, for a person or an LLM: say where to go.
+        print(_parser().format_usage(), end="")
+        print("Draw a .pik diagram as a PowerPoint deck: pikslide diagram.pik diagram.pptx")
+        print("New to pikslide? pikslide --help intro. All options and help topics: pikslide --help")
+        raise SystemExit(2)
+
+    # --help [TOPIC] (src/pikslide/help.py) is handled before the rest, since
+    # INPUT is otherwise required.
+    for i, arg in enumerate(argv):
+        if arg in ("-h", "--help"):
+            topic = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("-") else None
+            if topic is None:
+                _parser().print_help()
+                print()
+                print(help_topics_text(), end="")
+                return
+            raise SystemExit(show_help(topic))
 
     args = _parse_args(argv)
     with open(args.input, encoding="utf-8") as f:
@@ -25,10 +44,18 @@ def main() -> None:
     _run(args, text, base_dir)
 
 
-def _parse_args(argv: list[str]) -> argparse.Namespace:
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pikslide",
-        description="Render a .pik diagram to a new one-slide PowerPoint deck (docs/spec.md SS4).",
+        description="Render a .pik diagram to a new one-slide PowerPoint deck. "
+        "Language reference: pikslide --help TOPIC -- start with `--help intro`, then a "
+        "keyword (`--help box`) or a list (`--help keywords`); topics are listed below.",
+        add_help=False,
+    )
+    parser.add_argument(
+        "-h", "--help", nargs="?", metavar="TOPIC",
+        help="show this help, or help on TOPIC: a keyword (box, chop, fill, ...), "
+        "a list (colors, shapes, ...) or a manual (grammar, spec)",
     )
     parser.add_argument("input", help="a .pik source file")
     parser.add_argument(
@@ -69,6 +96,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--format", choices=("text", "json"), default="text", help="diagnostics format (default: text)"
     )
+    return parser
+
+
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = _parser()
     args = parser.parse_args(argv)
 
     args.include_paths = args.include_path or []
@@ -138,21 +170,37 @@ def _fail(args: argparse.Namespace, message: str) -> None:
 
 
 def _fail_syntax(args: argparse.Namespace, err: PikSyntaxError, main_path: str, main_text: str) -> None:
+    """With the help topics for the statement it's in (help.py), so a
+    person or an LLM stuck on the syntax knows where to look it up."""
+    text = main_text if err.file is None else (_try_read(err.file) or "")
+    lines = text.splitlines()
+    source_line = lines[err.line - 1] if 0 < err.line <= len(lines) else ""
+    topics = syntax_error_topics(source_line, err.text)
     if args.format == "json":
-        print(json.dumps({"ok": False, "errors": [_syntax_error_detail(err, main_path, main_text)]}))
+        detail = _syntax_error_detail(err, main_path, main_text)
+        print(json.dumps({"ok": False, "errors": [{**detail, "help": _help_commands(topics)}]}))
     else:
         print(f"error: {format_syntax_error(err, main_path, main_text)}", file=sys.stderr)
+        print(help_hint(topics), file=sys.stderr)
     raise SystemExit(1)
+
+
+def _help_commands(topics: list[str]) -> list[str]:
+    return [f"pikslide --help {t}" for t in topics]
 
 
 def _fail_layout(args: argparse.Namespace, err: LayoutError) -> None:
     """A LayoutError (docs/spec.md SS5: undefined names and the like)
     carries no file position -- unlike a
     PikSyntaxError, it isn't tied to one token."""
+    topics = layout_error_topics(str(err))
     if args.format == "json":
-        print(json.dumps({"ok": False, "errors": [{"file": None, "line": None, "column": None, "message": str(err)}]}))
+        error = {"file": None, "line": None, "column": None, "message": str(err), "help": _help_commands(topics)}
+        print(json.dumps({"ok": False, "errors": [error]}))
     else:
         print(f"error: {err}", file=sys.stderr)
+        if topics:
+            print(help_hint(topics), file=sys.stderr)
     raise SystemExit(1)
 
 

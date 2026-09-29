@@ -31,9 +31,12 @@ def _run(monkeypatch, argv: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_no_args_prints_hello(monkeypatch, capsys):
-    _run(monkeypatch, [])
-    assert "Hello from pikslide" in capsys.readouterr().out
+def test_no_args_points_to_the_help(monkeypatch, capsys):
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [])
+    assert exc.value.code == 2
+    out = capsys.readouterr().out
+    assert "usage: pikslide" in out and "pikslide --help intro" in out
 
 
 def test_dump_mode_prints_parsed_tree(monkeypatch, capsys, tmp_path):

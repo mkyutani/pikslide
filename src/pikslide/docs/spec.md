@@ -498,11 +498,24 @@ Humans and LLMs both need errors they can act on.
 - A `define` naming an already-defined variable is an **error** (§3.6).
 - `--check` parses and lays out without writing; `--format json` emits
   diagnostics as JSON for tooling.
+- An error names the help topics that explain it (`see: pikslide --help
+  box`; in JSON, each error's `help` list): the syntax error's statement
+  class or keyword, or the list an unknown name belongs to (`colors`,
+  `shapes`, …).
 
 ## 6. Use from other tools
 
 - The diagram is written as native shapes directly, so a caller need not
   render a PNG, or convert a rendered diagram to shapes afterwards.
+- **`pikslide --help TOPIC`** answers from the installed package, so a
+  person or an LLM writing a diagram needs no repository: a keyword
+  (`box`, `chop`, `fill`, …) gives its synopsis, the attributes it takes and
+  its defaults; a list (`keywords`, `classes`, `attributes`, `flags`,
+  `colors`, `shapes`, `variables`, `prelude`) is built from the source
+  itself, so it can't go stale; `grammar` and `spec` are these manuals.
+  On a terminal the text is formatted and paged; piped, it is plain text.
+  `pikslide --help` alone lists the topics, and `pikslide --help intro`
+  is the language in one page, the place to start.
 
 ## 7. Not in v1
 

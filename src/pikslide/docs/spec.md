@@ -73,16 +73,39 @@ Goal: the Selection Pane in PowerPoint reads like the source.
   output never contains a group at all.)
 - **Line labels.** A PowerPoint line cannot hold text, so a line's strings
   become text boxes named `<line name> text <k>`.
-- `invis` objects are still emitted (no fill, no outline): they are legitimate
-  text anchors.
+- `stroke invis` objects are still emitted (no outline, and no fill unless
+  given one): they are legitimate text anchors.
+- **Text color and line color are separate.** `color` is a string attribute:
+  `box "alert" color accent2 "details"` colors `"alert"` only; a string
+  without one takes the `color` variable (prelude: `black`). The line or
+  outline is set with `stroke`, which groups all of its attributes:
+  `stroke [COLOR] [thickness T | thick | thin | solid | invis | dashed [L] |
+  dotted [L] …]`, color first. Its default color is the `stroke` variable
+  (prelude: `black`). Outside `stroke`, `thickness`, `thick`, `thin`,
+  `solid`, `invis`, `dashed` and `dotted` are errors, and so is `stroke`
+  on an object that draws no line (`text`, `image`, `move`, a `[ … ]`
+  block) or with nothing after it. `A.color` is an object's text color,
+  `A.stroke` its line color.
+- **`dot`** has no rule of its own: `fill` paints it, and its default fill
+  is its line color.
+- **`ljust` / `rjust` are object attributes**, for all of the object's
+  strings at once; giving both is an error. `rjust` mirrors `ljust`:
+
+  | Object | `ljust` |
+  |---|---|
+  | `text` with `at P` | the text's frame has its left edge at P |
+  | closed shapes (box, circle, …) | the strings align left, `margin` in from the left side |
+  | lines and arrows | the labels start `margin` in from the line's left end |
+
+  Without either, a line's labels are centered on the line.
 
 ### 3.2 Lines and arrows; `connector` is deferred
 
 **v1 has no connectors.** `line`, `arrow`, `spline` and `arc` are *lines
 drawn with fixed geometry*. They are emitted as plain PowerPoint lines (a
-two-point path as a line, a longer path as a freeform), with `dashed`,
-`dotted`, `thick`, `thin` and `<-`, `->`, `<->` mapped to dash style,
-weight and arrowheads.
+two-point path as a line, a longer path as a freeform), with `stroke`'s
+`dashed`, `dotted`, `thick`, `thin` and the arrowheads `<-`, `->`, `<->`
+mapped to dash style, weight and arrowheads.
 
 They are **never attached to shapes**, even when an endpoint lies exactly on
 a shape's edge. Moving a box in PowerPoint leaves the line where it was.
@@ -120,7 +143,7 @@ write:
 ```pikslide
 box "Primary"  fill accent1
 box "Soft"     fill accent1 lighter 40%
-box "Outline"  fill bg1 color text1
+box "Outline"  fill bg1 stroke text1
 ```
 
 - **`theme "slot"`.** The string is an OOXML `schemeClr` value (`accent1`–
@@ -145,7 +168,7 @@ box "Outline"  fill bg1 color text1
   house style is plain variables: `primary = accent1 lighter 60%`, then
   `box fill primary`. A color is not a number: `primary + 1` is an error.
 - **Fonts.** Text uses the theme's minor font (Latin `+mn-lt`, East Asian
-  `+mn-ea`), not a hard-coded family. A new text flag `major` selects the
+  `+mn-ea`), not a hard-coded family. A new string attribute `major` selects the
   heading font (`+mj-lt` / `+mj-ea`). A specific family is set with the
   string variable `typeface` (`typeface = "BIZ UDPゴシック"`), normally in the
   template's settings file (§3.8); the prelude gives it the empty string,
@@ -154,11 +177,11 @@ box "Outline"  fill bg1 color text1
 - **Size.** PowerPoint needs points, not a percentage of the viewer's own
   font. pikslide has three sizes: `small` = 9 pt, `medium` = 10.5 pt (the
   default, so no flag is needed), and `large` or `big` = 12 pt (`big` is a
-  synonym for `large`). Like `fill`, `color` and `thickness`, the words
+  synonym for `large`). Like `fill`, `color`, `stroke` and `thickness`, the words
   themselves can be assigned to set their values; the prelude (§3.7) has
   `small = 9pt`, `medium = 10.5pt`, `large = 12pt`. Assign to them to
   change the sizes, or set them in the template's settings file (§3.8). If
-  a string carries more than one size flag, the last one wins. `fit` sizing
+  a string carries more than one size attribute, the last one wins. `fit` sizing
   measures with the size in effect.
 
 **Where the theme comes from.** The tool reads it from the template named
@@ -210,11 +233,12 @@ Japanese (`Jpan`) choice. `bold` and `italic` use those faces.
   own default Japanese font instead of the theme's, which is not the font
   `fit` measured with.
 
-**Space around the text.** `textmargin` (prelude: `0.1`, inches) is the
+**Space around the text.** `margin` (prelude: `0.1`, inches) is the
 space between an object's text and its left and right sides: the text
 frame's side insets, so justified text (`ljust`, `rjust`) stops that far
-from the outline. `fit` makes an object as wide as its widest line plus
-`textmargin` on each side. Top and bottom have no inset; a `fit` object's
+from the outline, and a line's `ljust`/`rjust` labels start that far
+from its end (§3.1). `fit` makes an object as wide as its widest line plus
+`margin` on each side. Top and bottom have no inset; a `fit` object's
 height is its lines plus three quarters of a line. Like the text sizes,
 each object uses the value in effect where it is written.
 
@@ -232,7 +256,7 @@ shape wedgeRectCallout "Note" fit
   `ST_ShapeType`), matched case-insensitively. Unknown names are an error that
   lists the nearest matches.
 - Behaves like `box`: default size `boxwid × boxht`; `width`, `height`, `fit`,
-  `at`, `with`, `same`, text, `fill`, `color`, `dashed`, `thickness` all work.
+  `at`, `with`, `same`, text, `fill`, `stroke` all work.
   Edge names (`.n`, `.ne`, …) and `chop` refer to the **bounding rectangle**.
 - No adjustment handles in v1 (default geometry), except `rad` on `roundRect`,
   already supported for `box`.
@@ -288,7 +312,7 @@ Web: box "Web" fill primary card            # a color variable, a macro
 # house.pik: definitions only
 boxwid = 1.2
 primary = accent1 lighter 60%
-define card { rad 8px color text1 }
+define card { rad 8px stroke text1 }
 ```
 
 - **Definitions only.** An included file may contain `define` macros,
@@ -341,7 +365,9 @@ boxwid     = 0.75
 linewid    = 0.5
 thickness  = 0.015
 fill       = none
-color      = black
+color      = black     # text
+stroke     = black     # lines and outlines
+margin     = 0.1
 
 small      = 9pt
 medium     = 10.5pt
@@ -361,8 +387,8 @@ emphasis   = accent1
   `bg1`, `bg2`, `link` and `followed`, with `theme` (§3.3). They are ordinary
   variables, so a template's settings file can redefine or add them.
 - **It defines the built-in defaults.** Default object sizes and drawing
-  style (`boxwid`, `linewid`, `charwid`, `textmargin`, `thickness`, `fill`,
-  `color`, and so on) are defined here, so the defaults are readable and
+  style (`boxwid`, `linewid`, `charwid`, `margin`, `thickness`, `fill`,
+  `color`, `stroke`, and so on) are defined here, so the defaults are readable and
   changeable in one place.
 - **It defines the three text sizes** (§3.3). Lengths are inches internally,
   so `9pt` is 9/72 in; the PowerPoint writer converts back to points.

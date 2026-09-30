@@ -171,10 +171,10 @@ statement       ::= direction
 
 direction       ::= "up" | "down" | "left" | "right"
 
-lvalue          ::= ID | "fill" | "color" | "thickness"
+lvalue          ::= ID | "fill" | "color" | "stroke" | "thickness"
                    | "small" | "medium" | "large"    (* the text sizes *)
 
-print-item      ::= "fill" | "color" | "thickness" | STRING | rvalue
+print-item      ::= "fill" | "color" | "stroke" | "thickness" | STRING | rvalue
 ```
 
 A `PLACENAME ":"` label is followed by either an *object*
@@ -186,10 +186,10 @@ starts with those tokens.
 ## Objects
 
 ```
-unnamed-statement ::= basetype { attribute }
+unnamed-statement ::= basetype { STRING { string-attr } } attribute-list
 
 basetype        ::= CLASSNAME
-                   | STRING { text-flag }
+                   | STRING { string-attr }
                    | "[" statement-list "]"
                    | "shape" preset-name
                    | "image" STRING
@@ -197,10 +197,15 @@ basetype        ::= CLASSNAME
 preset-name     ::= ID | CLASSNAME                   (* an OOXML preset geometry name,
                                                         e.g. chevron, roundRect, ellipse *)
 
-text-flag       ::= "center" | "ljust" | "rjust" | "above" | "below"
-                   | "italic" | "bold" | "mono" | "aligned" | "big" | "small"
-                   | "major" | "medium" | "large"
+string-attr     ::= "center" | "above" | "below"
+                   | "italic" | "bold" | "mono"
+                   | "big" | "small" | "major" | "medium" | "large"
+                   | "color" color-value
 ```
+
+An object's strings come right after its class, before any of its
+attributes; a `STRING` after an attribute is an error. A `string-attr`
+belongs to the `STRING` right before it, and to no other.
 
 `preset-name` allows `CLASSNAME` because some preset names (`ellipse`,
 `diamond`, `line`, `arc`) are also class names and lex as such.
@@ -213,8 +218,8 @@ the current direction":
 attribute-list  ::= [ relexpr ] { attribute }
 
 attribute       ::= numprop relexpr
-                   | dashprop [ expr ]
-                   | colorprop color-value
+                   | "fill" color-value
+                   | "stroke" stroke-attrs
                    | [ "go" ] direction optrelexpr
                    | [ "go" ] direction ( "until" "even" | "even" ) "with" position
                    | "go" optrelexpr ( "heading" expr | EDGEPT )
@@ -224,19 +229,23 @@ attribute       ::= numprop relexpr
                    | "from" position
                    | "to" position
                    | boolprop
+                   | "ljust" | "rjust" | "aligned"
                    | arrowdir
                    | "at" position
                    | "with" [ "." ] edge "at" position
                    | "same" [ "as" object ]
-                   | STRING { text-flag }
                    | "fit"
                    | "behind" object
                    | "alt" STRING                    (* image only *)
 
-numprop         ::= "width" | "height" | "radius" | "diameter" | "thickness"
+numprop         ::= "width" | "height" | "radius" | "diameter"
+boolprop        ::= "cw" | "ccw"
+
+stroke-attrs    ::= [ color-value ] { stroke-attr }  (* at least one of the two *)
+stroke-attr     ::= "thickness" relexpr
+                   | dashprop [ expr ]
+                   | "thick" | "thin" | "solid" | "invis"
 dashprop        ::= "dashed" | "dotted"
-colorprop       ::= "fill" | "color"
-boolprop        ::= "cw" | "ccw" | "invis" | "thick" | "thin" | "solid"
 arrowdir        ::= "<-" | "->" | "<->"
 
 relexpr         ::= expr [ "%" ]
@@ -246,6 +255,11 @@ optrelexpr      ::= [ relexpr ]
 `"then"` with nothing following (no amount, no heading/edge point) is a
 complete attribute on its own: it marks a new path segment without
 moving yet.
+
+`stroke` groups everything about an object's line or outline. Its color
+can only come first, so that a `dashed`/`dotted` length is never taken
+for it. `thickness`, `thick`, `thin`, `solid`, `invis`, `dashed` and
+`dotted` are valid only inside `stroke`; arrowheads stay outside it.
 
 ## Colors
 
@@ -292,7 +306,7 @@ expr            ::= expr ( "+" | "-" ) expr
                    | expr ( "*" | "/" ) expr
                    | ( "-" | "+" ) expr
                    | "(" expr ")"
-                   | "(" ( "fill" | "color" | "thickness" ) ")"
+                   | "(" ( "fill" | "color" | "stroke" | "thickness" ) ")"
                    | NUMBER
                    | ID
                    | FUNC1 "(" expr ")"
@@ -301,7 +315,7 @@ expr            ::= expr ( "+" | "-" ) expr
                    | place2 "." ( "x" | "y" )
                    | object "." dotprop
 
-dotprop         ::= numprop | dashprop | colorprop
+dotprop         ::= numprop | "thickness" | dashprop | "fill" | "color" | "stroke"
 
 FUNC1           ::= "abs" | "cos" | "int" | "sin" | "sqrt"
 FUNC2           ::= "max" | "min"
@@ -357,7 +371,8 @@ names.
 | `shape`, `image` | object classes |
 | `include` | the include statement |
 | `alt` | an attribute of `image` |
-| `major`, `medium`, `large` | text flags |
+| `major`, `medium`, `large` | string attributes |
+| `stroke` | the stroke attribute group, and the default line color |
 | `theme` | builds a theme color from a slot name, `theme "accent1"` |
 | `lighter`, `darker` | color modifiers |
 | `none`, `off` | the *no color* value |
@@ -367,6 +382,11 @@ Semantic constraints the grammar cannot express (each is an error):
 
 - a statement in an included file that is not an `include-item`;
 - `alt` on anything other than an `image`;
+- a second `at` on one object;
+- both `ljust` and `rjust` on one object;
+- a second `color` on one string;
+- `stroke` on an object that draws no line (`text`, `image`, `move`, a
+  `[ … ]` block), and an empty `stroke`;
 - arithmetic on a color (`primary + 1`);
 - a `preset-name` that is not a known OOXML preset geometry;
 - a `theme` string that names no known slot;
@@ -421,38 +441,48 @@ language or in any output format. A link between two named objects is a
 different concept, planned as a separate `connector` object class (see
 [spec.md](spec.md) §3.2).
 
-**Attributes.** `width`/`height`/`radius`/`diameter`/`thickness` set a
-size (a `relexpr` with `%` is a percentage of the current value);
-`dashed`/`dotted` take an optional length (default `dashwid`); `fill` and
-`color` set the interior and stroke color; `thick`/`thin` scale the
-stroke by 1.5/0.67, `solid` resets stroke and dashing, `invis` hides the
-outline; `cw`/`ccw` set an arc's direction; `<-`/`->`/`<->` add arrowheads;
+**Attributes.** `width`/`height`/`radius`/`diameter` set a size (a
+`relexpr` with `%` is a percentage of the current value); `fill` sets the
+interior color; `stroke` sets the line or outline: its color, `thickness`,
+`thick`/`thin` (scale it by 1.5/0.67), `solid` (reset thickness and
+dashing), `invis` (hide it) and `dashed`/`dotted` with an optional length
+(default `dashwid`); `ljust`/`rjust` align all of the object's strings
+(see *Text*); `cw`/`ccw` set an arc's direction; `<-`/`->`/`<->` add arrowheads;
 `fit` sizes the object to its text; `chop` shortens a line's ends to the
 outlines of the objects it joins; `close` closes a path; `behind X` places
 the object immediately below `X` in z-order.
 
-**Text.** Each `STRING` is a line of text on the object. Placement flags
-are `center`, `ljust`, `rjust`, `above`, `below`, and `aligned` (rotate
-along a line); style flags are `bold`, `italic`, `mono`. Size flags select
-one of three sizes: `small`, `medium` (the default), and `large` or
-`big`. Their values are set by assigning to the words themselves, as
-`fill`, `color` and `thickness` set theirs; the prelude gives `small = 9pt`,
-`medium = 10.5pt` and `large = 12pt`. The last size flag on a string wins.
+**Text.** Each `STRING` is a line of text on the object. Its string
+attributes place it (`center`, `above`, `below`), style it (`bold`,
+`italic`, `mono`), size it and color it. Size attributes select one of
+three sizes: `small`, `medium` (the default), and `large` or `big`. Their
+values are set by assigning to the words themselves, as `fill`, `color`
+and `thickness` set theirs; the prelude gives `small = 9pt`,
+`medium = 10.5pt` and `large = 12pt`. The last size on a string wins.
+`color` colors that string only (`box "alert" color accent2 "details"`);
+a string without one takes the object's text color, the `color` variable.
 See [spec.md](spec.md) §3.3.
 
-A flag belongs to the `STRING` right before it, and to no other: to set
-the size of every string, flag each one (`"a" small "b" small`). An object
-may carry any number of strings; ones not flagged `above`/`below`/`center`
-are stacked evenly above and below its center.
+A string attribute belongs to the `STRING` right before it, and to no
+other: to set the size of every string, give it to each one
+(`"a" small "b" small`). An object may carry any number of strings; ones
+not placed `above`/`below`/`center` are stacked evenly above and below its
+center.
+
+`ljust`, `rjust` and `aligned` are object attributes instead, applying to
+all of the object's strings: `ljust` aligns them left, `margin` in from
+the object's left side (a line's: from its left end), and on a `text`
+with `at P` puts the text's left edge at P; `rjust` mirrors it. `aligned`
+(rotate along a line) is accepted and has no effect.
 
 **Why some words are reserved and others aren't.** A word is reserved
 exactly when the grammar needs it as a literal token somewhere — an object
-class, a statement, an attribute, a text flag, a modifier — regardless of
+class, a statement, an attribute, a string attribute, a modifier — regardless of
 whether its *value* also comes from the prelude or a settings file.
-`small`/`medium`/`large` are reserved because they are text flags
+`small`/`medium`/`large` are reserved because they are string attributes
 (`"Label" large`), not because their values are prelude-supplied; the
-same is true of `fill`/`color`/`thickness`, which are attribute keywords
-and lvalues both. Names that are never used as syntax —
+same is true of `fill`/`color`/`stroke`/`thickness`, which are attribute
+keywords and lvalues both. `margin`, by contrast, is an ordinary variable. Names that are never used as syntax —
 `content_left`, `layout`, `typeface`, `primary`, `accent1`, the CSS color
 names, … — are ordinary `ID`s and are never reserved, however important
 their value is.
@@ -461,8 +491,10 @@ their value is.
 leaves the value unchanged) assigns a number, a color or a string. The
 built-in variables above are ordinary variables and can be reassigned to
 change every later default; they are defined by the prelude (see
-[spec.md](spec.md) §3.7). `fill`, `color` and `thickness` set the defaults
-for later objects, and `small`, `medium` and `large` set the three text
+[spec.md](spec.md) §3.7). For later objects, `fill` sets the default
+interior color, `color` the default text color, `stroke` the default line
+and outline color, `thickness` the default line thickness and `margin` the
+space between text and an object's sides; and `small`, `medium` and `large` set the three text
 sizes. `print` and `assert` are parsed but have no effect on the drawing.
 
 ## Acknowledgments

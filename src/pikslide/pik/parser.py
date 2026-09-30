@@ -61,7 +61,7 @@ _STRING_ATTR_NAME = {
     TokType.MONO: "mono",
     TokType.BIG: "big",
     TokType.SMALL: "small",
-    # pikslide ext: docs/grammar.md, Objects (text-flag)
+    # pikslide ext: docs/grammar.md, Objects (string-attr)
     TokType.MAJOR: "major",
     TokType.MEDIUM: "medium",
     TokType.LARGE: "large",

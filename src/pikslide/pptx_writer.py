@@ -387,7 +387,7 @@ def _apply_line_style(line, shape: Shape) -> None:
 def _apply_run_font(run, flags: list[str], typeface: str) -> None:
     """Set a run's font family (docs/spec.md SS3.3): by default the
     theme's own minor font (`+mn-lt`/`+mn-ea`), or its major (heading)
-    font (`+mj-lt`/`+mj-ea`) when the `major` text flag is present --
+    font (`+mj-lt`/`+mj-ea`) when the `major` string attribute is present --
     kept as a symbolic theme reference, exactly like a `theme` color
     (never resolved to a literal family here, checked: round-trips and
     renders correctly through real PowerPoint, picking each script's own

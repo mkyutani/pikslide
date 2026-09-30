@@ -221,8 +221,8 @@ thickness = 0.015
 
 # --- Text sizes (docs/spec.md SS3.3) --------------------------------------
 # Three fixed sizes in points. `small`/`medium`/`large` are reserved words (they also work as
-# text flags, `"Label" large`), assignable exactly like `fill`/`color`/
-# `thickness` above.
+# string attributes, `"Label" large`), assignable exactly like `fill`/`color`/
+# `stroke`/`thickness` above.
 
 small = 9pt
 medium = 10.5pt

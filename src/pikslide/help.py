@@ -241,7 +241,7 @@ ENTRIES: tuple[Entry, ...] = (
     # --- text -------------------------------------------------------------
     Entry(("above", "below"), "text above or below the object's center, or a line",
           synopsis=('"string" above', '"string" below', "N above POSITION"),
-          body="As a text flag: puts the string above (below) the object's center or the "
+          body="As a string attribute: puts the string above (below) the object's center or the "
                "line, stacking with the others there. In a position: that far above "
                "(below) a point.", example='arrow "request" above "reply" below',
           group="flag", see=("flags",)),
@@ -253,7 +253,7 @@ ENTRIES: tuple[Entry, ...] = (
                "puts its left (right) edge at P. Not both on one object.",
           example='box "one" "three" ljust width 2', group="attribute", see=("flags", "margin")),
     Entry(("center",), "centered text; the center edge point", synopsis=('"string" center', "X.center"),
-          body="As a text flag: centered, on the center line. As an edge: the object's "
+          body="As a string attribute: centered, on the center line. As an edge: the object's "
                "center (also `.c`).", group="flag", see=("flags", "edges")),
     Entry(("bold", "italic"), "bold or italic text", synopsis=('"string" bold', '"string" italic'),
           group="flag", example='box "Title" bold "subtitle" italic', see=("flags",)),
@@ -666,7 +666,7 @@ _LISTS = {
     "keywords": "every reserved word, with what it's for",
     "classes": "the object classes",
     "attributes": "the attributes objects take",
-    "flags": "the text flags",
+    "flags": "the string attributes",
     "colors": "color names and theme colors",
     "shapes": "PowerPoint preset shape names, for `shape NAME`",
     "variables": "the built-in variables and their defaults",

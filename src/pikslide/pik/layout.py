@@ -52,7 +52,7 @@ class FontMetrics(Protocol):
         self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
     ) -> float:
         """Width, in inches, of one line of `text` itself, at this flags'
-        size -- no margin (that's `textmargin`, added by _autosize_text()).
+        size -- no margin (that's `margin`, added by _autosize_text()).
         `typeface` is the object's own `Shape.typeface`: a literal family
         to measure with, or empty for the theme's font."""
         ...

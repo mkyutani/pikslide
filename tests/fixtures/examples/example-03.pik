@@ -6,42 +6,42 @@
     down
 In: box "Interface" wid 150% ht 75% fill white
     arrow
-CP: box same "SQL Command" "Processor"
+CP: box "SQL Command" "Processor" same
     arrow
-VM: box same "Virtual Machine"
+VM: box "Virtual Machine" same
     arrow down 1.25*$margin
-BT: box same "B-Tree"
+BT: box "B-Tree" same
     arrow
-    box same "Pager"
+    box "Pager" same
     arrow
-OS: box same "OS Interface"
-    box same with .w at 1.25*$margin east of 1st box.e "Tokenizer"
+OS: box "OS Interface" same
+    box "Tokenizer" same with .w at 1.25*$margin east of 1st box.e
     arrow
-    box same "Parser"
+    box "Parser" same
     arrow
-CG: box same ht 200% "Code" "Generator"
-UT: box same as 1st box at (Tokenizer,Pager) "Utilities"
+CG: box "Code" "Generator" same ht 200%
+UT: box "Utilities" same as 1st box at (Tokenizer,Pager)
     move lineht
-TC: box same "Test Code"
+TC: box "Test Code" same
     arrow from CP to 1/4<Tokenizer.sw,Tokenizer.nw> chop
     arrow from 1/3<CG.nw,CG.sw> to CP chop
 
     box ht (In.n.y-VM.s.y)+$margin wid In.wid+$margin \
        at CP fill 0xd8ecd0 behind In
-    line invis from 0.25*$margin east of last.sw up last.ht \
-        "Core" italic aligned
+    line "Core" italic aligned stroke invis \
+        from 0.25*$margin east of last.sw up last.ht
 
     box ht (BT.n.y-OS.s.y)+$margin wid In.wid+$margin \
        at Pager fill 0xd0ece8 behind In
-    line invis from 0.25*$margin east of last.sw up last.ht \
-       "Backend" italic aligned
+    line "Backend" italic aligned stroke invis \
+       from 0.25*$margin east of last.sw up last.ht
 
     box ht (Tokenizer.n.y-CG.s.y)+$margin wid In.wid+$margin \
        at 1/2<Tokenizer.n,CG.s> fill 0xe8d8d0 behind In
-    line invis from 0.25*$margin west of last.se up last.ht \
-       "SQL Compiler" italic aligned
+    line "SQL Compiler" italic aligned stroke invis \
+       from 0.25*$margin west of last.se up last.ht
 
     box ht (UT.n.y-TC.s.y)+$margin wid In.wid+$margin \
        at 1/2<UT,TC> fill 0xe0ecc8 behind In
-    line invis from 0.25*$margin west of last.se up last.ht \
-      "Accessories" italic aligned
+    line "Accessories" italic aligned stroke invis \
+      from 0.25*$margin west of last.se up last.ht

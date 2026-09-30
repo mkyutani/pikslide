@@ -325,7 +325,7 @@ def test_hex_literal_and_none_are_colors():
 
 
 def test_theme_color_stays_symbolic_with_lighter_darker():
-    result = layout('box fill accent1 lighter 40%\nbox color accent2 darker 25%\n')
+    result = layout('box fill accent1 lighter 40%\nbox stroke accent2 darker 25%\n')
     assert result.shapes[0].fill == Color(theme_slot="accent1", lum_mod=0.6, lum_off=0.4)
     assert result.shapes[1].color == Color(theme_slot="accent2", lum_mod=0.75, lum_off=0.0)
 
@@ -432,7 +432,7 @@ def test_text_with_many_strings_lays_out():
         assert len(shape.texts) == 20
 
 
-def test_fit_width_is_the_widest_line_plus_textmargin_each_side():
+def test_fit_width_is_the_widest_line_plus_margin_each_side():
     class FixedMetrics:
         def text_width(self, text, flags=(), text_sizes=None, typeface=""):
             return 0.1 * len(text)
@@ -446,7 +446,7 @@ def test_fit_width_is_the_widest_line_plus_textmargin_each_side():
     assert box('box "abc" "abcdef" fit\n').w == pytest.approx(0.6 + 2 * 0.1)
     assert box('box "abc" "abcdef" fit\n').text_margin == 0.1
     # Each object uses the value in effect where it is written.
-    shape = box('textmargin = 0.25\nbox "abc" fit\n')
+    shape = box('margin = 0.25\nbox "abc" fit\n')
     assert (shape.w, shape.text_margin) == pytest.approx((0.3 + 0.5, 0.25))
 
 
@@ -679,3 +679,36 @@ def test_image_participates_in_positioning_like_any_object(tmp_path: pathlib.Pat
     )
     logo, caption = result.shapes
     assert caption.cy == pytest.approx(logo.edge_point("s")[1] - 0.2)
+
+
+@pytest.mark.parametrize("src", ['text "a" stroke red\n', '"a" stroke thick\n', "move stroke dashed\n",
+                                 '[ box ] stroke red\n'])
+def test_stroke_on_an_object_with_no_line_is_an_error(src: str):
+    with pytest.raises(LayoutError, match="'stroke' is not valid"):
+        layout(src)
+
+
+def test_ljust_applies_to_every_string_of_the_object():
+    shape = layout('box "a" "b" small ljust\n').shapes[0]
+    assert shape.just == "ljust"
+    assert all("ljust" in flags for _text, flags in shape.texts)
+
+
+def test_text_ljust_at_puts_its_left_edge_at_the_point():
+    left, right = layout('text "abc" ljust at (1, 0)\ntext "abc" rjust at (1, 0)\n').shapes
+    assert left.cx - left.w / 2 == pytest.approx(1.0)
+    assert right.cx + right.w / 2 == pytest.approx(1.0)
+
+
+def test_color_is_the_text_color_and_stroke_the_line_color():
+    shape = layout('box "a" color red "b" stroke blue\n').shapes[0]
+    assert shape.text_colors == [Color(rgb=0xFF0000), None]
+    assert shape.color == Color(rgb=0x0000FF)
+    assert shape.text_color == Color(rgb=0x000000)
+
+
+def test_dot_is_filled_with_the_default_stroke_color_unless_filled():
+    plain, stroked, filled = layout("dot\ndot stroke red\ndot fill blue\n").shapes
+    assert plain.fill == plain.color
+    assert stroked.fill == plain.color and stroked.color != plain.color
+    assert filled.fill != plain.color

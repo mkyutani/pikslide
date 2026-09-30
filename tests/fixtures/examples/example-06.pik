@@ -24,7 +24,7 @@ box height C3.y-C2.y \
     width (C5P.e.x-C0.w.x)+linewid \
     with .w at 0.5*linewid west of C0.w \
     behind C0 \
-    fill 0xc6e2ff thin color gray
+    fill 0xc6e2ff stroke gray thin
 box same width previous.e.x - C2.w.x \
     with .se at previous.ne \
     fill 0x9accfc
@@ -52,7 +52,7 @@ box height C3.y-C2.y \
     width (C7.e.x-C0.w.x)+1.5*C1.radius \
     with .w at 0.5*linewid west of C0.w \
     behind C0 \
-    fill 0xc6e2ff thin color gray
+    fill 0xc6e2ff stroke gray thin
 box same width previous.e.x - C2.w.x \
     with .se at previous.ne \
     fill 0x9accfc

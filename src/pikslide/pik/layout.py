@@ -242,7 +242,6 @@ def assign_text_slots(texts: list[tuple[str, list[str]]]) -> list[str]:
         return []
 
     slots: list[str | None] = []
-    justs: list[str | None] = []
     for _text, flags in texts:
         if "above" in flags:
             slots.append("above")
@@ -252,7 +251,6 @@ def assign_text_slots(texts: list[tuple[str, list[str]]]) -> list[str]:
             slots.append("center")
         else:
             slots.append(None)
-        justs.append("ljust" if "ljust" in flags else "rjust" if "rjust" in flags else None)
 
     if n == 1:
         return [slots[0] or "center"]
@@ -271,17 +269,14 @@ def assign_text_slots(texts: list[tuple[str, list[str]]]) -> list[str]:
             slots[i] = _slot_name("below", k)
 
     used = {s for s in slots if s is not None}
-    if n == 2 and {justs[0], justs[1]} == {"ljust", "rjust"}:
-        free = ["center", "center"]
-    else:
-        # n // 2 slots each side, plus center when n is odd: n in all, so
-        # at least as many free ones as un-flagged texts.
-        half = n // 2
-        free = [_slot_name("above", k) for k in range(half, 0, -1)]
-        if n % 2 != 0:
-            free.append("center")
-        free += [_slot_name("below", k) for k in range(1, half + 1)]
-        free = [s for s in free if s == "center" or s not in used]
+    # n // 2 slots each side, plus center when n is odd: n in all, so
+    # at least as many free ones as un-flagged texts.
+    half = n // 2
+    free = [_slot_name("above", k) for k in range(half, 0, -1)]
+    if n % 2 != 0:
+        free.append("center")
+    free += [_slot_name("below", k) for k in range(1, half + 1)]
+    free = [s for s in free if s == "center" or s not in used]
 
     it = iter(free)
     return [s if s is not None else next(it) for s in slots]
@@ -323,11 +318,20 @@ class Shape:
     dotted: float = 0.0
     fill: Color | None = None
     color: Color | None = None
+    """The line/outline color (`stroke`, docs/spec.md SS3.1)."""
+    text_color: Color | None = None
+    """The color of a string with no `color` of its own."""
     larrow: bool = False
     rarrow: bool = False
     cw: bool = True
     closed: bool = False
     texts: list[tuple[str, list[str]]] = field(default_factory=list)
+    text_colors: list[Color | None] = field(default_factory=list)
+    """Each of `.texts`' own `color` (index for index), or None for
+    `.text_color`; see string_color()."""
+    just: str | None = None
+    """`ljust`/`rjust` (docs/spec.md SS3.1), for all of `.texts` at once;
+    also present in each text's own flags, for a renderer's alignment."""
     path: list[tuple[float, float]] | None = None
     enter: tuple[float, float] = (0.0, 0.0)
     exit: tuple[float, float] = (0.0, 0.0)
@@ -359,12 +363,13 @@ class Shape:
     SS3.3): this object's own text renders in the family that was in
     effect when it was written, not the document's final one."""
     text_margin: float = 0.0
-    """Like `text_sizes`, but for `textmargin` (docs/spec.md SS3.3): the
+    """Like `text_sizes`, but for `margin` (docs/spec.md SS3.3): the
     space between the text and the object's left and right sides."""
     label_width: float = 0.0
     """A line's labels' shared width (docs/spec.md SS3.1): its widest
-    label's, measured as `fit` measures, so that ljust/rjust labels line
-    up on a common edge and the lined-up block stays centered on the line."""
+    label's, measured as `fit` measures, so that the labels line up on a
+    common edge -- the line's own center, or with ljust/rjust its left/
+    right end."""
     fit: bool = False
     """Set by `_autosize_text()` (explicit `fit`, docs/spec.md SS3.3, or
     the implicit case -- no size given at all, ext): this shape's own
@@ -666,7 +671,7 @@ def _eval_assignment(stmt: ast.AssignStatement, ctx: "_Ctx") -> None:
             "+=": current + rhs, "-=": current - rhs,
             "*=": current * rhs, "/=": current / rhs if rhs != 0 else current,
         }[stmt.op]
-    if stmt.name in ("fill", "color"):
+    if stmt.name in ("fill", "color", "stroke"):
         result = _as_color(result)
     ctx.vars[stmt.name] = result
 
@@ -768,7 +773,7 @@ _PROP_GETTERS = {
     "width": lambda s: s.w, "height": lambda s: s.h, "radius": lambda s: s.rad,
     "diameter": lambda s: s.rad * 2, "thickness": lambda s: s.sw,
     "dashed": lambda s: s.dashed, "dotted": lambda s: s.dotted,
-    "fill": lambda s: s.fill, "color": lambda s: s.color,
+    "fill": lambda s: s.fill, "color": lambda s: s.text_color, "stroke": lambda s: s.color,
 }
 
 
@@ -1269,6 +1274,22 @@ def _append_segment(build: "_Build", shape: Shape, pt: tuple[float, float], obj:
     build.then_flag = False
 
 
+# The objects that draw no line of their own, so `stroke` is an error on
+# them (docs/spec.md SS3.1), each with how the error names it.
+_NO_STROKE = {"text": "a text", "image": "an image", "move": "a move", "block": "a block"}
+
+
+def _add_text(shape: Shape, text: str, flags: list[str], color: ast.Expr | None, ctx: _Ctx) -> None:
+    shape.texts.append((text, list(flags)))
+    shape.text_colors.append(_as_color(eval_expr(color, ctx)) if color is not None else None)
+
+
+def string_color(shape: Shape, i: int) -> Color | None:
+    """The color `shape.texts[i]` is drawn in: its own, else the object's."""
+    own = shape.text_colors[i] if i < len(shape.text_colors) else None
+    return own if own is not None else shape.text_color
+
+
 def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _Ctx) -> None:
     if isinstance(attr, ast.LeadingDirection):
         length = _resolve_rel(attr.amount, ctx.vars["linewid"], ctx)
@@ -1307,6 +1328,14 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
             shape.fill = value
         else:
             shape.color = value
+    elif isinstance(attr, ast.Stroke):
+        if shape.kind in _NO_STROKE:
+            raise LayoutError(f"'stroke' is not valid on {_NO_STROKE[shape.kind]}: it draws no line")
+        for sub in attr.attrs:
+            _apply_attribute(sub, shape, build, ctx)
+    elif isinstance(attr, ast.Justify):
+        if attr.name != "aligned":
+            shape.just = attr.name
     elif isinstance(attr, ast.BoolProperty):
         if attr.name == "cw":
             shape.cw = True
@@ -1325,7 +1354,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         shape.larrow = attr.kind in ("left", "both")
         shape.rarrow = attr.kind in ("right", "both")
     elif isinstance(attr, ast.TextAttribute):
-        shape.texts.append((attr.text, attr.flags))
+        _add_text(shape, attr.text, attr.flags, attr.color, ctx)
     elif isinstance(attr, ast.Fit):
         build.fit = True
     elif isinstance(attr, ast.Behind):
@@ -1354,6 +1383,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
             shape.dotted = same_from.dotted
             shape.fill = same_from.fill
             shape.color = same_from.color
+            shape.text_color = same_from.text_color
             shape.cw = same_from.cw
             shape.larrow = same_from.larrow
             shape.rarrow = same_from.rarrow
@@ -1477,7 +1507,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
     # point a later object's own override may already have changed them.
     text_sizes_now = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
     typeface_now = _as_string(ctx.vars.get("typeface", ""), "typeface")
-    text_margin_now = _as_number(ctx.vars.get("textmargin", 0.0), "textmargin")
+    text_margin_now = _as_number(ctx.vars.get("margin", 0.0), "margin")
 
     if isinstance(base, ast.BlockBase):
         ctx.scope_stack.append({})
@@ -1494,24 +1524,28 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
         is_line = False
     elif isinstance(base, ast.TextBase):
         shape = Shape(kind="text", name=None, cx=0.0, cy=0.0, w=0.0, h=0.0,
-                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["color"])
-        shape.texts.append((base.text, base.flags))
+                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["stroke"],
+                      text_color=ctx.vars["color"])
+        _add_text(shape, base.text, base.flags, base.color, ctx)
         is_line = False
     elif isinstance(base, ast.ShapeBase):
         shape = Shape(kind="shape", name=None, cx=0.0, cy=0.0, w=0.0, h=0.0,
-                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["color"],
+                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["stroke"],
+                      text_color=ctx.vars["color"],
                       preset=_resolve_preset_name(base.preset))
         _init_class_defaults(shape, "shape", ctx)
         is_line = False
     elif isinstance(base, ast.ImageBase):
         shape = Shape(kind="image", name=None, cx=0.0, cy=0.0, w=0.0, h=0.0,
-                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["color"],
+                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["stroke"],
+                      text_color=ctx.vars["color"],
                       image_path=_resolve_image_path(base.path, ctx.base_dir))
         is_line = False
     else:
         classname = base.classname
         shape = Shape(kind=classname, name=None, cx=0.0, cy=0.0, w=0.0, h=0.0,
-                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["color"])
+                      sw=ctx.vars["thickness"], fill=ctx.vars["fill"], color=ctx.vars["stroke"],
+                      text_color=ctx.vars["color"])
         _init_class_defaults(shape, classname, ctx)
         is_line = classname in LINE_LIKE
 
@@ -1534,8 +1568,15 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
         _apply_attribute(attr, shape, build, ctx)
     ctx.current = None
 
+    if shape.just is not None:
+        # The renderer aligns each string by its own flags (see Shape.just).
+        shape.texts = [(text, flags + [shape.just]) for text, flags in shape.texts]
+
     if build.at is not None:
-        with_pos, with_edge = build.at, C
+        # A text's `ljust at P` puts its left edge at P (rjust: right);
+        # the string itself still sits `margin` in from that edge.
+        with_pos = build.at
+        with_edge = {"ljust": W, "rjust": E}.get(shape.just, C) if shape.kind == "text" else C
     elif build.with_pos is not None:
         with_pos, with_edge = build.with_pos, build.with_edge
 

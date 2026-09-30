@@ -6,6 +6,7 @@ used here as a "does this parse without error" regression net.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -54,15 +55,15 @@ def test_lowercase_color_name_is_an_ordinary_variable():
     # capitalized PLACENAME is always an object reference, never a color
     # -- "darkblue" is an ordinary Var, resolved against the prelude
     # (docs/spec.md SS3.7) at evaluation time, not parse time.
-    doc = parse("box color darkblue\n")
+    doc = parse("box fill darkblue\n")
     attr = doc.statements[0].attributes[0]
-    assert attr == ast.ColorProperty("color", ast.Var("darkblue"))
+    assert attr == ast.ColorProperty("fill", ast.Var("darkblue"))
 
 
 def test_dashed_with_and_without_value():
-    doc = parse("line dashed\nline dashed 0.05\n")
-    assert doc.statements[0].attributes[0] == ast.DashProperty("dashed", None)
-    assert doc.statements[1].attributes[0] == ast.DashProperty("dashed", ast.Num(0.05))
+    doc = parse("line stroke dashed\nline stroke dashed 0.05\n")
+    assert doc.statements[0].attributes[0] == ast.Stroke([ast.DashProperty("dashed", None)])
+    assert doc.statements[1].attributes[0] == ast.Stroke([ast.DashProperty("dashed", ast.Num(0.05))])
 
 
 def test_arrow_direction_flags():
@@ -625,3 +626,54 @@ def test_missing_include_file_error_still_names_the_including_file(tmp_path: Pat
 def test_syntax_errors_raise(text: str):
     with pytest.raises(PikSyntaxError):
         parse(text)
+
+
+# ---------------------------------------------------------------------------
+# Strings first, then the object's attributes (docs/grammar.md, Objects)
+# ---------------------------------------------------------------------------
+
+
+def test_string_attributes_bind_to_the_string_before_them():
+    doc = parse('text "a" small color red "b" bold ljust at (1, 2)\n')
+    a, b, just, at = doc.statements[0].attributes
+    assert a == ast.TextAttribute("a", ["small"], ast.Var("red"))
+    assert b == ast.TextAttribute("b", ["bold"], None)
+    assert just == ast.Justify("ljust")
+    assert isinstance(at, ast.At)
+
+
+def test_bare_string_takes_string_attributes_then_object_attributes():
+    doc = parse('"a" italic "b" rjust at (0, 0)\n')
+    stmt = doc.statements[0]
+    assert stmt.base == ast.TextBase("a", ["italic"], None)
+    assert stmt.attributes[0] == ast.TextAttribute("b", [], None)
+    assert stmt.attributes[1] == ast.Justify("rjust")
+
+
+def test_stroke_groups_color_and_line_attributes():
+    doc = parse("box stroke accent2 thick dashed 0.1 fill bg1\n")
+    stroke, fill = doc.statements[0].attributes
+    assert stroke == ast.Stroke([
+        ast.ColorProperty("stroke", ast.Var("accent2")),
+        ast.BoolProperty("thick"),
+        ast.DashProperty("dashed", ast.Num(0.1)),
+    ])
+    assert fill == ast.ColorProperty("fill", ast.Var("bg1"))
+
+
+@pytest.mark.parametrize(("src", "message"), [
+    ('box width 1 "a"\n', "a string must come right after the object class"),
+    ('box "a" ljust "b"\n', "a string must come right after the object class"),
+    ('"P" at (0, 0) "Q" at (1, 1)\n', "a string must come right after the object class"),
+    ('box "a" width 1 bold\n', "'bold' is a string attribute"),
+    ('box "a" width 1 color red\n', "'color' is a string attribute"),
+    ("box thick\n", "'thick' is a stroke attribute"),
+    ('box "a" invis\n', "'invis' is a stroke attribute"),
+    ("box stroke\n", "expected a color or a stroke attribute after 'stroke'"),
+    ('"P" at (0, 0) at (1, 1)\n', "an object can have only one 'at'"),
+    ('box "a" ljust rjust\n', "'ljust' and 'rjust' cannot both be given"),
+    ('box "a" color red color blue\n', "a string can have only one 'color'"),
+])
+def test_misplaced_or_conflicting_attributes_are_errors(src: str, message: str):
+    with pytest.raises(PikSyntaxError, match=re.escape(message)):
+        parse(src)

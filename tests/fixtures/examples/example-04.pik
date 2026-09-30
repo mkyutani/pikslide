@@ -6,7 +6,7 @@ linewid = 0.25
 #
 box "element" bold fit
 line down 50% from last box.sw
-dot rad 250% color black
+dot rad 250% stroke black
 X0: last.e + (0.3,0)
 arrow from last dot to X0
 move right 3.9in

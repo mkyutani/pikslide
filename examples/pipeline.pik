@@ -1,5 +1,5 @@
-arrow right 200% "Markdown" "Source"
-box rad 10px "pikslide" "Formatter" fit
-arrow right 200% "PPTX" "Output"
+arrow "Markdown" "Source" right 200%
+box "pikslide" "Formatter" rad 10px fit
+arrow "PPTX" "Output" right 200%
 arrow <- down 70% from last box.s
 file "pikslide" "Language" fit

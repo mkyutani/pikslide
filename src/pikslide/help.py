@@ -52,20 +52,22 @@ class Entry:
 
 
 _CLOSED_ATTRIBUTES = """\
+text     "string" [flag ...] ...  first, right after the class (--help flags)
+         ljust  rjust
 size     width W (wid)  height H (ht)  radius R (rad)  fit
-style    fill C  color C  thickness T  thick  thin  dashed [L]  dotted [L]
-         solid  invis
-text     "string" [flag ...] ...              (--help flags)
+style    fill C  stroke [C] [thickness T] [thick] [thin] [dashed [L]]
+         [dotted [L]] [solid] [invis]
 place    at P  with .EDGE at P  same [as X]  behind X
 edges    .n .ne .e .se .s .sw .w .nw .c  (.top .bottom .left .right .center)"""
 
 _LINE_ATTRIBUTES = """\
+text     "string" [flag ...] ...  labels, right after the class (--help flags)
+         ljust  rjust
 path     [N]  up|down|left|right [N]  go N heading A  from P  to P  then
          right until even with P  close  chop
 heads    ->  <-  <->
-style    color C  thickness T  thick  thin  dashed [L]  dotted [L]  solid
-         invis  fill C (a closed path)
-text     "string" [flag ...] ...              labels (--help flags)
+style    stroke [C] [thickness T] [thick] [thin] [dashed [L]] [dotted [L]]
+         [solid] [invis]  fill C (a closed path)
 place    same [as X]  behind X
 points   .start  .end  Nth vertex of X"""
 
@@ -153,7 +155,7 @@ ENTRIES: tuple[Entry, ...] = (
           "path says otherwise.", ("linewid", "lineht"), "line from A.e to B.w"),
     _line(("arrow",), "a line with an arrowhead at its end",
           "A line with an arrowhead at its end (`->`); `<-` or `<->` change the heads.",
-          ("linewid", "lineht", "arrowht", "arrowwid"), 'arrow from A to B chop "request" above'),
+          ("linewid", "lineht", "arrowht", "arrowwid"), 'arrow "request" above from A to B chop'),
     _line(("spline",), "a curve through its points (drawn as a polyline)",
           "A curve through its path's points; drawn as straight segments in v1.",
           ("linewid", "lineht"), "spline right then up then right"),
@@ -181,33 +183,47 @@ ENTRIES: tuple[Entry, ...] = (
                "cylinder's end depth.", example="box rad 0.1", group="attribute"),
     Entry(("diameter",), "a circle's diameter", synopsis=("diameter EXPR[%]",),
           example="circle diameter 0.4", group="attribute"),
+    Entry(("stroke",), "the line or outline: its color, thickness and dashes",
+          synopsis=("stroke [COLOR] [STROKE-ATTRIBUTE ...]", "stroke = COLOR"),
+          body="Groups what the object's line or outline looks like: a color first, if "
+               "any, then thickness, thick, thin, dashed, dotted, solid or invis. Those "
+               "are written only after `stroke`. An error on an object that draws no "
+               "line (text, image, move, a block). Assigned as a variable, it sets the "
+               "default line color for later objects.",
+          example='box "a" stroke accent2 thick dashed', group="attribute",
+          sections=(("COLORS", "{colors}"),), see=("colors", "color", "fill"),
+          defaults=("stroke",)),
     Entry(("thickness",), "line thickness; as a variable, the default",
-          synopsis=("thickness EXPR[%]", "thickness = EXPR"),
-          body="The stroke width, in inches. Assigned as a variable, it sets the default "
-               "for later objects.", example="box thickness 0.03", group="attribute",
-          defaults=("thickness",)),
-    Entry(("thick",), "1.5 times thicker", group="attribute", example="arrow thick"),
-    Entry(("thin",), "0.67 times as thick", group="attribute", example="line thin"),
-    Entry(("solid",), "solid, default-thickness stroke (undoes dashed/dotted)", group="attribute"),
+          synopsis=("stroke thickness EXPR[%]", "thickness = EXPR"),
+          body="The stroke width, in inches (a stroke attribute). Assigned as a variable, "
+               "it sets the default for later objects.", example="box stroke thickness 0.03",
+          group="attribute", defaults=("thickness",), see=("stroke",)),
+    Entry(("thick",), "1.5 times thicker", group="attribute", example="arrow stroke thick", see=("stroke",)),
+    Entry(("thin",), "0.67 times as thick", group="attribute", example="line stroke thin", see=("stroke",)),
+    Entry(("solid",), "solid, default-thickness stroke (undoes dashed/dotted)", group="attribute",
+          synopsis=("stroke solid",), see=("stroke",)),
     Entry(("invis", "invisible"), "no outline", group="attribute",
-          body="Hides the outline (text still shows).", example='box invis "label only"'),
-    Entry(("dashed",), "a dashed stroke", synopsis=("dashed [EXPR]",),
-          body="Dashes of the given length (default `dashwid`).", example="line dashed",
-          group="attribute", defaults=("dashwid",)),
-    Entry(("dotted",), "a dotted stroke", synopsis=("dotted [EXPR]",),
+          body="Hides the line or outline (text still shows).", example='box "label only" stroke invis',
+          see=("stroke",)),
+    Entry(("dashed",), "a dashed stroke", synopsis=("stroke dashed [EXPR]",),
+          body="Dashes of the given length (default `dashwid`).", example="line stroke dashed",
+          group="attribute", defaults=("dashwid",), see=("stroke",)),
+    Entry(("dotted",), "a dotted stroke", synopsis=("stroke dotted [EXPR]",),
           body="Dots spaced by the given length (default `dashwid`).", group="attribute",
-          defaults=("dashwid",)),
+          defaults=("dashwid",), see=("stroke",)),
     Entry(("fill",), "the fill color; as a variable, the default",
           synopsis=("fill COLOR", "fill = COLOR"),
           body="Fills the object's interior. Assigned as a variable, it sets the default "
                "for later objects.", example="box fill accent1 lighter 60%",
           sections=(("COLORS", "{colors}"),), see=("colors", "theme"), group="attribute",
           defaults=("fill",)),
-    Entry(("color", "colour"), "the stroke and text color; as a variable, the default",
-          synopsis=("color COLOR", "color = COLOR"),
-          body="Colors the outline and the text. Assigned as a variable, it sets the "
-               "default for later objects.", example="arrow color accent2",
-          sections=(("COLORS", "{colors}"),), see=("colors", "theme", "fill"), group="attribute",
+    Entry(("color", "colour"), "a string's color; as a variable, the default text color",
+          synopsis=('"string" color COLOR', "color = COLOR"),
+          body="A string attribute: colors the string right before it, and no other. "
+               "Assigned as a variable, it sets the default text color for later objects. "
+               "The line or outline is colored by `stroke`.",
+          example='box "alert" color accent2 "details"',
+          sections=(("COLORS", "{colors}"),), see=("colors", "theme", "stroke", "fill"), group="flag",
           defaults=("color",)),
     Entry(("theme",), "a theme color by slot name", synopsis=('theme "SLOT"',),
           body="A color from the deck's theme, kept linked to it: the diagram recolors "
@@ -219,7 +235,7 @@ ENTRIES: tuple[Entry, ...] = (
           synopsis=("COLOR lighter N%", "COLOR darker N%"),
           body="A tint (lighter) or shade (darker) of a color, as PowerPoint's own "
                "theme color variants.", example="box fill accent1 lighter 60%", see=("colors",)),
-    Entry(("none", "off"), "no color", synopsis=("fill none", "color off"),
+    Entry(("none", "off"), "no color", synopsis=("fill none", "stroke off"),
           body="The no-color value: no fill, or no stroke.", see=("colors",)),
 
     # --- text -------------------------------------------------------------
@@ -229,11 +245,13 @@ ENTRIES: tuple[Entry, ...] = (
                "line, stacking with the others there. In a position: that far above "
                "(below) a point.", example='arrow "request" above "reply" below',
           group="flag", see=("flags",)),
-    Entry(("ljust", "rjust"), "line strings up on their left or right edges",
-          synopsis=('"string" ljust', '"string" rjust'),
-          body="The object's strings line up with each other on their left (right) edges; "
-               "in a fixed-size object they sit textmargin from its side.",
-          example='box "one" ljust "three" ljust width 2', group="flag", see=("flags", "textmargin")),
+    Entry(("ljust", "rjust"), "line the object's strings up on the left or right",
+          synopsis=('CLASS "string" ... ljust', 'CLASS "string" ... rjust'),
+          body="An object attribute, for all its strings at once: they line up on their "
+               "left (right) edges, margin in from the left (right) side of a box or other "
+               "closed shape, or from the left (right) end of a line. On a text, `at P` "
+               "puts its left (right) edge at P. Not both on one object.",
+          example='box "one" "three" ljust width 2', group="attribute", see=("flags", "margin")),
     Entry(("center",), "centered text; the center edge point", synopsis=('"string" center', "X.center"),
           body="As a text flag: centered, on the center line. As an edge: the object's "
                "center (also `.c`).", group="flag", see=("flags", "edges")),
@@ -241,7 +259,7 @@ ENTRIES: tuple[Entry, ...] = (
           group="flag", example='box "Title" bold "subtitle" italic', see=("flags",)),
     Entry(("mono", "monospace"), "monospace text (accepted; draws in the normal font)",
           group="flag", see=("flags",)),
-    Entry(("aligned",), "text along the line's direction (accepted; no effect in v1)", group="flag", see=("flags",)),
+    Entry(("aligned",), "text along the line's direction (accepted; no effect in v1)", group="attribute"),
     Entry(("small", "medium", "large", "big"), "text size; as variables, the three sizes",
           synopsis=('"string" small', '"string" large', "small = 9pt"),
           body="Text flags for the three sizes (`big` is `large`); the last one on a "
@@ -290,8 +308,8 @@ ENTRIES: tuple[Entry, ...] = (
                "from the one named.", example="box same as Web", group="attribute"),
     Entry(("fit",), "sizes the object to its text",
           body="Makes the object just big enough for its text, measured in the fonts the "
-               "deck is drawn in, plus textmargin at each side.",
-          example='box "a longer label" fit', group="attribute", see=("textmargin",)),
+               "deck is drawn in, plus margin at each side.",
+          example='box "a longer label" fit', group="attribute", see=("margin",)),
     Entry(("behind",), "draws the object just below another in z-order",
           synopsis=("behind OBJECT",), example="box fill bg2 behind Web", group="attribute"),
     Entry(("alt",), "an image's accessibility description", synopsis=('alt "TEXT"',),
@@ -360,7 +378,7 @@ _VARIABLE_DOCS = {
     "charht": "text line height, when no real font is measured",
     "charwid": "character width, when no real font is measured",
     "circlerad": "default circle radius",
-    "color": "default stroke and text color",
+    "color": "default text color",
     "cylht": "default cylinder height",
     "cylrad": "default depth of a cylinder's ends",
     "cylwid": "default cylinder width",
@@ -376,11 +394,12 @@ _VARIABLE_DOCS = {
     "fill": "default fill color",
     "lineht": "default length of a vertical line",
     "linewid": "default length of a horizontal line",
+    "margin": "space between text and an object's sides, or a line's ends",
     "movewid": "default length of a move",
     "ovalht": "default oval height",
     "ovalwid": "default oval width",
     "scale": "(accepted; no effect in v1)",
-    "textmargin": "space between text and an object's left and right sides",
+    "stroke": "default line and outline color",
     "textht": "default height of a text object with no strings",
     "textwid": "default width of a text object with no strings",
     "thickness": "default line thickness",
@@ -549,7 +568,7 @@ arrow "request" above
 Web: box "Web server" bold "(nginx)" small fill accent1 lighter 60% fit
 arrow
 DB: cylinder "Orders" fit
-Cache: box "Cache" dashed fit with .n at 0.5 below Web.s
+Cache: box "Cache" stroke dashed fit with .n at 0.5 below Web.s
 arrow from Web.s to Cache.n <->"""
 
 _INTRO = f"""\
@@ -575,9 +594,12 @@ object ends. `at P` or `with .EDGE at P` place an object explicitly;
 `from P to Q` and `then` shape a line; `chop` ends a line at the outlines of
 the objects it joins. P is a point: A.e, (1, 2), 0.5 below A.s, ...
 
-Text. Strings after the class are lines of text: box "Title" bold "note"
-small. A flag belongs to the string before it. `fit` sizes the object to its
-text.
+Text. Strings right after the class are lines of text: box "Title" bold
+"note" small. A string attribute (bold, small, above, color C, ...) belongs to
+the string before it; the object's own attributes (ljust, at, fill, ...) come
+after all of its strings. `fit` sizes the object to its text.
+
+Lines. `stroke` sets a line or outline: box stroke accent2 thick dashed.
 
 Colors. Theme colors follow the deck: accent1..accent6, text1, text2, bg1,
 bg2, with `lighter N%` / `darker N%`; CSS names (steelblue, ...) are fixed.

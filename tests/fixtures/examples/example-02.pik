@@ -4,15 +4,15 @@
   Prelude:  file "prelude.pik"; move
             arrow down from Src.s
   Parse:    oval "parser" ht 50%
-            arrow " AST" ljust above
+            arrow "AST" above ljust
   Layout:   oval "layout" ht 50%
             arrow from Img chop down until even with Parse \
               then to Layout.nw rad 20px
-            "embedded " rjust "images " rjust \
+            "embedded" "images" rjust \
               at 2nd vertex of previous
             arrow from Prelude chop down until even with Parse \
               then to Layout.ne rad 20px
-            " default" ljust " variables" ljust \
+            "default" "variables" ljust \
               at 2nd vertex of previous
   Shapes:   box "shapes" with .n at lineht below Layout.s
             arrow from Layout to Shapes chop

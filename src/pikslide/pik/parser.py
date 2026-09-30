@@ -26,12 +26,15 @@ _NUMPROP_NAME = {
     TokType.HEIGHT: "height",
     TokType.RADIUS: "radius",
     TokType.DIAMETER: "diameter",
-    TokType.THICKNESS: "thickness",
 }
 
 _BOOLPROP_NAME = {
     TokType.CW: "cw",
     TokType.CCW: "ccw",
+}
+
+# The attributes only a `stroke` group can hold (docs/grammar.md, Objects).
+_STROKE_BOOL_NAME = {
     TokType.INVIS: "invis",
     TokType.THICK: "thick",
     TokType.THIN: "thin",
@@ -44,19 +47,18 @@ _ARROW_KIND = {
     TokType.LRARROW: "both",
 }
 
-_COLORPROP_NAME = {TokType.FILL: "fill", TokType.COLOR: "color"}
 _DASHPROP_NAME = {TokType.DASHED: "dashed", TokType.DOTTED: "dotted"}
+_STROKE_ONLY = set(_STROKE_BOOL_NAME) | set(_DASHPROP_NAME) | {TokType.THICKNESS}
 
-_TEXTFLAG_NAME = {
+# string-attr (docs/grammar.md, Objects): binds to the STRING right
+# before it. `color` is one too, but takes a value, so it's parsed apart.
+_STRING_ATTR_NAME = {
     TokType.CENTER: "center",
-    TokType.LJUST: "ljust",
-    TokType.RJUST: "rjust",
     TokType.ABOVE: "above",
     TokType.BELOW: "below",
     TokType.ITALIC: "italic",
     TokType.BOLD: "bold",
     TokType.MONO: "mono",
-    TokType.ALIGNED: "aligned",
     TokType.BIG: "big",
     TokType.SMALL: "small",
     # pikslide ext: docs/grammar.md, Objects (text-flag)
@@ -64,6 +66,9 @@ _TEXTFLAG_NAME = {
     TokType.MEDIUM: "medium",
     TokType.LARGE: "large",
 }
+
+# The object-level justification (docs/spec.md SS3.1): all strings at once.
+_JUSTIFY_NAME = {TokType.LJUST: "ljust", TokType.RJUST: "rjust", TokType.ALIGNED: "aligned"}
 
 _DOTL_PROP_NAME = {
     TokType.WIDTH: "width",
@@ -75,11 +80,13 @@ _DOTL_PROP_NAME = {
     TokType.DOTTED: "dotted",
     TokType.FILL: "fill",
     TokType.COLOR: "color",
+    TokType.STROKE: "stroke",
 }
 
 _PSEUDOVAR_NAME = {
     TokType.FILL: "fill",
     TokType.COLOR: "color",
+    TokType.STROKE: "stroke",
     TokType.THICKNESS: "thickness",
 }
 
@@ -194,7 +201,7 @@ class Parser:
             self.advance()
             return ast.DirectionStatement(_DIR_NAME[t.type])
 
-        if t.type in (TokType.ID, TokType.FILL, TokType.COLOR, TokType.THICKNESS,
+        if t.type in (TokType.ID, TokType.FILL, TokType.COLOR, TokType.STROKE, TokType.THICKNESS,
                       TokType.SMALL, TokType.MEDIUM, TokType.LARGE):
             name_tok = self.advance()
             op_tok = self.expect(TokType.ASSIGN)
@@ -266,17 +273,39 @@ class Parser:
     # -- objects ----------------------------------------------------------
 
     def parse_unnamed_statement(self) -> tuple[ast.Basetype, list[ast.Attribute]]:
+        # unnamed-statement ::= basetype { STRING { string-attr } } attribute-list
+        # (docs/grammar.md, Objects): the strings come first, then the
+        # object's own attributes, and no string after those.
         base = self.parse_basetype()
-        attrs = self.parse_attribute_list()
+        attrs: list[ast.Attribute] = []
+        while self.at(TokType.STRING):
+            text = unescape_string(self.advance().text)
+            flags, color = self.parse_string_attrs()
+            attrs.append(ast.TextAttribute(text, flags, color))
+        attrs += self.parse_attribute_list()
+        self._check_misplaced_attribute()
         return base, attrs
+
+    def _check_misplaced_attribute(self) -> None:
+        """A clearer error than "unexpected token" for the words that are
+        valid in an object, just not where they were written."""
+        t = self.peek()
+        if t is None:
+            return
+        if t.type == TokType.STRING:
+            self._error("a string must come right after the object class, before its attributes")
+        if t.type in _STRING_ATTR_NAME or t.type == TokType.COLOR:
+            self._error(f"'{t.text}' is a string attribute: write it right after the string it applies to")
+        if t.type in _STROKE_ONLY:
+            self._error(f"'{t.text}' is a stroke attribute: write it after 'stroke' (e.g. 'stroke {t.text}')")
 
     def parse_basetype(self) -> ast.Basetype:
         if self.at(TokType.CLASSNAME):
             return ast.ClassBase(self.advance().text)
         if self.at(TokType.STRING):
             text = unescape_string(self.advance().text)
-            flags = self.parse_textposition()
-            return ast.TextBase(text, flags)
+            flags, color = self.parse_string_attrs()
+            return ast.TextBase(text, flags, color)
         if self.at(TokType.LB):
             self.advance()
             statements = self.parse_statement_list()
@@ -304,25 +333,78 @@ class Parser:
             return self.advance().text
         self._error("expected a preset shape name")
 
-    def parse_textposition(self) -> list[str]:
+    def parse_string_attrs(self) -> tuple[list[str], ast.Expr | None]:
+        """The `string-attr`s after one STRING: its flags, and its own
+        `color` value if it has one."""
         flags: list[str] = []
+        color: ast.Expr | None = None
         while True:
             t = self.peek()
-            if t is None or t.type not in _TEXTFLAG_NAME:
+            if t is None:
                 break
-            self.advance()
-            flags.append(_TEXTFLAG_NAME[t.type])
-        return flags
+            if t.type in _STRING_ATTR_NAME:
+                self.advance()
+                flags.append(_STRING_ATTR_NAME[t.type])
+            elif t.type == TokType.COLOR:
+                if color is not None:
+                    self._error("a string can have only one 'color'")
+                self.advance()
+                color = self.parse_color_value()
+            else:
+                break
+        return flags, color
 
     def parse_attribute_list(self) -> list[ast.Attribute]:
         attrs: list[ast.Attribute] = []
         if self._starts_expr():
             attrs.append(ast.LeadingDirection(self.parse_relexpr()))
+        seen_at = False
+        justify: str | None = None
         while True:
+            t = self.peek()
+            # Semantic errors, reported where the second one is written:
+            # one position per object, and one side to justify to.
+            if t is not None and t.type == TokType.AT:
+                if seen_at:
+                    self._error("an object can have only one 'at'")
+                seen_at = True
+            if t is not None and t.type in (TokType.LJUST, TokType.RJUST):
+                name = _JUSTIFY_NAME[t.type]
+                if justify is not None and justify != name:
+                    self._error("'ljust' and 'rjust' cannot both be given")
+                justify = name
             attr = self._try_parse_attribute()
             if attr is None:
                 break
             attrs.append(attr)
+        return attrs
+
+    def _parse_stroke_attrs(self) -> list[ast.Attribute]:
+        """After `stroke`: an optional color value first, then any of the
+        line's own attributes (docs/grammar.md, Objects). The color can
+        only come first, so that a following `dashed`/`dotted` value is
+        never mistaken for it, or it for theirs."""
+        attrs: list[ast.Attribute] = []
+        if self.at(TokType.THEME, TokType.NOCOLOR) or self._starts_expr():
+            attrs.append(ast.ColorProperty("stroke", self.parse_color_value()))
+        while True:
+            t = self.peek()
+            if t is None:
+                break
+            if t.type == TokType.THICKNESS:
+                self.advance()
+                attrs.append(ast.NumProperty("thickness", self.parse_relexpr()))
+            elif t.type in _DASHPROP_NAME:
+                self.advance()
+                value = self.parse_expr() if self._starts_expr() else None
+                attrs.append(ast.DashProperty(_DASHPROP_NAME[t.type], value))
+            elif t.type in _STROKE_BOOL_NAME:
+                self.advance()
+                attrs.append(ast.BoolProperty(_STROKE_BOOL_NAME[t.type]))
+            else:
+                break
+        if not attrs:
+            self._error("expected a color or a stroke attribute after 'stroke'")
         return attrs
 
     def _try_parse_attribute(self) -> ast.Attribute | None:
@@ -335,14 +417,17 @@ class Parser:
             self.advance()
             return ast.NumProperty(_NUMPROP_NAME[tt], self.parse_relexpr())
 
-        if tt in _DASHPROP_NAME:
+        if tt == TokType.FILL:
             self.advance()
-            value = self.parse_expr() if self._starts_expr() else None
-            return ast.DashProperty(_DASHPROP_NAME[tt], value)
+            return ast.ColorProperty("fill", self.parse_color_value())
 
-        if tt in _COLORPROP_NAME:
+        if tt == TokType.STROKE:
             self.advance()
-            return ast.ColorProperty(_COLORPROP_NAME[tt], self.parse_color_value())
+            return ast.Stroke(self._parse_stroke_attrs())
+
+        if tt in _JUSTIFY_NAME:
+            self.advance()
+            return ast.Justify(_JUSTIFY_NAME[tt])
 
         if tt == TokType.GO:
             self.advance()
@@ -401,11 +486,6 @@ class Parser:
                 self.advance()
                 return ast.Same(self.parse_object())
             return ast.Same(None)
-
-        if tt == TokType.STRING:
-            text = unescape_string(self.advance().text)
-            flags = self.parse_textposition()
-            return ast.TextAttribute(text, flags)
 
         if tt == TokType.FIT:
             self.advance()

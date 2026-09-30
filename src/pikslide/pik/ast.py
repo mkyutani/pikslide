@@ -269,7 +269,7 @@ class DashProperty(Attribute):
 
 @dataclass
 class ColorProperty(Attribute):
-    name: str  # 'fill' or 'color'
+    name: str  # 'fill'; inside a Stroke: 'stroke'
     value: Expr
 
 
@@ -315,7 +315,7 @@ class Then(Attribute):
 
 @dataclass
 class BoolProperty(Attribute):
-    name: str  # 'cw', 'ccw', 'thick', 'thin', 'solid', 'invis'
+    name: str  # 'cw', 'ccw'; inside a Stroke: 'thick', 'thin', 'solid', 'invis'
 
 
 @dataclass
@@ -325,8 +325,32 @@ class ArrowDirection(Attribute):
 
 @dataclass
 class TextAttribute(Attribute):
+    """One of an object's strings, with its string attributes
+    (docs/grammar.md, Objects): `flags` are the slot/size/style words
+    ('above', 'below', 'center', 'small', 'bold', ...), `color` its own
+    `color` if given (None: the object's text color)."""
+
     text: str
-    flags: list[str]  # 'center', 'ljust', 'rjust', 'above', 'below', 'bold', ...
+    flags: list[str]
+    color: Expr | None = None
+
+
+@dataclass
+class Justify(Attribute):
+    """``ljust`` / ``rjust`` / ``aligned``: an object attribute, applying
+    to all of the object's strings at once (docs/spec.md SS3.1)."""
+
+    name: str  # 'ljust', 'rjust', 'aligned'
+
+
+@dataclass
+class Stroke(Attribute):
+    """``stroke stroke-attr...`` (docs/grammar.md, Objects): the look of
+    an object's line or outline. `attrs` are the ColorProperty
+    ('stroke'), NumProperty ('thickness'), DashProperty and BoolProperty
+    ('thick', 'thin', 'solid', 'invis') it groups, in order."""
+
+    attrs: list[Attribute]
 
 
 @dataclass
@@ -406,6 +430,7 @@ class ImageBase(Basetype):
 class TextBase(Basetype):
     text: str
     flags: list[str]
+    color: Expr | None = None
 
 
 @dataclass

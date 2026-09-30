@@ -65,6 +65,7 @@ class TokType(Enum):
     CHOP = auto()
     CLOSE = auto()
     COLOR = auto()
+    STROKE = auto()
     CW = auto()
     DASHED = auto()
     DEFINE = auto()
@@ -217,6 +218,7 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "south": (TokType.EDGEPT, None, "s"),
     "sqrt": (TokType.FUNC1, "sqrt", None),
     "start": (TokType.START, None, "start"),
+    "stroke": (TokType.STROKE, None, None),
     "sw": (TokType.EDGEPT, None, "sw"),
     "t": (TokType.TOP, None, "n"),
     "the": (TokType.THE, None, None),

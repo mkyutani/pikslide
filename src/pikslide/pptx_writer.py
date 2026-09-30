@@ -45,6 +45,7 @@ from .pik.layout import (
     rasterize_svg,
     resolve_layout,
     slot_step,
+    string_color,
 )
 
 EMU_PER_INCH = 914400
@@ -435,7 +436,7 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
     # is for a fixed, author-chosen size instead, which this isn't.
     tf.word_wrap = not shape.fit
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    # The side margins are `textmargin` (docs/spec.md SS3.3), which
+    # The side margins are `margin` (docs/spec.md SS3.3), which
     # _autosize_text() already added to a `fit` box's width -- not
     # PowerPoint's own defaults. Top and bottom have none: a `fit` box's
     # height already has room above and below the lines.
@@ -464,7 +465,7 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
-        _apply_color(run.font.color, shape.color or Color(rgb=0))
+        _apply_color(run.font.color, string_color(shape, i) or Color(rgb=0))
 
 
 #: The OOXML SVG-picture extension (Microsoft's own, not ECMA-376): a
@@ -553,7 +554,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
-        _apply_color(run.font.color, shape.color or Color(rgb=0))
+        _apply_color(run.font.color, string_color(shape, i) or Color(rgb=0))
 
 
 def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
@@ -649,11 +650,20 @@ def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, flo
     # other: ljust ones on a shared left edge, rjust ones on a shared
     # right edge.
     box_w = max(shape.label_width, 0.3)
+    # ljust/rjust (docs/spec.md SS3.1): the labels start at the line's left
+    # end (end at its right end) instead, `margin` in from it, as a
+    # string sits `margin` in from a box's side.
+    if shape.just == "ljust":
+        lx0 = bx0 + shape.text_margin
+    elif shape.just == "rjust":
+        lx0 = bx1 - shape.text_margin - box_w
+    else:
+        lx0 = cx - box_w / 2
     out = []
     for (text, flags), slot in zip(shape.texts, assign_text_slots(shape.texts)):
         dy = slot_step(slot) * label_step
         y = cy + dy
-        out.append(((cx - box_w / 2, y - label_box_h / 2, cx + box_w / 2, y + label_box_h / 2), text, flags))
+        out.append(((lx0, y - label_box_h / 2, lx0 + box_w, y + label_box_h / 2), text, flags))
     return out
 
 
@@ -680,7 +690,7 @@ def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
-        _apply_color(run.font.color, shape.color or Color(rgb=0))
+        _apply_color(run.font.color, string_color(shape, i - 1) or Color(rgb=0))
 
 
 def _content_bbox(result: LayoutResult) -> tuple[float, float, float, float]:

@@ -1,16 +1,16 @@
 down
 ManagingDirector: box "Managing Director" fit
 line 0.4
-ProjectManager: box same "Project Manager" fit
+ProjectManager: box "Project Manager" same fit
 
 right
 Development: box "Development" "Team" fit at (ProjectManager.x - 1.7, ProjectManager.s.y - 0.8)
 move
-Test: box same "Test" "Team"
+Test: box "Test" "Team" same
 move
-Migration: box same "Migration" "Team"
+Migration: box "Migration" "Team" same
 move
-Technical: box same "Technical" "Team"
+Technical: box "Technical" "Team" same
 
 PMO: box "PMO" fit at (Technical.e.x + 0.5, ProjectManager.s.y - 0.2)
 

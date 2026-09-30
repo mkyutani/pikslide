@@ -59,7 +59,7 @@ def test_arrow_labels_render_as_textboxes_above_and_below(tmp_path: pathlib.Path
     # A connector shape has no text_frame of its own in python-pptx, so an
     # arrow's text must show up as separate floating textboxes -- and two
     # un-flagged texts split above/below the line (assign_text_slots()).
-    prs = render('arrow right "Top" "Bottom"\n', tmp_path)
+    prs = render('arrow "Top" "Bottom" right\n', tmp_path)
     slide = prs.slides[0]
     textboxes = [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX]
     assert {tb.text_frame.text for tb in textboxes} == {"Top", "Bottom"}
@@ -69,19 +69,54 @@ def test_arrow_labels_render_as_textboxes_above_and_below(tmp_path: pathlib.Path
     assert top_box.top < bottom_box.top
 
 
-@pytest.mark.parametrize(("flag", "align"), [("ljust", PP_ALIGN.LEFT), ("rjust", PP_ALIGN.RIGHT), ("center", PP_ALIGN.CENTER)])
-def test_arrow_labels_line_up_with_each_other(tmp_path: pathlib.Path, flag: str, align: PP_ALIGN):
-    # ljust/rjust/center line an object's strings up with each other; a
-    # line's labels are separate textboxes, so they share one box width
-    # and align within it, centered on the line.
-    prs = render(f'arrow right 2 "a" {flag} above "a much longer line" {flag} below\n', tmp_path)
+@pytest.mark.parametrize(("just", "align"), [("ljust", PP_ALIGN.LEFT), ("rjust", PP_ALIGN.RIGHT), ("", PP_ALIGN.CENTER)])
+def test_arrow_labels_line_up_with_each_other(tmp_path: pathlib.Path, just: str, align: PP_ALIGN):
+    # A line's labels are separate textboxes, so they share one box width
+    # and align within it: centered on the line, or with ljust (rjust)
+    # starting (ending) `margin` in from its left (right) end.
+    prs = render(f'arrow "a" above "a much longer line" below {just} right 2\n', tmp_path)
     slide = prs.slides[0]
     line = next(s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.LINE)
     boxes = [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX]
     assert len(boxes) == 2
     assert boxes[0].left == boxes[1].left and boxes[0].width == boxes[1].width
     assert all(b.text_frame.paragraphs[0].alignment == align for b in boxes)
-    assert boxes[0].left + boxes[0].width / 2 == pytest.approx(line.left + line.width / 2, abs=2)
+    if just == "ljust":
+        assert boxes[0].left == pytest.approx(line.left + Inches(0.1), abs=2)
+    elif just == "rjust":
+        assert boxes[0].left + boxes[0].width == pytest.approx(line.left + line.width - Inches(0.1), abs=2)
+    else:
+        assert boxes[0].left + boxes[0].width / 2 == pytest.approx(line.left + line.width / 2, abs=2)
+
+
+def test_text_ljust_puts_its_left_edge_at_the_point(tmp_path: pathlib.Path):
+    # `text ... ljust at P`: the frame's left edge at P (rjust: right edge
+    # at P), the strings `margin` in from it; checked against a dot at P.
+    prs = render('dot at (1, 0)\ntext "a" "bb" ljust at (1, 0)\ntext "c" rjust at (1, 1)\n', tmp_path)
+    dot, left, right = prs.slides[0].shapes
+    x = dot.left + dot.width / 2
+    assert left.left == pytest.approx(x, abs=2)
+    assert left.text_frame.margin_left == Inches(0.1)
+    assert all(p.alignment == PP_ALIGN.LEFT for p in left.text_frame.paragraphs)
+    assert right.left + right.width == pytest.approx(x, abs=2)
+    assert right.text_frame.paragraphs[0].alignment == PP_ALIGN.RIGHT
+
+
+def test_string_color_and_stroke_color_are_separate(tmp_path: pathlib.Path):
+    # `color` colors only the string before it; `stroke` only the outline.
+    prs = render('box "a" color red "b" stroke blue\n', tmp_path)
+    shape = prs.slides[0].shapes[0]
+    a, b = (p.runs[0] for p in shape.text_frame.paragraphs)
+    assert a.font.color.rgb == RGBColor(0xFF, 0x00, 0x00)
+    assert b.font.color.rgb == RGBColor(0x00, 0x00, 0x00)
+    assert shape.line.color.rgb == RGBColor(0x00, 0x00, 0xFF)
+
+
+def test_color_and_stroke_variables_set_separate_defaults(tmp_path: pathlib.Path):
+    prs = render('color = red\nstroke = blue\nbox "a"\n', tmp_path)
+    shape = prs.slides[0].shapes[0]
+    assert shape.text_frame.paragraphs[0].runs[0].font.color.rgb == RGBColor(0xFF, 0x00, 0x00)
+    assert shape.line.color.rgb == RGBColor(0x00, 0x00, 0xFF)
 
 
 def test_above_and_below_text_clear_a_line_through_its_anchor(tmp_path: pathlib.Path):
@@ -145,7 +180,7 @@ def test_fill_color_is_applied(tmp_path: pathlib.Path):
 
 
 def test_invis_object_has_no_outline(tmp_path: pathlib.Path):
-    prs = render("box invis\n", tmp_path)
+    prs = render("box stroke invis\n", tmp_path)
     shape = prs.slides[0].shapes[0]
     assert shape.line.fill.type == MSO_FILL_TYPE.BACKGROUND
 
@@ -254,7 +289,7 @@ def test_line_label_and_image_caption_also_get_the_theme_font(tmp_path: pathlib.
     # _add_line_text() and _add_image_shape() build runs independently of
     # _apply_text() -- checked separately, since nothing shares that code path.
     _make_image(tmp_path)
-    prs = render('arrow right "Label"\nimage "logo.png" width 50% "Caption"\n', tmp_path, name="fonts.pptx")
+    prs = render('arrow "Label" right\nimage "logo.png" "Caption" width 50%\n', tmp_path, name="fonts.pptx")
     slide = prs.slides[0]
     label = next(s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX and s.text_frame.text == "Label")
     caption = next(s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX and s.text_frame.text == "Caption")
@@ -298,8 +333,8 @@ def test_line_and_image_shapes_are_named_too(tmp_path: pathlib.Path):
     assert names == ["arrow 1", "image 1"]
 
 
-def test_text_frame_side_insets_are_textmargin(tmp_path: pathlib.Path):
-    prs = render('box "a" width 2\ntextmargin = 0.2\nbox "b" width 2\n', tmp_path)
+def test_text_frame_side_insets_are_margin(tmp_path: pathlib.Path):
+    prs = render('box "a" width 2\nmargin = 0.2\nbox "b" width 2\n', tmp_path)
     a, b = (s for s in prs.slides[0].shapes if s.has_text_frame)
     assert (a.text_frame.margin_left, a.text_frame.margin_right) == (Inches(0.1), Inches(0.1))
     assert (b.text_frame.margin_left, b.text_frame.margin_right) == (Inches(0.2), Inches(0.2))
@@ -365,7 +400,7 @@ def test_fit_measures_with_typeface_over_the_theme(tmp_path: pathlib.Path):
 
 
 def test_line_label_textbox_naming(tmp_path: pathlib.Path):
-    prs = render('Conn: arrow right "Top" "Bottom"\n', tmp_path)
+    prs = render('Conn: arrow "Top" "Bottom" right\n', tmp_path)
     boxes = {s.text_frame.text: s.name for s in prs.slides[0].shapes if s.shape_type == MSO_SHAPE_TYPE.TEXT_BOX}
     assert boxes["Top"] in ("Conn text 1", "Conn text 2")
     assert boxes["Bottom"] in ("Conn text 1", "Conn text 2")
@@ -465,7 +500,7 @@ def test_image_alt_text_is_the_actual_saved_description(tmp_path: pathlib.Path):
 
 def test_image_text_becomes_a_centred_caption_textbox(tmp_path: pathlib.Path):
     _make_image(tmp_path)
-    prs = render('image "logo.png" width 2 "Caption"\n', tmp_path)
+    prs = render('image "logo.png" "Caption" width 2\n', tmp_path)
     picture, caption = prs.slides[0].shapes
     assert picture.shape_type == MSO_SHAPE_TYPE.PICTURE
     assert caption.shape_type == MSO_SHAPE_TYPE.TEXT_BOX

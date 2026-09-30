@@ -9,6 +9,7 @@ Document
         TextAttribute
           text: 'Supplier'
           flags: []
+          color: None
         Fit()
     ObjectStatement
       label: None
@@ -19,9 +20,11 @@ Document
         TextAttribute
           text: 'materials'
           flags: []
+          color: None
         TextAttribute
           text: ''
           flags: []
+          color: None
         Fit()
     ObjectStatement
       label: 'Procurement'
@@ -32,6 +35,7 @@ Document
         TextAttribute
           text: 'Procurement'
           flags: []
+          color: None
         Fit()
     ObjectStatement
       label: None
@@ -48,6 +52,7 @@ Document
         TextAttribute
           text: 'Production'
           flags: []
+          color: None
         Same
           obj: None
     ObjectStatement
@@ -65,6 +70,7 @@ Document
         TextAttribute
           text: 'Warehouse'
           flags: []
+          color: None
         Same
           obj: None
     ObjectStatement
@@ -76,9 +82,11 @@ Document
         TextAttribute
           text: 'products'
           flags: []
+          color: None
         TextAttribute
           text: ''
           flags: []
+          color: None
         Fit()
     ObjectStatement
       label: 'Distributor'
@@ -89,6 +97,7 @@ Document
         TextAttribute
           text: 'Distributor'
           flags: []
+          color: None
         Fit()
     ObjectStatement
       label: None
@@ -99,9 +108,11 @@ Document
         TextAttribute
           text: 'delivery'
           flags: []
+          color: None
         TextAttribute
           text: ''
           flags: []
+          color: None
         Fit()
     ObjectStatement
       label: 'Consumer'
@@ -112,6 +123,7 @@ Document
         TextAttribute
           text: 'Consumer'
           flags: []
+          color: None
         Fit()
     ObjectStatement
       label: 'Finance'
@@ -122,6 +134,7 @@ Document
         TextAttribute
           text: 'Finance'
           flags: []
+          color: None
         At
           position:
             XYFromPositions
@@ -495,6 +508,7 @@ Document
           text: 'Company'
           flags:
             'bold'
+          color: None
       attributes:
         At
           position:

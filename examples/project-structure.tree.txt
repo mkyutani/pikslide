@@ -11,6 +11,7 @@ Document
         TextAttribute
           text: 'Managing Director'
           flags: []
+          color: None
         Fit()
     ObjectStatement
       label: None
@@ -31,11 +32,12 @@ Document
         ClassBase
           classname: 'box'
       attributes:
-        Same
-          obj: None
         TextAttribute
           text: 'Project Manager'
           flags: []
+          color: None
+        Same
+          obj: None
         Fit()
     DirectionStatement
       direction: 'right'
@@ -48,9 +50,11 @@ Document
         TextAttribute
           text: 'Development'
           flags: []
+          color: None
         TextAttribute
           text: 'Team'
           flags: []
+          color: None
         Fit()
         At
           position:
@@ -99,14 +103,16 @@ Document
         ClassBase
           classname: 'box'
       attributes:
-        Same
-          obj: None
         TextAttribute
           text: 'Test'
           flags: []
+          color: None
         TextAttribute
           text: 'Team'
           flags: []
+          color: None
+        Same
+          obj: None
     ObjectStatement
       label: None
       base:
@@ -119,14 +125,16 @@ Document
         ClassBase
           classname: 'box'
       attributes:
-        Same
-          obj: None
         TextAttribute
           text: 'Migration'
           flags: []
+          color: None
         TextAttribute
           text: 'Team'
           flags: []
+          color: None
+        Same
+          obj: None
     ObjectStatement
       label: None
       base:
@@ -139,14 +147,16 @@ Document
         ClassBase
           classname: 'box'
       attributes:
-        Same
-          obj: None
         TextAttribute
           text: 'Technical'
           flags: []
+          color: None
         TextAttribute
           text: 'Team'
           flags: []
+          color: None
+        Same
+          obj: None
     ObjectStatement
       label: 'PMO'
       base:
@@ -156,6 +166,7 @@ Document
         TextAttribute
           text: 'PMO'
           flags: []
+          color: None
         Fit()
         At
           position:

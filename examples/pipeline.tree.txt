@@ -6,6 +6,14 @@ Document
         ClassBase
           classname: 'arrow'
       attributes:
+        TextAttribute
+          text: 'Markdown'
+          flags: []
+          color: None
+        TextAttribute
+          text: 'Source'
+          flags: []
+          color: None
         GoDirection
           direction: 'right'
           amount:
@@ -15,18 +23,20 @@ Document
                 Num
                   value: 200.0
           even_with: None
-        TextAttribute
-          text: 'Markdown'
-          flags: []
-        TextAttribute
-          text: 'Source'
-          flags: []
     ObjectStatement
       label: None
       base:
         ClassBase
           classname: 'box'
       attributes:
+        TextAttribute
+          text: 'pikslide'
+          flags: []
+          color: None
+        TextAttribute
+          text: 'Formatter'
+          flags: []
+          color: None
         NumProperty
           name: 'radius'
           value:
@@ -35,12 +45,6 @@ Document
                 Num
                   value: 0.10416666666666667
               percent: None
-        TextAttribute
-          text: 'pikslide'
-          flags: []
-        TextAttribute
-          text: 'Formatter'
-          flags: []
         Fit()
     ObjectStatement
       label: None
@@ -48,6 +52,14 @@ Document
         ClassBase
           classname: 'arrow'
       attributes:
+        TextAttribute
+          text: 'PPTX'
+          flags: []
+          color: None
+        TextAttribute
+          text: 'Output'
+          flags: []
+          color: None
         GoDirection
           direction: 'right'
           amount:
@@ -57,12 +69,6 @@ Document
                 Num
                   value: 200.0
           even_with: None
-        TextAttribute
-          text: 'PPTX'
-          flags: []
-        TextAttribute
-          text: 'Output'
-          flags: []
     ObjectStatement
       label: None
       base:
@@ -100,8 +106,10 @@ Document
         TextAttribute
           text: 'pikslide'
           flags: []
+          color: None
         TextAttribute
           text: 'Language'
           flags: []
+          color: None
         Fit()
   macros: []

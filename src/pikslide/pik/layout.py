@@ -445,8 +445,9 @@ class LayoutResult:
     enforces this) -- used only when making a new slide from a
     `--template`."""
     warnings: list[str] = field(default_factory=list)
-    """Problems a renderer found that didn't stop it (e.g. a font that
-    isn't installed, so `fit` measured with a substitute)."""
+    """Problems layout or a renderer found that didn't stop it (e.g. text
+    overflowing a fixed-size box, or a font that isn't installed, so `fit`
+    measured with a substitute)."""
 
 
 # Edge/offset/chop geometry for box/ellipse/diamond
@@ -736,6 +737,7 @@ class _Ctx:
         self.metrics: FontMetrics = metrics if metrics is not None else _ApproxMetrics(self)
         self.image_metrics: ImageMetrics = image_metrics if image_metrics is not None else _PILImageMetrics()
         self.base_dir = base_dir
+        self.warnings: list[str] = []
         # `layout` (docs/spec.md SS3.8) may be assigned while loading the
         # prelude or a settings file, below, but not once the actual
         # program starts (_eval_assignment() checks this).
@@ -1151,6 +1153,38 @@ def _text_placement(shape: Shape, ctx: _Ctx) -> tuple[float, float]:
     return (up - down) / 2, (2 * gap if explicit and split else 0.0)
 
 
+# How much wider than its text area (text plus `margin` each side) a
+# shape's bounding box is: `fit` multiplies by it, and a fixed-size
+# shape's text area is its width divided by it (_check_text_overflow()).
+_TEXT_AREA_SCALE = {"diamond": 1.6, "circle": math.sqrt(2), "ellipse": math.sqrt(2), "oval": math.sqrt(2)}
+
+# The objects whose text wraps inside a fixed-size frame.
+_FRAMED_TEXT_KINDS = {"box", "circle", "ellipse", "oval", "diamond", "cylinder", "file", "shape"}
+
+
+def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
+    """Warn when a fixed-size object's widest string is wider than its text
+    area -- its width less `margin` on each side (issue #8). A renderer
+    word-wraps such text (Shape.fit), which would otherwise go unnoticed.
+    A one-character string can't wrap, so it never counts."""
+    if shape.fit or shape.kind not in _FRAMED_TEXT_KINDS:
+        return
+    widest = max(
+        (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface)
+         for text, flags in shape.texts if len(text) > 1),
+        default=0.0,
+    )
+    if widest == 0.0:
+        return
+    usable = shape.w / _TEXT_AREA_SCALE.get(shape.kind, 1.0) - 2 * shape.text_margin
+    if widest > usable + 1e-6:
+        what = label if label is not None else f'{shape.kind} "{shape.texts[0][0]}"'
+        ctx.warnings.append(
+            f"{what}: text overflows the usable width ({widest:.2f} in > {usable:.2f} in) and will wrap; "
+            "widen it, reduce margin, or use fit"
+        )
+
+
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     """Size a "fit" object to its text using ctx.metrics: the pptx
     backend's PilFontMetrics measures actual glyph widths; only the fallback _ApproxMetrics estimates from flat constants.
@@ -1172,18 +1206,19 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     # own size-to-fit does), keeping .n/.s clear of the text.
     dy, split = _text_placement(shape, ctx)
     shape.h += 2 * abs(dy) + split
+    scale = _TEXT_AREA_SCALE.get(shape.kind, 1.0)
     if shape.kind == "diamond":
         # A diamond's text sits well inside its points, so needs extra room.
-        shape.w *= 1.6
-        shape.h *= 1.6
+        shape.w *= scale
+        shape.h *= scale
     elif shape.kind in ("circle", "ellipse", "oval"):
         # The largest axis-aligned rectangle inscribed in an ellipse of
         # full width/height (W, H) is (W/sqrt(2)) x (H/sqrt(2)) -- so to
         # give the text box that exact size, the ellipse's own bounding
         # box (what shape.w/.h become) must be sqrt(2) times bigger in
         # each dimension, the same idea as diamond's correction above.
-        shape.w *= math.sqrt(2)
-        shape.h *= math.sqrt(2)
+        shape.w *= scale
+        shape.h *= scale
     elif shape.kind == "cylinder":
         # A cylinder's top end is drawn as an ellipse dipping into the
         # shape from the top, so the usable (rectangular) text area is
@@ -1590,6 +1625,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
             _size_image(shape, ctx)
         elif (shape.w <= 0.0 or shape.h <= 0.0) and shape.texts:
             _autosize_text(shape, ctx)
+        _check_text_overflow(shape, stmt.label, ctx)
         if shape.texts:
             shape.text_dy, shape.text_split = _text_placement(shape, ctx)
         ofst = shape.offset(with_edge)
@@ -1763,4 +1799,7 @@ def resolve_layout(
     text_sizes = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
     typeface = _as_string(ctx.vars.get("typeface", ""), "typeface")
     layout_name = _as_string(ctx.vars.get("layout", ""), "layout")
-    return LayoutResult(shapes=shapes, bbox=bbox, text_sizes=text_sizes, typeface=typeface, layout_name=layout_name)
+    return LayoutResult(
+        shapes=shapes, bbox=bbox, text_sizes=text_sizes, typeface=typeface, layout_name=layout_name,
+        warnings=list(ctx.warnings),
+    )

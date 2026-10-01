@@ -242,6 +242,12 @@ from its end (§3.1). `fit` makes an object as wide as its widest line plus
 height is its lines plus three quarters of a line. Like the text sizes,
 each object uses the value in effect where it is written.
 
+An object with a size of its own and no `fit` wraps a string wider than
+its width less `margin` on each side (a circle, ellipse, oval or
+diamond: the part of its width `fit` gives the text). That is a **warning**, naming the object
+and both widths, so wrapped text is never silent; a one-character string
+cannot wrap and is exempt.
+
 ### 3.4 Preset shapes: `shape`
 
 One new class keyword instead of ~180 reserved words:
@@ -518,6 +524,7 @@ Humans and LLMs both need errors they can act on.
 - Every error carries `file:line:column`, the source line, and a caret; the
   file is the included one when the error is inside an `include` (§3.6).
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
+- Text wider than a fixed-size object's text area is a **warning** (§3.3).
 - Unknown names (color, theme slot, preset, image path) are
   **errors with suggestions**, not silent fallbacks. `--strict` turns
   warnings into errors.

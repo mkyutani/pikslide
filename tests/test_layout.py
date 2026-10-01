@@ -450,6 +450,33 @@ def test_fit_width_is_the_widest_line_plus_margin_each_side():
     assert (shape.w, shape.text_margin) == pytest.approx((0.3 + 0.5, 0.25))
 
 
+def test_text_wider_than_a_fixed_size_objects_text_area_warns():
+    # issue #8: the text area is the width less `margin` each side.
+    class FixedMetrics:
+        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+            return 0.1 * len(text)
+
+        def line_height(self, flags=(), text_sizes=None):
+            return 0.2
+
+    def warnings(src):
+        return resolve_layout(parse(src), metrics=FixedMetrics()).warnings
+
+    # 1.0 in of text: fits in 1.2 (1.0 + 2 * 0.1), not in 1.1.
+    assert warnings('box "0123456789" width 1.2\n') == []
+    [w] = warnings('box "0123456789" width 1.1\n')
+    assert w.startswith('box "0123456789": text overflows the usable width (1.00 in > 0.90 in)')
+    assert warnings('margin = 0\nbox "0123456789" width 1.0\n') == []
+    # Named by its label; a circle's text area is its inscribed square.
+    [w] = warnings('C: circle "abcd" diameter 0.6\n')
+    assert w.startswith("C: text overflows")
+    # Not for `fit`, text, lines, or a string too short to wrap.
+    assert warnings('box "0123456789" width 0.5 fit\n') == []
+    assert warnings('text "0123456789" width 0.5\n') == []
+    assert warnings('arrow "0123456789" width 0.5\n') == []
+    assert warnings('circle "7" diameter 0.1\n') == []
+
+
 def test_above_and_below_offset_text_from_the_objects_center():
     # A single above string sits half a line up plus a quarter-line gap
     # (_TEXT_SIDE_GAP), so its bottom clears the center; a below one the

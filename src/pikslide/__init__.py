@@ -255,15 +255,17 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
         _fail_layout(args, e)
         return
 
+    warnings = list(result.warnings)
+
     if args.check:
-        _succeed(args, f"ok: {args.input} parses and lays out cleanly (--check, nothing written)")
+        _succeed(args, f"ok: {args.input} parses and lays out cleanly (--check, nothing written)",
+                 warnings=warnings)
         return
 
     if not out_path.endswith(".pptx"):
         _fail(args, f"unsupported output format: {out_path}")
         return
 
-    warnings = list(result.warnings)
     if args.template is not None:
         try:
             layout_name = args.layout if args.layout is not None else result.layout_name

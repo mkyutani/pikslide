@@ -244,7 +244,7 @@ def resolve_for_pptx(
         doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir
     )
     substitute = os.path.basename(metrics.substitute) if metrics.substitute else "a flat estimate"
-    result.warnings += [
+    result.stand_ins += [
         f"font not installed: {family}; `fit` measured it with {substitute} instead" for family in sorted(metrics.missing)
     ]
     return result

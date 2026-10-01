@@ -103,6 +103,24 @@ def test_strict_turns_the_no_template_warning_into_an_error(monkeypatch, capsys,
     assert "stand-ins" in capsys.readouterr().err
 
 
+def test_strict_turns_a_missing_font_into_an_error(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", 'typeface = "NoSuchFontXyz"\nbox "Web" fit\n')
+    _run(monkeypatch, [str(src), "--check"])
+    assert "warning: font not installed: NoSuchFontXyz" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [str(src), "--check", "--strict"])
+    assert exc.value.code == 1
+    assert "error: font not installed: NoSuchFontXyz" in capsys.readouterr().err
+
+
+def test_strict_leaves_text_overflow_a_warning(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", 'circle "abcdefgh"\n')
+    _run(monkeypatch, [str(src), "--check", "--strict"])
+    captured = capsys.readouterr()
+    assert "warning: circle \"abcdefgh\": text overflows" in captured.err
+    assert "ok:" in captured.out
+
+
 def test_template_flag_starts_a_new_deck_from_that_theme(monkeypatch, capsys, tmp_path):
     tmpl = _template_deck(tmp_path)
     src = _write(tmp_path, "d.pik", 'box "Web"\n')

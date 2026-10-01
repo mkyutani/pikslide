@@ -525,9 +525,15 @@ Humans and LLMs both need errors they can act on.
   file is the included one when the error is inside an `include` (§3.6).
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
 - Text wider than a fixed-size object's text area is a **warning** (§3.3).
+- A font that is not installed, so `fit` measured with a substitute, is a
+  **warning** (§3.3).
 - Unknown names (color, theme slot, preset, image path) are
-  **errors with suggestions**, not silent fallbacks. `--strict` turns
-  warnings into errors.
+  **errors with suggestions**, not silent fallbacks.
+- `--strict` makes a **stand-in** an error: the built-in theme in place of
+  a `--template`, or a substitute for a font that is not installed. Both
+  mean the output is not what the deck will really show. Text overflowing
+  a fixed-size object stays a warning: it is a fact about the diagram,
+  visible in the output itself.
 - A `define` naming an already-defined variable is an **error** (§3.6).
 - `--check` parses and lays out without writing; `--format json` emits
   diagnostics as JSON for tooling.

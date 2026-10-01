@@ -445,9 +445,12 @@ class LayoutResult:
     enforces this) -- used only when making a new slide from a
     `--template`."""
     warnings: list[str] = field(default_factory=list)
-    """Problems layout or a renderer found that didn't stop it (e.g. text
-    overflowing a fixed-size box, or a font that isn't installed, so `fit`
-    measured with a substitute)."""
+    """Problems with the diagram that didn't stop layout (e.g. text
+    overflowing a fixed-size box). --strict leaves these alone."""
+    stand_ins: list[str] = field(default_factory=list)
+    """Warnings that the output uses a stand-in for what the deck will
+    really have (e.g. a font that isn't installed, so `fit` measured with
+    a substitute). --strict makes these errors (docs/spec.md SS5)."""
 
 
 # Edge/offset/chop geometry for box/ellipse/diamond

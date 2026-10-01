@@ -91,7 +91,10 @@ def _parser() -> argparse.ArgumentParser:
         help="what renders --png/--pdf: PowerPoint (via powershell.exe), LibreOffice (soffice), or "
         "auto, PowerPoint if reachable, else LibreOffice (default: auto)",
     )
-    parser.add_argument("--strict", action="store_true", help="turn warnings into errors")
+    parser.add_argument(
+        "--strict", action="store_true",
+        help="make a stand-in an error: no --template (the built-in theme), or a font that isn't installed",
+    )
     parser.add_argument("--check", action="store_true", help="parse and lay out the source without writing any output")
     parser.add_argument(
         "--format", choices=("text", "json"), default="text", help="diagnostics format (default: text)"
@@ -255,7 +258,12 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
         _fail_layout(args, e)
         return
 
-    warnings = list(result.warnings)
+    # --strict (docs/spec.md SS5): a stand-in for what the deck will really
+    # have is an error; a problem with the diagram itself stays a warning.
+    if args.strict and result.stand_ins:
+        _fail(args, "; ".join(result.stand_ins))
+        return
+    warnings = result.stand_ins + result.warnings
 
     if args.check:
         _succeed(args, f"ok: {args.input} parses and lays out cleanly (--check, nothing written)",

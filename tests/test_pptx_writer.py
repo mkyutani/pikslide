@@ -382,8 +382,8 @@ def test_fit_measures_with_the_templates_theme_fonts(tmp_path: pathlib.Path):
     result = resolve_for_pptx(parse('box "a 和" "b" bold fit\n'), template_path=str(template), font_index=index)
     assert set(index.asked) == {("Latin Theme Font", False), ("和文テーマフォント", False), ("Latin Theme Font", True)}
     # Not installed: measured with a substitute, and said so.
-    assert any("Latin Theme Font" in w for w in result.warnings)
-    assert any("和文テーマフォント" in w for w in result.warnings)
+    assert any("Latin Theme Font" in w for w in result.stand_ins)
+    assert any("和文テーマフォント" in w for w in result.stand_ins)
 
 
 def test_fit_measures_with_typeface_over_the_theme(tmp_path: pathlib.Path):

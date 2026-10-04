@@ -17,8 +17,9 @@ through two earlier languages; see Acknowledgments, §8.)
 
 The target is one *diagram*, not a deck. Deck structure (titles, ordering,
 body text) belongs to whatever assembles the deck; pikslide writes a diagram
-as a one-slide deck, sized to it, whose shapes are copied or moved into the
-real deck from there.
+as a one-slide deck, sized to it, or with a template on the template's own
+slide, in its content area (§4), and its shapes are copied or moved into
+the real deck from there.
 
 ### Scope of v1
 
@@ -460,12 +461,15 @@ file**, found beside it or named with `--settings FILE`, which holds:
 - the accent colors: which of the theme's colors the diagram uses for
   emphasis. `primary` and `emphasis` are the standard names (§3.7); a
   template may define others;
-- the default text sizes (`small`, `medium`, `large`, §3.7).
+- the default text sizes (`small`, `medium`, `large`, §3.7);
+- the content area: where on the slide the diagram goes (`content_left`,
+  `content_top`, `content_right`, `content_bottom`).
 
 The settings file is read after the prelude and before the program, so its
 definitions override the prelude's, and the program's override its own. A
 template without one gets the prelude's defaults and its first master's blank
-layout.
+layout. A `.pik` still never names the file: the tool finds it from the
+template, or the caller names it (§4).
 
 **The template's own defaults.** A theme can have a default shape
 (`<a:objectDefaults>`'s `spDef`; PowerPoint's *Set as Default Shape*).
@@ -487,9 +491,7 @@ and text colors would apply to every object and every string at once
 size would come out larger than `large`; its default line's arrowhead
 would turn every `line` into an arrow; and where and how text is placed
 is pikslide's own. The built-in Office theme's default shape sets no
-insets, so with no `--template` the prelude's values stand. A
-`.pik` still never names the file: the tool finds it from the template, or
-the caller names it (§4).
+insets, so with no `--template` the prelude's values stand.
 
 ```pikslide
 # corporate.theme.pik (beside corporate.potx)
@@ -499,6 +501,10 @@ medium        = 12pt       # this template's diagram text size
 primary       = text2      # the standard accent-color names
 emphasis      = accent1
 warning       = accent5    # any further names the template wants
+content_left   = 0.5in     # where the diagram goes on the slide
+content_top    = 1.2in
+content_right  = 12.8in
+content_bottom = 6.9in
 ```
 
 - **Format.** The prelude's own: a file of definitions only, as in §3.6. It
@@ -517,15 +523,25 @@ warning       = accent5    # any further names the template wants
   the theme. The prelude gives it the empty string, which means the first
   layout of type `blank` in the first master, or that master's first layout
   if it has none. Many templates set no layout's type, so that first
-  layout often has a title and a body; their placeholders, laid out for the
-  template's own slide, are left off the new slide. A layout named here or
-  with `--layout` brings its placeholders along. If two masters have a layout of that name, the first one
+  layout often has a title and a body; their placeholders are left off the
+  new slide. A layout named here or with `--layout` brings its placeholders
+  along, except the content placeholder whose place the diagram takes. If two masters have a layout of that name, the first one
   found wins. A name that no layout has is an error that lists the names it
   does have. `layout` can be set only in a settings file: assigning it in a
   program is an error, because a `.pik` never chooses the deck's structure.
   The caller can also name it with `--layout NAME`, which overrides the
   settings file's (so a script choosing a layout per template needs no
   settings file written for it); it needs `--template`.
+- **The content area** is the rectangle of the slide the diagram goes in,
+  at its top left (§4): `content_left` and `content_right` are measured
+  from the slide's left edge, `content_top` and `content_bottom` from its
+  top, as lengths (`0.5in`, `36pt`). Like `layout`, they can be set only in a
+  settings file, and then all four of them. Without them, the area is the
+  layout's first content placeholder (a body or an object one, not its
+  title); with none, the master's body placeholder, which is where the
+  template sets text when a layout says nothing else; with none of those,
+  the whole slide. Either way it leaves the master's and the layout's own
+  graphics (a title rule, a logo, a footer) where the template has them.
 - **Strings.** A variable can hold a string, written as in text
   (`typeface = "…"`). A string is not a number and cannot be used in an
   expression; in v1 strings serve settings only, and a string variable is not
@@ -553,7 +569,14 @@ and fonts resolve the way the real deck will (see §3.3); when `OUTPUT` is
 omitted but `--template` is given, it defaults to `INPUT` with its extension
 changed to `.pptx` (`diagram.pik` → `diagram.pptx`).
 
+With `--template`, the slide is not sized to the diagram: it is the
+template's own size, and the diagram's top left is at the top left of the
+content area (§3.8), so the slide looks as it will in the real deck, the
+master's title rule, logo and footer clear of the diagram.
+
 A diagram is never scaled: the text sizes and line widths are the author's.
+One bigger than its content area runs past it, to the right and down, and
+that is a warning naming both sizes.
 
 `OUTPUT` is always a `.pptx`. `--png` and `--pdf` are a post-processing
 step on top of it: after the deck is written, its slide is also rendered

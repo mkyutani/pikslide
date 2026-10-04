@@ -704,12 +704,76 @@ def _from_template(text: str, template: pathlib.Path, tmp_path: pathlib.Path, na
     return Presentation(str(out))
 
 
-def test_template_strips_the_sample_slide_and_sizes_to_the_diagram(tmp_path: pathlib.Path):
+def test_template_strips_the_sample_slide_and_keeps_its_slide_size(tmp_path: pathlib.Path):
     tmpl = _template_deck(tmp_path)
     prs = _from_template('box "Web"\n', tmpl, tmp_path)
     assert len(prs.slides) == 1
     assert "Sample" not in (prs.slides[0].shapes.title.text if prs.slides[0].shapes.title else "")
-    assert prs.slide_width.inches < 2  # sized to the tiny diagram, not the template's own 10x7.5in
+    assert (prs.slide_width.inches, prs.slide_height.inches) == (10, 7.5)  # the template's own
+
+
+# The built-in template's master sets body text here (inches): below the
+# title, clear of the date, footer and slide number.
+_MASTER_BODY = (0.5, 1.75)
+
+
+def test_diagram_goes_at_the_top_left_of_the_content_area(tmp_path: pathlib.Path):
+    # The blank layout has no content placeholder of its own, so the area
+    # is the master's body placeholder.
+    tmpl = _template_deck(tmp_path)
+    prs = _from_template('box "Web" width 1 height 0.5\nbox "App" width 1 height 1\n', tmpl, tmp_path)
+    web, app = prs.slides[0].shapes
+    assert web.left.inches == pytest.approx(_MASTER_BODY[0], abs=1e-4)
+    assert app.top.inches == pytest.approx(_MASTER_BODY[1], abs=1e-4)  # the taller one sets the top
+    assert web.top.inches == pytest.approx(_MASTER_BODY[1] + 0.25, abs=1e-4)
+
+
+def test_named_layout_puts_the_diagram_in_place_of_its_content_placeholder(tmp_path: pathlib.Path):
+    tmpl = _template_deck(tmp_path)
+    prs = _from_template('box "Web"\n', tmpl, tmp_path, layout_name="Title and Content")
+    slide = prs.slides[0]
+    # The title stays, for the slide's own title; the content placeholder
+    # goes, the diagram taking its place.
+    assert [p.placeholder_format.idx for p in slide.placeholders] == [0]
+    content = next(p for p in slide.slide_layout.placeholders if p.placeholder_format.idx == 1)
+    box = next(s for s in slide.shapes if s.name == "box 1")
+    assert (box.left, box.top) == (content.left, content.top)
+
+
+def test_settings_file_content_area_wins_over_the_layouts(tmp_path: pathlib.Path):
+    from pikslide.pptx_writer import write_pptx_from_template
+
+    tmpl = _template_deck(tmp_path)
+    settings = "content_left = 1in\ncontent_top = 2in\ncontent_right = 9in\ncontent_bottom = 7in\n"
+    result = resolve_for_pptx(parse('box "Web"\n'), template_path=str(tmpl), settings_text=settings)
+    assert result.content_area == (1, 2, 8, 5)
+    write_pptx_from_template(result, str(tmpl), str(tmp_path / "out.pptx"))
+    [box] = Presentation(str(tmp_path / "out.pptx")).slides[0].shapes
+    assert (box.left.inches, box.top.inches) == pytest.approx((1, 2), abs=1e-4)
+
+
+@pytest.mark.parametrize(
+    ("settings", "program", "message"),
+    [
+        ("", "content_left = 1in\n", "'content_left' can only be set in a template's settings file"),
+        ("content_left = 1in\ncontent_top = 1in\n", "", "content_right, content_bottom is not set"),
+        ("content_left = 2in\ncontent_top = 1in\ncontent_right = 1in\ncontent_bottom = 5in\n", "",
+         "the content area is empty"),
+    ],
+)
+def test_content_area_errors(settings: str, program: str, message: str):
+    with pytest.raises(LayoutError, match=message):
+        resolve_for_pptx(parse(program + 'box "Web"\n'), settings_text=settings)
+
+
+def test_diagram_bigger_than_the_content_area_is_a_warning(tmp_path: pathlib.Path):
+    # Never scaled to fit (docs/spec.md SS4): it runs past the area.
+    tmpl = _template_deck(tmp_path)
+    fits = resolve_for_pptx(parse("box width 9 height 4.9\n"), template_path=str(tmpl))
+    assert fits.warnings == []
+    [w] = resolve_for_pptx(parse("box width 9.5 height 1\n"), template_path=str(tmpl)).warnings
+    assert w == ("the diagram (9.50 x 1.00 in) is bigger than the 'Text Placeholder 2' placeholder of "
+                 "the slide master it goes in (9.00 x 4.95 in), and runs past it")
 
 
 def test_template_uses_a_blank_layout_by_default(tmp_path: pathlib.Path):

@@ -417,7 +417,8 @@ _VARIABLE_DOCS = {
     "medium": "the medium (default) text size",
     "large": "the large text size",
     "typeface": 'font family for all text; "" means the theme\'s',
-    "layout": "the --template slide layout to use (settings file only)",
+    "layout": "the --template slide layout to use (settings file only; content_left, content_top, "
+              "content_right and content_bottom set where on it the diagram goes)",
     "primary": "a house color, for a template's settings file to repoint",
     "emphasis": "a house accent color, for a template's settings file to repoint",
 }

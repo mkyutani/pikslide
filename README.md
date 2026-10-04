@@ -101,7 +101,10 @@ uv run pikslide diagram.pik diagram.pptx --template corporate.potx
 INPUT's own path with its extension changed to `.pptx`.) The new slide is
 made from the template's first blank layout, unless its settings file
 names one with `layout`, or `--layout NAME` does (which wins over the
-settings file).
+settings file). It is the template's own size, and the diagram goes at
+the top left of its content area: the layout's content placeholder, or
+the master's body area, or the settings file's `content_left`,
+`content_top`, `content_right` and `content_bottom`.
 
 `--check` parses and lays out a source without writing anything, and
 `--format json` emits diagnostics as one JSON object instead of plain
@@ -132,8 +135,9 @@ it falls back to LibreOffice (`soffice`) and says so in a note: a
 different rendering engine, good for a quick look but not for verifying
 exact layout or text fit against real PowerPoint. `--renderer powerpoint`
 or `--renderer libreoffice` uses only that one.
-Since pikslide sizes its slide exactly to the diagram, the PNG is an image
-of just the diagram, no separate cropping needed. The PowerShell scripts
+With no `--template`, pikslide sizes its slide exactly to the diagram, so
+the PNG is an image of just the diagram, no separate cropping needed; with
+one, it is the whole slide, as it will look in the deck. The PowerShell scripts
 behind this (`src/pikslide/ps/*.ps1`) also run on their own from Windows
 PowerShell.
 

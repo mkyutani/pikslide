@@ -21,7 +21,7 @@ from PIL import ImageFont
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_LINE_DASH_STYLE, MSO_THEME_COLOR
-from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
+from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE, PP_PLACEHOLDER
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.oxml import parse_xml
@@ -278,15 +278,18 @@ def resolve_for_pptx(
     A font the deck asks for that isn't installed is reported in the
     result's `warnings`. That theme's default shape also gives `margin`
     and `vmargin` their values (template_defaults_from_xml()), over the
-    prelude's and under the settings file's.
+    prelude's and under the settings file's. A diagram bigger than the
+    content area it goes in (_content_area()) is a warning too.
 
     `base_dir` is the source file's own directory, against which an
     `image` object's path resolves (docs/spec.md SS3.5). `settings_text`/
     `settings_base_dir` are a template's settings file (docs/spec.md
     SS3.8), if any -- see find_settings_file()."""
-    template_defaults = {}
     if template_path is None:
-        theme_fonts = default_theme_fonts()
+        metrics = PilFontMetrics(theme_fonts=default_theme_fonts(), font_index=font_index)
+        result = resolve_layout(
+            doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir
+        )
     else:
         if layout_name is None:
             # `layout` can only be set by the prelude or the settings file,
@@ -296,17 +299,18 @@ def resolve_for_pptx(
             ).layout_name
         prs, tmp_path = _open_template_base(template_path)
         try:
-            master = _resolve_template_layout(prs, layout_name).slide_master
-            theme_fonts = _master_theme_fonts(master)
-            template_defaults = template_defaults_from_xml(_master_theme_xml(master))
+            layout = _resolve_template_layout(prs, layout_name)
+            master = layout.slide_master
+            metrics = PilFontMetrics(theme_fonts=_master_theme_fonts(master), font_index=font_index)
+            result = resolve_layout(
+                doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text,
+                settings_base_dir=settings_base_dir,
+                template_defaults=template_defaults_from_xml(_master_theme_xml(master)),
+            )
+            result.warnings += _content_area_overflow(prs, layout, result)
         finally:
             if tmp_path is not None:
                 os.remove(tmp_path)
-    metrics = PilFontMetrics(theme_fonts=theme_fonts, font_index=font_index)
-    result = resolve_layout(
-        doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir,
-        template_defaults=template_defaults,
-    )
     substitute = os.path.basename(metrics.substitute) if metrics.substitute else "a flat estimate"
     result.stand_ins += [
         f"font not installed: {family}; `fit` measured it with {substitute} instead" for family in sorted(metrics.missing)
@@ -389,9 +393,18 @@ class _Transform:
     slide_width/slide_height are clamped up to it, and the extra space is
     split evenly as additional margin so the diagram stays centered
     rather than pinned in a corner.
+
+    With `origin` (slide inches), the diagram's top left goes there
+    instead, on a slide whose size is someone else's (a template's), and
+    `margin` is unused.
     """
 
-    def __init__(self, bbox: tuple[float, float, float, float], margin: float):
+    def __init__(
+        self,
+        bbox: tuple[float, float, float, float],
+        margin: float,
+        origin: tuple[float, float] | None = None,
+    ):
         self.x0, self.y0, self.x1, self.y1 = bbox
         natural_w = (self.x1 - self.x0) + 2 * margin
         natural_h = (self.y1 - self.y0) + 2 * margin
@@ -399,6 +412,8 @@ class _Transform:
         self.slide_height = max(natural_h, _MIN_SLIDE_SIDE_IN)
         self.margin_x = margin + (self.slide_width - natural_w) / 2
         self.margin_y = margin + (self.slide_height - natural_h) / 2
+        if origin is not None:
+            self.margin_x, self.margin_y = origin
 
     def rect(self, shape: Shape) -> tuple[float, float, float, float]:
         """Return (left, top, width, height) in inches for shape's bbox."""
@@ -905,12 +920,63 @@ def _resolve_template_layout(prs: Presentation, layout_name: str):
     raise LayoutError(f"no slide layout named {layout_name!r} in this template; it has: {', '.join(known)}")
 
 
+# The placeholder types a layout sets its content in, as opposed to its
+# title, subtitle, date, footer and slide number.
+_CONTENT_PLACEHOLDER_TYPES = {PP_PLACEHOLDER.OBJECT, PP_PLACEHOLDER.BODY}
+
+
+def _placeholder_rect(placeholder) -> tuple[float, float, float, float] | None:
+    values = (placeholder.left, placeholder.top, placeholder.width, placeholder.height)
+    if any(v is None for v in values):
+        return None
+    return tuple(Emu(v).inches for v in values)
+
+
+def _content_area(
+    prs: Presentation, layout, settings_area: tuple[float, float, float, float] | None
+) -> tuple[tuple[float, float, float, float], int | None, str]:
+    """Where on a slide made from `layout` the diagram goes (docs/spec.md
+    SS3.8): (left, top, width, height) in inches; the idx of the layout's
+    placeholder it takes the place of, if any; and what the area is, for
+    a message. It is the settings file's content area, if it sets one;
+    else the layout's first content placeholder (body or object); else
+    its master's body placeholder, where the template sets text when a
+    layout says nothing else; else the whole slide."""
+    if settings_area is not None:
+        return settings_area, None, "the settings file's content area"
+    for placeholder in sorted(layout.placeholders, key=lambda p: p.placeholder_format.idx):
+        if placeholder.placeholder_format.type in _CONTENT_PLACEHOLDER_TYPES:
+            rect = _placeholder_rect(placeholder)
+            if rect is not None:
+                return rect, placeholder.placeholder_format.idx, f"the {placeholder.name!r} placeholder of layout {layout.name!r}"
+    for placeholder in layout.slide_master.placeholders:
+        if placeholder.placeholder_format.type == PP_PLACEHOLDER.BODY:
+            rect = _placeholder_rect(placeholder)
+            if rect is not None:
+                return rect, None, f"the {placeholder.name!r} placeholder of the slide master"
+    return (0.0, 0.0, Emu(prs.slide_width).inches, Emu(prs.slide_height).inches), None, "the slide"
+
+
+def _content_area_overflow(prs: Presentation, layout, result: LayoutResult) -> list[str]:
+    """A warning, if the diagram is wider or taller than the content area
+    it goes in: it is never scaled to fit (docs/spec.md SS4), so it runs
+    past it, to the right and down."""
+    (_left, _top, area_w, area_h), _idx, what = _content_area(prs, layout, result.content_area)
+    x0, y0, x1, y1 = _content_bbox(result)
+    w, h = x1 - x0, y1 - y0
+    if w <= area_w + 1e-6 and h <= area_h + 1e-6:
+        return []
+    return [
+        f"the diagram ({w:.2f} x {h:.2f} in) is bigger than {what} it goes in "
+        f"({area_w:.2f} x {area_h:.2f} in), and runs past it"
+    ]
+
+
 def write_pptx_from_template(
     result: LayoutResult,
     template_path: str,
     path: str,
     layout_name: str = "",
-    margin: float = 0.15,
 ) -> None:
     """`write_pptx()`, but starting from `template_path`'s theme (docs/
     spec.md SS3.3 rule 1, SS4 `--template`) instead of the built-in
@@ -922,26 +988,25 @@ def write_pptx_from_template(
     `template_path` itself, so its symbols resolve against that
     template's own theme once the file is reopened.
 
-    The output slide is still sized to the diagram, not the template's
-    own slide size (SS4): only the theme (via the resolved layout's
-    master) comes along, plus the layout's own placeholder shapes, if it
-    has any and `layout_name` named it explicitly. The default, empty
+    The slide is the template's own size, and the diagram goes in its
+    content area (SS3.8, _content_area()), its top left at the area's
+    top left, so the master's and the layout's own graphics (a title
+    rule, a footer) stay where the template has them, clear of it. The
+    layout's placeholders come along when `layout_name` names it, except
+    the one whose place the diagram takes. The default, empty
     `layout_name` brings none: it resolves to a *blank* layout where
     there is one, but a template's layouts often have no `type` (see
     _resolve_template_layout()), so it can as well be one with a title
-    and a body, and its placeholders, sized for the template's own slide,
-    are removed from the new one."""
+    and a body, which nobody asked for."""
     prs, tmp_path = _open_template_base(template_path)
     try:
         layout = _resolve_template_layout(prs, layout_name)
-        tf = _Transform(_content_bbox(result), margin)
-        prs.slide_width = Emu(int(tf.slide_width * EMU_PER_INCH))
-        prs.slide_height = Emu(int(tf.slide_height * EMU_PER_INCH))
+        (left, top, _w, _h), content_idx, _what = _content_area(prs, layout, result.content_area)
         slide = prs.slides.add_slide(layout)
-        if not layout_name:
-            for placeholder in list(slide.placeholders):
+        for placeholder in list(slide.placeholders):
+            if not layout_name or placeholder.placeholder_format.idx == content_idx:
                 placeholder.element.getparent().remove(placeholder.element)
-        _add_all_shapes(slide, result.shapes, tf)
+        _add_all_shapes(slide, result.shapes, _Transform(_content_bbox(result), 0.0, origin=(left, top)))
         prs.save(path)
     finally:
         if tmp_path is not None:

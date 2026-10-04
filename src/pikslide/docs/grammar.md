@@ -109,6 +109,12 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
   Substitution doesn't reach inside `STRING` tokens: an already-tokenized
   string is opaque to macro expansion, so `$1` written inside a quoted
   string stays literal text, not a substitution.
+- The body replaces the call without its leading and trailing newlines
+  (or `;`), so it joins the call's own statement however it's laid out:
+  `P: pair` labels the first statement of `pair`, even when the body
+  starts on the line after `{`.
+- An error inside an expansion points at the body, inside the `define`,
+  in the file the `define` is in.
 - Recursion is an error; nesting is limited to 50 levels.
 - **A macro name must not already be a variable.** A reserved word can
   never collide, since only an `ID` can start a `macro-definition`, and no

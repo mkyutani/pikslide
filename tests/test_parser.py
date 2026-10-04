@@ -351,6 +351,28 @@ def test_macro_invocation_requires_adjacent_parens():
     ]
 
 
+@pytest.mark.parametrize(
+    ("text", "labels"),
+    [
+        ("define pair {\n  [ box; box ]\n}\nP: pair\n", ["P"]),  # issue #11
+        ("define pair { [ box; box ] }\nP: pair\n", ["P"]),
+        ("define pair {\n  [ box; box ]\n}\nP: pair; Q: pair\n", ["P", "Q"]),
+    ],
+)
+def test_labeled_call_of_a_macro_whose_body_starts_on_its_own_line(text: str, labels: list[str]):
+    doc = parse(text)
+    assert [s.label for s in doc.statements] == labels
+    assert all(isinstance(s.base, ast.BlockBase) for s in doc.statements)
+
+
+def test_macro_body_of_several_statements_ends_with_the_rest_of_the_call_line():
+    doc = parse("define two {\n  box\n  circle\n}\ntwo fill red\n")
+    assert doc.statements == [
+        ast.ObjectStatement(None, ast.ClassBase("box")),
+        ast.ObjectStatement(None, ast.ClassBase("circle"), [ast.ColorProperty("fill", ast.Var("red"))]),
+    ]
+
+
 def test_recursive_macro_raises():
     with pytest.raises(PikSyntaxError):
         parse("define loop { loop }\nloop\n")
@@ -599,6 +621,36 @@ def test_format_syntax_error_shows_the_right_files_own_source_line(tmp_path: Pat
     formatted = format_syntax_error(exc.value, "main.pik", main_text)
     assert formatted.startswith(str(tmp_path / "bad.pik") + ":1:1:")
     assert 'box "oops"' in formatted  # bad.pik's own line, not main.pik's
+
+
+def test_syntax_error_inside_a_macro_expansion_points_at_the_body():
+    # Issue #11: not at 1:1 of the main file.
+    text = "box\nbox\ndefine pair {\n  [ box; box with ]\n}\nP: pair\n"
+    with pytest.raises(PikSyntaxError) as exc:
+        parse(text)
+    from pikslide.pik.tokens import column_at
+
+    assert exc.value.file is None
+    assert exc.value.line == 4
+    assert column_at(text, exc.value.pos) == text.split("\n")[3].index("]") + 1
+
+
+def test_unrecognized_token_in_a_macro_body_points_at_the_body():
+    text = "box\ndefine pair {\n  [ box; box ` ]\n}\npair\n"
+    with pytest.raises(PikSyntaxError) as exc:
+        parse(text)
+    from pikslide.pik.tokens import column_at
+
+    assert exc.value.line == 3
+    assert column_at(text, exc.value.pos) == text.split("\n")[2].index("`") + 1
+
+
+def test_syntax_error_inside_a_macro_from_an_include_names_the_included_file(tmp_path: Path):
+    (tmp_path / "pair.pik").write_text("# pairs\ndefine pair {\n  [ box; box with ]\n}\n", encoding="utf-8")
+    with pytest.raises(PikSyntaxError) as exc:
+        parse('include "pair.pik"\nP: pair\n', base_dir=str(tmp_path))
+    assert exc.value.file == str(tmp_path / "pair.pik")
+    assert exc.value.line == 3
 
 
 def test_missing_include_file_error_still_names_the_including_file(tmp_path: Path):

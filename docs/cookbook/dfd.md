@@ -58,9 +58,7 @@ circle wraps where PowerPoint chooses, with a warning.
 `line`s and a `text` centered between them. A labeled call (`Orders:
 store("D1  Orders")`) names the block like any other object, and its
 edges are its bounding box's: `.w` and `.e` at the middle of its open
-ends, `.n` and `.s` at the middle of each line. Start the macro body on
-the `{` line: the body replaces the call as written, and a newline right
-after `Orders:` is a syntax error.
+ends, `.n` and `.s` at the middle of each line.
 
 **Data flows.** Label every flow with the data it carries, and keep the
 label off the line: `above` on a horizontal arrow, `ljust` (to the right)

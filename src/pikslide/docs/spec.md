@@ -523,6 +523,8 @@ Humans and LLMs both need errors they can act on.
 
 - Every error carries `file:line:column`, the source line, and a caret; the
   file is the included one when the error is inside an `include` (§3.6).
+  An error inside a macro's expansion points at the macro's body, in its
+  `define`.
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
 - Text wider than a fixed-size object's text area is a **warning** (§3.3).
 - A font that is not installed, so `fit` measured with a substitute, is a

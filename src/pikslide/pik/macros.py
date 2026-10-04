@@ -119,7 +119,36 @@ def _validate_definitions_only(tokens: list[Token]) -> None:
 class _Macro:
     name: str
     body: str
+    file: str | None
+    """Where the body is: the file its `define` is in (`None` for the
+    main source), and the line and character offset of the body's first
+    character, just after the `{`."""
+    line: int
+    pos: int
     in_use: bool = False
+
+    def tokens(self) -> list[Token]:
+        """The body, freshly lexed for one call. Each token carries its
+        place in the `define`, not in the body text alone, so that an
+        error in an expansion points at the body, in the right file.
+        Leading and trailing EOLs are dropped: a body that starts on the
+        line after `{` still makes one statement with what's around the
+        call, as in `P: pair`."""
+        try:
+            tokens = Lexer(self.body, file=self.file).tokenize()
+        except PikSyntaxError as e:
+            raise PikSyntaxError(
+                e.message, e.line + self.line - 1, e.text, pos=e.pos + self.pos, file=self.file
+            ) from None
+        for t in tokens:
+            t.line += self.line - 1
+            t.pos += self.pos
+        start, end = 0, len(tokens)
+        while start < end and tokens[start].type == TokType.EOL:
+            start += 1
+        while end > start and tokens[end - 1].type == TokType.EOL:
+            end -= 1
+        return tokens[start:end]
 
 
 @dataclass
@@ -216,8 +245,9 @@ def _expand(
                     f"'{name}' is already a variable; a macro cannot shadow it", tokens[i + 1].line, name,
                     pos=tokens[i + 1].pos, file=tokens[i + 1].file,
                 )
-            body = tokens[i + 2].text[1:-1]  # strip the outer { }
-            state.macros[name] = _Macro(name, body)
+            block = tokens[i + 2]
+            body = block.text[1:-1]  # strip the outer { }
+            state.macros[name] = _Macro(name, body, block.file, block.line, block.pos + 1)
             i += 3
             continue
 
@@ -241,7 +271,7 @@ def _expand(
                 args, j = _parse_macro_args(tokens, j, end, params)
             mac.in_use = True
             try:
-                body_tokens = Lexer(mac.body).tokenize()
+                body_tokens = mac.tokens()
                 _expand(body_tokens, 0, len(body_tokens), args, state, depth + 1,
                         current_dir, include_paths, include_stack)
             finally:

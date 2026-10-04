@@ -1,0 +1,25 @@
+# Order handling, as a level-1 data flow diagram (DeMarco/Yourdon notation).
+
+# A data store: two parallel lines with its name between them. The body
+# starts on the `{` line: a labeled call, `Orders: store(...)`, needs the
+# block right after the label.
+define store { [
+  Upper: line right 1.3in
+  Lower: line right 1.3in from 0.4in below Upper.start
+  text $1 at 1/2<Upper.c, Lower.c>
+] }
+
+Customer: box "Customer" fit
+arrow "order" above right 150%
+Take: circle "1" bold "Take" "order" rad 0.5in
+arrow "new order" above right 150%
+Orders: store("D1  Orders")
+
+Ship: circle "2" bold "Ship" "order" rad 0.5in with .n at 1in below Orders.s
+arrow "order details" ljust from Orders.s to Ship.n
+
+Inventory: store("D2  Inventory") with .w at 1.2in right of Ship.e
+arrow "stock level" above from Inventory.w to Ship.e
+
+line "delivery note" above from Ship.w left until even with Customer
+arrow up to Customer.s

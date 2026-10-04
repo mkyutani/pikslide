@@ -1,7 +1,8 @@
 """The diagrams in the docs: every `.pik` under docs/, and every
 ```pikslide block in docs/'s Markdown and the top-level README, must parse
-and lay out (docs/README.md); and the shape gallery must be what
-scripts/gen_shape_gallery.py writes.
+and lay out (docs/README.md); a cookbook recipe must show its .pik file
+as it is; and the shape gallery must be what scripts/gen_shape_gallery.py
+writes.
 
 The packaged manuals (src/pikslide/docs/) are left out: spec.md's blocks
 are fragments of a design -- an image or include file that isn't there, a
@@ -54,6 +55,15 @@ def test_pik_file_lays_out(path: pathlib.Path):
 def test_markdown_block_lays_out(block):
     _, source, base_dir = block
     _lays_out(source, base_dir)
+
+
+@pytest.mark.parametrize("recipe", sorted((DOCS / "cookbook").glob("*.pik")), ids=lambda p: p.stem)
+def test_recipe_shows_its_source_as_it_is(recipe: pathlib.Path):
+    """A recipe's Markdown shows its .pik file, unchanged, in a block."""
+    md = recipe.with_suffix(".md")
+    sources = [m.group(1) for m in _BLOCK.finditer(md.read_text(encoding="utf-8"))]
+    assert recipe.read_text(encoding="utf-8") in sources, f"{md.name} doesn't show {recipe.name} as it is"
+    assert recipe.with_suffix(".png").exists()
 
 
 def _gallery_script():

@@ -16,6 +16,8 @@ pictures they render to.
 - [shapes.md](shapes.md): every preset shape `shape NAME` draws, as a
   picture. Written by `scripts/gen_shape_gallery.py` (`--png` to render
   the pictures, with PowerPoint)
+- [cookbook/](cookbook/): one recipe per kind of diagram, to copy and
+  adapt: its source, its picture, and how it's drawn
 
 Every `.pik` here, and every ` ```pikslide ` block in this directory's
 Markdown and in the top-level README, must parse and lay out

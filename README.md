@@ -99,7 +99,8 @@ uv run pikslide diagram.pik diagram.pptx --template corporate.potx
 
 (OUTPUT may be omitted when `--template` is given: it then defaults to
 INPUT's own path with its extension changed to `.pptx`.) The new slide is
-made from the template's first blank layout, unless its settings file
+made from the template's Title and Content layout (the first with one
+placeholder besides its title, date, footer and slide number), unless its settings file
 names one with `layout`, or `--layout NAME` does (which wins over the
 settings file). It is the template's own size, and the diagram goes at
 the top left of its content area: the layout's content placeholder, or

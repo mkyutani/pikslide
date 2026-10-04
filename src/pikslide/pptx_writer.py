@@ -898,16 +898,19 @@ def _resolve_template_layout(prs: Presentation, layout_name: str):
     """The slide layout a new slide is made from (docs/spec.md SS3.8
     `layout`), which also fixes the master and so the theme (SS3.3):
     named, found in any master (the first match wins if more than one
-    master has a layout of that name); empty, the first `blank`-type
-    layout of the *first* master, or that master's own first layout if it
-    has none (checked: a real-world template's layouts commonly don't set
-    the `type` attribute at all, so this fallback -- not just the
-    blank-type lookup -- is the common case in practice, not a rare
-    corner)."""
+    master has a layout of that name); empty, the first layout, master by
+    master, with exactly one content placeholder (_content_placeholder()):
+    a Title and Content layout, which most templates have, found by its
+    placeholders since a template's layouts often have no `type`. With no
+    such layout, the first `blank`-type layout of the first master, or
+    that master's own first layout."""
     all_layouts = [(m, layout) for m in prs.slide_masters for layout in m.slide_layouts]
     if not all_layouts:
         raise LayoutError("this template has no slide masters/layouts at all")
     if not layout_name:
+        for _master, layout in all_layouts:
+            if _content_placeholder(layout) is not None:
+                return layout
         first_master = prs.slide_masters[0]
         for layout in first_master.slide_layouts:
             if layout.element.get("type") == "blank":
@@ -920,9 +923,19 @@ def _resolve_template_layout(prs: Presentation, layout_name: str):
     raise LayoutError(f"no slide layout named {layout_name!r} in this template; it has: {', '.join(known)}")
 
 
-# The placeholder types a layout sets its content in, as opposed to its
-# title, subtitle, date, footer and slide number.
-_CONTENT_PLACEHOLDER_TYPES = {PP_PLACEHOLDER.OBJECT, PP_PLACEHOLDER.BODY}
+# A layout's title, date, footer and slide number placeholders; any other
+# holds content. A subtitle counts as title, so a title slide has none.
+_NON_CONTENT_PLACEHOLDER_TYPES = {
+    PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE, PP_PLACEHOLDER.VERTICAL_TITLE, PP_PLACEHOLDER.SUBTITLE,
+    PP_PLACEHOLDER.DATE, PP_PLACEHOLDER.FOOTER, PP_PLACEHOLDER.SLIDE_NUMBER,
+}
+
+
+def _content_placeholder(layout):
+    """`layout`'s content placeholder, if it has exactly one, as a Title
+    and Content layout does; else None."""
+    found = [p for p in layout.placeholders if p.placeholder_format.type not in _NON_CONTENT_PLACEHOLDER_TYPES]
+    return found[0] if len(found) == 1 else None
 
 
 def _placeholder_rect(placeholder) -> tuple[float, float, float, float] | None:
@@ -939,16 +952,17 @@ def _content_area(
     SS3.8): (left, top, width, height) in inches; the idx of the layout's
     placeholder it takes the place of, if any; and what the area is, for
     a message. It is the settings file's content area, if it sets one;
-    else the layout's first content placeholder (body or object); else
-    its master's body placeholder, where the template sets text when a
-    layout says nothing else; else the whole slide."""
+    else the layout's content placeholder, if it has exactly one
+    (_content_placeholder()); else its master's body placeholder, where
+    the template sets text when a layout says nothing else, and which
+    spans a two-column layout's both columns; else the whole slide."""
     if settings_area is not None:
         return settings_area, None, "the settings file's content area"
-    for placeholder in sorted(layout.placeholders, key=lambda p: p.placeholder_format.idx):
-        if placeholder.placeholder_format.type in _CONTENT_PLACEHOLDER_TYPES:
-            rect = _placeholder_rect(placeholder)
-            if rect is not None:
-                return rect, placeholder.placeholder_format.idx, f"the {placeholder.name!r} placeholder of layout {layout.name!r}"
+    placeholder = _content_placeholder(layout)
+    if placeholder is not None:
+        rect = _placeholder_rect(placeholder)
+        if rect is not None:
+            return rect, placeholder.placeholder_format.idx, f"the {placeholder.name!r} placeholder of layout {layout.name!r}"
     for placeholder in layout.slide_master.placeholders:
         if placeholder.placeholder_format.type == PP_PLACEHOLDER.BODY:
             rect = _placeholder_rect(placeholder)
@@ -994,10 +1008,9 @@ def write_pptx_from_template(
     rule, a footer) stay where the template has them, clear of it. The
     layout's placeholders come along when `layout_name` names it, except
     the one whose place the diagram takes. The default, empty
-    `layout_name` brings none: it resolves to a *blank* layout where
-    there is one, but a template's layouts often have no `type` (see
-    _resolve_template_layout()), so it can as well be one with a title
-    and a body, which nobody asked for."""
+    `layout_name` brings none: it resolves to a Title and Content layout
+    (_resolve_template_layout()) for where its content goes, not for an
+    empty title nobody asked for."""
     prs, tmp_path = _open_template_base(template_path)
     try:
         layout = _resolve_template_layout(prs, layout_name)

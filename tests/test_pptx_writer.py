@@ -712,14 +712,13 @@ def test_template_strips_the_sample_slide_and_keeps_its_slide_size(tmp_path: pat
     assert (prs.slide_width.inches, prs.slide_height.inches) == (10, 7.5)  # the template's own
 
 
-# The built-in template's master sets body text here (inches): below the
-# title, clear of the date, footer and slide number.
+# The built-in template's Title and Content layout sets content here
+# (inches): below the title, clear of the date, footer and slide number.
 _MASTER_BODY = (0.5, 1.75)
 
 
 def test_diagram_goes_at_the_top_left_of_the_content_area(tmp_path: pathlib.Path):
-    # The blank layout has no content placeholder of its own, so the area
-    # is the master's body placeholder.
+    # Title and Content's content placeholder.
     tmpl = _template_deck(tmp_path)
     prs = _from_template('box "Web" width 1 height 0.5\nbox "App" width 1 height 1\n', tmpl, tmp_path)
     web, app = prs.slides[0].shapes
@@ -772,21 +771,56 @@ def test_diagram_bigger_than_the_content_area_is_a_warning(tmp_path: pathlib.Pat
     fits = resolve_for_pptx(parse("box width 9 height 4.9\n"), template_path=str(tmpl))
     assert fits.warnings == []
     [w] = resolve_for_pptx(parse("box width 9.5 height 1\n"), template_path=str(tmpl)).warnings
-    assert w == ("the diagram (9.50 x 1.00 in) is bigger than the 'Text Placeholder 2' placeholder of "
-                 "the slide master it goes in (9.00 x 4.95 in), and runs past it")
+    assert w == ("the diagram (9.50 x 1.00 in) is bigger than the 'Content Placeholder 2' placeholder of "
+                 "layout 'Title and Content' it goes in (9.00 x 4.95 in), and runs past it")
 
 
-def test_template_uses_a_blank_layout_by_default(tmp_path: pathlib.Path):
+def test_template_uses_title_and_content_by_default(tmp_path: pathlib.Path):
+    # The first layout with exactly one placeholder besides its title,
+    # subtitle, date, footer and slide number: not Title Slide (a title and
+    # a subtitle), but the next one.
     tmpl = _template_deck(tmp_path)
     prs = _from_template('box "Web"\n', tmpl, tmp_path)
+    assert prs.slides[0].slide_layout.name == "Title and Content"
     names = [s.name for s in prs.slides[0].shapes]
     assert names == ["box 1"]  # no placeholders brought in
 
 
+def test_with_no_title_and_content_layout_the_default_is_blank():
+    from pikslide.pptx_writer import _content_placeholder, _resolve_template_layout
+
+    prs = Presentation()
+    for layout in [layout for layout in prs.slide_layouts if _content_placeholder(layout) is not None]:
+        prs.slide_layouts.remove(layout)
+    assert _resolve_template_layout(prs, "").name == "Blank"
+
+
+@pytest.mark.parametrize(
+    ("layout_name", "expected"),
+    [
+        # One content placeholder: it.
+        ("Title and Content", ((0.5, 1.75, 9.0, 4.95), "'Content Placeholder 2' placeholder of layout")),
+        ("Section Header", ((0.79, 3.18, 8.5, 1.64), "'Text Placeholder 2' placeholder of layout")),
+        # None, or two (both columns): the master's body placeholder.
+        ("Blank", ((0.5, 1.75, 9.0, 4.95), "of the slide master")),
+        ("Title Only", ((0.5, 1.75, 9.0, 4.95), "of the slide master")),
+        ("Two Content", ((0.5, 1.75, 9.0, 4.95), "of the slide master")),
+        ("Comparison", ((0.5, 1.75, 9.0, 4.95), "of the slide master")),
+    ],
+)
+def test_content_area_of_each_layout(layout_name: str, expected):
+    from pikslide.pptx_writer import _content_area
+
+    prs = Presentation()
+    layout = next(layout for layout in prs.slide_layouts if layout.name == layout_name)
+    area, _idx, what = _content_area(prs, layout, None)
+    assert area == pytest.approx(expected[0], abs=0.01)
+    assert expected[1] in what
+
+
 def _template_without_layout_types(tmp_path: pathlib.Path) -> pathlib.Path:
     """The built-in template with no layout's `type` set, as is common in
-    real ones: none is `blank`, so the default is the first layout,
-    Title Slide, which has placeholders."""
+    real ones."""
     src = pathlib.Path(pptx.__file__).parent / "templates" / "default.pptx"
     out = tmp_path / "untyped.pptx"
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, "w") as zout:
@@ -799,11 +833,12 @@ def _template_without_layout_types(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 def test_default_layout_brings_no_placeholders_even_when_it_has_some(tmp_path: pathlib.Path):
-    # Issue #16: they'd sit, empty, over a slide sized to the diagram.
+    # Issue #16: the default layout is chosen for where its content goes,
+    # not for an empty title.
     tmpl = _template_without_layout_types(tmp_path)
     prs = _from_template('box "Web"\n', tmpl, tmp_path)
     slide = prs.slides[0]
-    assert slide.slide_layout.name == "Title Slide"
+    assert slide.slide_layout.name == "Title and Content"  # found by its placeholders, not its type
     assert [s.name for s in slide.shapes] == ["box 1"]
 
 

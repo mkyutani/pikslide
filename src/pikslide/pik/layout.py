@@ -445,8 +445,8 @@ class LayoutResult:
     explicitly, overriding the theme."""
     layout_name: str = ""
     """The resolved `layout` variable (docs/spec.md SS3.8, ext): empty
-    means "the first blank-type layout of the template's first master, or
-    that master's own first layout if it has none"; settable only by the
+    means "the template's first layout with exactly one content
+    placeholder" (a Title and Content layout); settable only by the
     prelude or a settings file, never a program (`_eval_assignment()`
     enforces this) -- used only when making a new slide from a
     `--template`."""

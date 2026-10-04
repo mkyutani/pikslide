@@ -467,8 +467,8 @@ file**, found beside it or named with `--settings FILE`, which holds:
 
 The settings file is read after the prelude and before the program, so its
 definitions override the prelude's, and the program's override its own. A
-template without one gets the prelude's defaults and its first master's blank
-layout. A `.pik` still never names the file: the tool finds it from the
+template without one gets the prelude's defaults and its Title and Content
+layout (`layout`, below). A `.pik` still never names the file: the tool finds it from the
 template, or the caller names it (§4).
 
 **The template's own defaults.** A theme can have a default shape
@@ -521,11 +521,15 @@ content_bottom = 6.9in
 - **`layout`** is the name of a slide layout, used when pikslide makes a new
   slide from the template. A layout belongs to one master, so naming it also chooses the master and
   the theme. The prelude gives it the empty string, which means the first
-  layout of type `blank` in the first master, or that master's first layout
-  if it has none. Many templates set no layout's type, so that first
-  layout often has a title and a body; their placeholders are left off the
-  new slide. A layout named here or with `--layout` brings its placeholders
-  along, except the content placeholder whose place the diagram takes. If two masters have a layout of that name, the first one
+  layout, master by master, with exactly one placeholder besides its
+  title, subtitle, date, footer and slide number: a Title and Content
+  layout, which most templates have. It is found by its placeholders, since
+  many templates set no layout's type. Its placeholders are left off the
+  new slide, the diagram going where its content placeholder was. With no
+  such layout, it is the first layout of type `blank` in the first master,
+  or that master's first layout. A layout named here or with `--layout`
+  brings its placeholders along, except the content placeholder whose
+  place the diagram takes. If two masters have a layout of that name, the first one
   found wins. A name that no layout has is an error that lists the names it
   does have. `layout` can be set only in a settings file: assigning it in a
   program is an error, because a `.pik` never chooses the deck's structure.
@@ -537,10 +541,10 @@ content_bottom = 6.9in
   from the slide's left edge, `content_top` and `content_bottom` from its
   top, as lengths (`0.5in`, `36pt`). Like `layout`, they can be set only in a
   settings file, and then all four of them. Without them, the area is the
-  layout's first content placeholder (a body or an object one, not its
-  title); with none, the master's body placeholder, which is where the
-  template sets text when a layout says nothing else; with none of those,
-  the whole slide. Either way it leaves the master's and the layout's own
+  layout's content placeholder, when it has exactly one (as above);
+  otherwise, as on a blank or a two-column layout, the master's body
+  placeholder, which is where the template sets text when a layout says
+  nothing else; with none of those, the whole slide. Either way it leaves the master's and the layout's own
   graphics (a title rule, a logo, a footer) where the template has them.
 - **Strings.** A variable can hold a string, written as in text
   (`typeface = "…"`). A string is not a number and cannot be used in an

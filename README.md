@@ -150,8 +150,10 @@ file "pikslide" "Language" fit
 ```
 
 ```sh
-uv run pikslide docs/examples/pipeline.pik docs/examples/pipeline.pptx
+uv run pikslide docs/examples/pipeline.pik docs/examples/pipeline.pptx --png
 ```
+
+![pipeline.png: the diagram as PowerPoint draws it](docs/examples/pipeline.png)
 
 [docs/examples/](docs/examples/) has more, each with the PPTX and PNG it
 renders to.

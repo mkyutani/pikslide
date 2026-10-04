@@ -139,19 +139,22 @@ PowerShell.
 
 ### Example
 
-`examples/pipeline.pik`:
+`docs/examples/pipeline.pik`:
 
 ```pikslide
-arrow right 200% "Markdown" "Source"
-box rad 10px "Markdown" "Formatter" "(markdown.c)" fit
-arrow right 200% "HTML+SVG" "Output"
-arrow <-> down 70% from last box.s
-box same "Pikchr" "Formatter" "(pikchr.c)" fit
+arrow "Markdown" "Source" right 200%
+box "pikslide" "Formatter" rad 10px fit
+arrow "PPTX" "Output" right 200%
+arrow <- down 70% from last box.s
+file "pikslide" "Language" fit
 ```
 
 ```sh
-uv run pikslide examples/pipeline.pik examples/pipeline.pptx
+uv run pikslide docs/examples/pipeline.pik docs/examples/pipeline.pptx
 ```
+
+[docs/examples/](docs/examples/) has more, each with the PPTX and PNG it
+renders to.
 
 ## Limits of the current layout stage
 

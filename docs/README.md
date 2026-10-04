@@ -7,3 +7,13 @@ them (`pikslide --help grammar`, `pikslide --help spec`):
 - [grammar.md](../src/pikslide/docs/grammar.md): the grammar, in BNF
 
 `pikslide --help` lists every help topic.
+
+This directory holds what only the repository has: diagrams, with the
+pictures they render to.
+
+- [examples/](examples/): example diagrams, each `.pik` with the `.pptx`
+  and `.png` it renders to (`pikslide x.pik x.pptx --png`)
+
+Every `.pik` here, and every ` ```pikslide ` block in this directory's
+Markdown and in the top-level README, must parse and lay out
+(`tests/test_docs.py`).

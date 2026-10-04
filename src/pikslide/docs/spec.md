@@ -239,8 +239,14 @@ frame's side insets, so justified text (`ljust`, `rjust`) stops that far
 from the outline, and a line's `ljust`/`rjust` labels start that far
 from its end (§3.1). `fit` makes an object as wide as its widest line plus
 `margin` on each side. Top and bottom have no inset; a `fit` object's
-height is its lines plus three quarters of a line. Like the text sizes,
+height is its lines plus half a line. Like the text sizes,
 each object uses the value in effect where it is written.
+
+**Line height.** PowerPoint sets the lines of a paragraph 1.2 times the
+text size apart at single spacing, whatever the font (checked with Latin
+and Japanese fonts, from 9 to 18 pt). That is the line height `fit`
+measures with, and every paragraph pikslide writes has single spacing
+set explicitly, so a template's own default spacing can't change it.
 
 **The text area.** PowerPoint sets an object's text not in its whole
 box but in its shape's *text rectangle*, which each preset geometry

@@ -59,7 +59,9 @@ class FontMetrics(Protocol):
         ...
 
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
-        """Height, in inches, of one line of text at this flags' size."""
+        """Height, in inches, of one line of text at this flags' size: how
+        far apart the renderer sets one line from the next, not the size
+        of the text itself (PowerPoint's are 1.2 times that)."""
         ...
 
 
@@ -1227,7 +1229,8 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     sizes = shape.text_sizes
     widest = max((m.text_width(text, flags, sizes, shape.typeface) for text, flags in shape.texts), default=0.0)
     shape.w = widest + 2 * shape.text_margin
-    shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 0.75 * m.line_height([], sizes)
+    # The lines, plus half a line: a quarter of one above and below.
+    shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 0.5 * m.line_height([], sizes)
     # The object stays centered on its own position with the text shifted
     # off that center, so it grows by the shift on both sides (as pikchr's
     # own size-to-fit does), keeping .n/.s clear of the text.

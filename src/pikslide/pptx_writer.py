@@ -69,6 +69,15 @@ _MEASURE_FONT_CANDIDATES = [
 
 _LABEL_STEP_IN = 0.10  # how far a label shifts per above/below slot step at the medium size -- see _SLOT_STEP
 
+# How far apart PowerPoint sets the lines of a paragraph at single line
+# spacing, as a multiple of the text size: 1.2, whatever the font --
+# checked by rendering four lines at 9, 12 and 18 pt in Calibri, Aptos,
+# Arial, Meiryo, Yu Gothic, BIZ UDPGothic, MS PGothic and Noto Sans JP
+# (the font's own ascent, descent and line gap don't come into it). The
+# writer sets single spacing on every paragraph explicitly, so a
+# template's own default line spacing can't change it either.
+_LINE_PITCH = 1.2
+
 
 def _find_measure_font() -> str | None:
     for path in _MEASURE_FONT_CANDIDATES:
@@ -211,7 +220,7 @@ class PilFontMetrics:
         return px / _MEASURE_SCALE / 72.0
 
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
-        return self._size_pt(flags, text_sizes) / 72.0
+        return _LINE_PITCH * self._size_pt(flags, text_sizes) / 72.0
 
 
 def resolve_for_pptx(
@@ -475,6 +484,7 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
         if i == first_below:
             para.space_before = Inches(shape.text_split)
         para.alignment = _alignment(flags)
+        para.line_spacing = 1.0  # see _LINE_PITCH
         run = para.add_run()
         run.text = text
         _apply_run_font(run, flags, shape.typeface)
@@ -564,6 +574,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
     for i, (text, flags) in enumerate(shape.texts):
         para = text_frame.paragraphs[0] if i == 0 else text_frame.add_paragraph()
         para.alignment = PP_ALIGN.CENTER
+        para.line_spacing = 1.0  # see _LINE_PITCH
         run = para.add_run()
         run.text = text
         _apply_run_font(run, flags, shape.typeface)
@@ -656,7 +667,7 @@ def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, flo
     if not shape.texts:
         return []
     base_size_pt = shape.text_sizes.get("medium", 10.5 / 72.0) * 72.0
-    label_box_h = base_size_pt * 1.15 / 72.0  # a touch taller than line_height(), just for rendering safety
+    label_box_h = base_size_pt * _LINE_PITCH / 72.0  # one line, as PowerPoint sets it
     label_step = base_size_pt / 9.0 * _LABEL_STEP_IN
     bx0, by0, bx1, by1 = shape.bbox
     cx = (bx0 + bx1) / 2
@@ -700,6 +711,7 @@ def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
         text_frame.margin_top = text_frame.margin_bottom = 0
         para = text_frame.paragraphs[0]
         para.alignment = _alignment(flags)
+        para.line_spacing = 1.0  # see _LINE_PITCH
         run = para.add_run()
         run.text = text
         _apply_run_font(run, flags, shape.typeface)

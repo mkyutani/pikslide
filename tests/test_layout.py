@@ -515,12 +515,12 @@ def test_fit_sizes_a_preset_for_its_text_rectangle():
         shape = resolve_layout(parse(src), metrics=FixedMetrics()).shapes[-1]
         return shape.w, shape.h
 
-    # 1.0 in of text, 0.1 in of margin each side; 0.35 in tall.
-    assert size('shape rect "0123456789" fit\n') == pytest.approx((1.2, 0.35))
+    # 1.0 in of text, 0.1 in of margin each side; a line and a half tall.
+    assert size('shape rect "0123456789" fit\n') == pytest.approx((1.2, 0.3))
     # The slanted ends take a fifth of the width each.
-    assert size('shape flowChartInputOutput "0123456789" fit\n') == pytest.approx((2.0, 0.35))
+    assert size('shape flowChartInputOutput "0123456789" fit\n') == pytest.approx((2.0, 0.3))
     # The middle half, both ways.
-    assert size('shape flowChartDecision "0123456789" fit\n') == pytest.approx((2.4, 0.7))
+    assert size('shape flowChartDecision "0123456789" fit\n') == pytest.approx((2.4, 0.6))
 
 
 def test_above_and_below_offset_text_from_the_objects_center():

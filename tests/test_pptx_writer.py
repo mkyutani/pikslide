@@ -244,6 +244,27 @@ def test_fit_sizing_tracks_a_medium_override_at_render_time_too(tmp_path: pathli
     assert big.height.inches > small.height.inches
 
 
+def test_fit_height_is_powerpoints_line_pitch_per_line(tmp_path: pathlib.Path):
+    # Issue #10: PowerPoint sets lines 1.2 times the text size apart, so
+    # four lines at 12 pt need 4 x 14.4 pt, plus half a line.
+    shape = render('box "a" large "b" large "c" large "d" large fit\n', tmp_path).slides[0].shapes[0]
+    line = 1.2 * 12 / 72
+    assert shape.height.inches == pytest.approx(4 * line + 0.5 * 1.2 * 10.5 / 72, abs=1e-4)
+
+
+def test_every_paragraph_is_single_spaced(tmp_path: pathlib.Path):
+    # What fit's line height assumes, set explicitly so a template's own
+    # default spacing can't change it: object text, line labels and an
+    # image's caption alike.
+    from PIL import Image
+
+    Image.new("RGB", (40, 20)).save(tmp_path / "x.png")
+    prs = render('box "a" "b"\narrow "label"\nimage "x.png" "caption"\n', tmp_path)
+    paragraphs = [p for s in prs.slides[0].shapes if s.has_text_frame for p in s.text_frame.paragraphs]
+    assert len(paragraphs) == 4
+    assert all(p.line_spacing == 1.0 for p in paragraphs)
+
+
 # ---------------------------------------------------------------------------
 # Fonts (docs/spec.md SS3.3): symbolic theme references by default, `major`,
 # `typeface` -- checked, as elsewhere, against what's actually saved to disk

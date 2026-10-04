@@ -131,7 +131,9 @@ ENTRIES: tuple[Entry, ...] = (
           synopsis=("[Label:] shape PRESET [attribute ...]",),
           body="One of PowerPoint's ~180 preset geometries (chevron, roundRect, "
                "wedgeRectCallout, ...), matched case-insensitively. It behaves like a box: "
-               "same default size, attributes and edges (of its bounding rectangle). "
+               "same default size, attributes and edges (of its bounding rectangle). Its text "
+               "goes in the preset's own text area, often less than the box (a diamond's "
+               "middle half), and `fit` and the overflow warning follow it. "
                "`--help shapes` lists them all with what each looks like; `--help NAME` "
                "describes one.",
           sections=(("ATTRIBUTES", _CLOSED_ATTRIBUTES),),
@@ -312,7 +314,9 @@ ENTRIES: tuple[Entry, ...] = (
                "from the one named.", example="box same as Web", group="attribute"),
     Entry(("fit",), "sizes the object to its text",
           body="Makes the object just big enough for its text, measured in the fonts the "
-               "deck is drawn in, plus margin at each side.",
+               "deck is drawn in, plus margin at each side. A shape whose text goes in less "
+               "than its whole box is made bigger to match: a circle or a diamond, or a preset "
+               "shape such as flowChartInputOutput, whose text leaves out its slanted ends.",
           example='box "a longer label" fit', group="attribute", see=("margin",)),
     Entry(("behind",), "draws the object just below another in z-order",
           synopsis=("behind OBJECT",), example="box fill bg2 behind Web", group="attribute"),

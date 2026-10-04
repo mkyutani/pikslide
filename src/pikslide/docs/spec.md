@@ -242,11 +242,26 @@ from its end (§3.1). `fit` makes an object as wide as its widest line plus
 height is its lines plus three quarters of a line. Like the text sizes,
 each object uses the value in effect where it is written.
 
-An object with a size of its own and no `fit` wraps a string wider than
-its width less `margin` on each side (a circle, ellipse, oval or
-diamond: the part of its width `fit` gives the text). That is a **warning**, naming the object
-and both widths, so wrapped text is never silent; a one-character string
-cannot wrap and is exempt.
+**The text area.** PowerPoint sets an object's text not in its whole
+box but in its shape's *text rectangle*, which each preset geometry
+defines (`<a:rect>`, ECMA-376): a box's is the whole box; a rounded box
+is inset by about 0.3 of its corner radius at each side; a circle,
+ellipse or oval's is its inscribed rectangle, √2 smaller each way; a
+diamond's is the middle half of its width and height. A preset shape
+(§3.4) has its own: `flowChartInputOutput` leaves out a fifth of the
+width at each slanted end, and an arrow's leaves out most of its head.
+The text area is that rectangle less `margin` on each side.
+
+- `fit` makes a preset shape just big enough for its text rectangle to
+  hold the text (a parallelogram 5/3 as wide as a box; a flowchart
+  decision twice as wide and twice as tall). A circle, ellipse or oval is
+  made √2 times bigger each way, and a diamond 1.6 times: a `fit`
+  object's text doesn't wrap, so a diamond's runs a little past the
+  middle half and still sits well inside the points.
+- An object with a size of its own and no `fit` wraps a string wider than
+  its text area. That is a **warning**, naming the object and both
+  widths, so wrapped text is never silent; a one-character string cannot
+  wrap and is exempt.
 
 ### 3.4 Preset shapes: `shape`
 
@@ -264,6 +279,8 @@ shape wedgeRectCallout "Note" fit
 - Behaves like `box`: default size `boxwid × boxht`; `width`, `height`, `fit`,
   `at`, `with`, `same`, text, `fill`, `stroke` all work.
   Edge names (`.n`, `.ne`, …) and `chop` refer to the **bounding rectangle**.
+  Its text goes in the preset's own text rectangle, which `fit` and the
+  overflow warning follow (§3.3).
 - No adjustment handles in v1 (default geometry), except `rad` on `roundRect`,
   already supported for `box`.
 - Existing classes map onto presets as follows:

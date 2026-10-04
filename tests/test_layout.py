@@ -477,6 +477,52 @@ def test_text_wider_than_a_fixed_size_objects_text_area_warns():
     assert warnings('circle "7" diameter 0.1\n') == []
 
 
+def test_text_area_is_the_preset_text_rectangle():
+    # issue #12: what PowerPoint wraps the text in, less `margin` each side.
+    class FixedMetrics:
+        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+            return 0.1 * len(text)
+
+        def line_height(self, flags=(), text_sizes=None):
+            return 0.2
+
+    def warnings(src):
+        return resolve_layout(parse(src), metrics=FixedMetrics()).warnings
+
+    # A diamond's is its middle half: 0.7 in of text fits in 1.8 (0.9 - 0.2), not 1.6.
+    assert warnings('diamond "abcdefg" wid 1.8 ht 0.7\n') == []
+    [w] = warnings('diamond "abcdefg" wid 1.6 ht 0.7\n')
+    assert "(0.70 in > 0.60 in)" in w
+    # A parallelogram's leaves out a fifth at each end.
+    assert warnings('shape flowChartInputOutput "abcdefgh" wid 1.7 ht 0.45\n') == []
+    [w] = warnings('shape flowChartInputOutput "abcdefgh" wid 1.6 ht 0.45\n')
+    assert "(0.80 in > 0.76 in)" in w
+    # A rounded box's is inset by 0.29 of its corner radius.
+    assert warnings('box "0123456789" width 1.2\n') == []
+    [w] = warnings('box "0123456789" width 1.2 rad 0.1\n')
+    assert "(1.00 in > 0.94 in)" in w
+
+
+def test_fit_sizes_a_preset_for_its_text_rectangle():
+    class FixedMetrics:
+        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+            return 0.1 * len(text)
+
+        def line_height(self, flags=(), text_sizes=None):
+            return 0.2
+
+    def size(src):
+        shape = resolve_layout(parse(src), metrics=FixedMetrics()).shapes[-1]
+        return shape.w, shape.h
+
+    # 1.0 in of text, 0.1 in of margin each side; 0.35 in tall.
+    assert size('shape rect "0123456789" fit\n') == pytest.approx((1.2, 0.35))
+    # The slanted ends take a fifth of the width each.
+    assert size('shape flowChartInputOutput "0123456789" fit\n') == pytest.approx((2.0, 0.35))
+    # The middle half, both ways.
+    assert size('shape flowChartDecision "0123456789" fit\n') == pytest.approx((2.4, 0.7))
+
+
 def test_above_and_below_offset_text_from_the_objects_center():
     # A single above string sits half a line up plus a quarter-line gap
     # (_TEXT_SIDE_GAP), so its bottom clears the center; a below one the

@@ -31,6 +31,7 @@ from typing import Protocol
 
 from . import ast
 from .parser import parse
+from .text_area import fit_size, text_rect
 
 
 class FontMetrics(Protocol):
@@ -1156,20 +1157,43 @@ def _text_placement(shape: Shape, ctx: _Ctx) -> tuple[float, float]:
     return (up - down) / 2, (2 * gap if explicit and split else 0.0)
 
 
-# How much wider than its text area (text plus `margin` each side) a
-# shape's bounding box is: `fit` multiplies by it, and a fixed-size
-# shape's text area is its width divided by it (_check_text_overflow()).
+# How much bigger than its text (plus `margin` each side) `fit` makes a
+# diamond or an ellipse. A diamond's text is set in its middle half, but
+# a fit one's text doesn't wrap (Shape.fit), so it can run a little past
+# that and still sit well inside the points.
 _TEXT_AREA_SCALE = {"diamond": 1.6, "circle": math.sqrt(2), "ellipse": math.sqrt(2), "oval": math.sqrt(2)}
 
-# The objects whose text wraps inside a fixed-size frame.
-_FRAMED_TEXT_KINDS = {"box", "circle", "ellipse", "oval", "diamond", "cylinder", "file", "shape"}
+# The objects whose text wraps inside a fixed-size frame, and the preset
+# each is drawn as (pptx_writer's _AUTOSHAPE): `shape` is its own preset,
+# and a box with `rad` a roundRect.
+_FRAMED_TEXT_KINDS = {
+    "box": "rect", "circle": "ellipse", "ellipse": "ellipse", "oval": "ellipse",
+    "diamond": "diamond", "cylinder": "can", "file": "foldedCorner", "shape": None,
+}
+
+
+def _text_area_width(shape: Shape) -> float:
+    """The width PowerPoint sets `shape`'s text in: its preset's text
+    rectangle (text_area.text_rect()), less `margin` on each side. A
+    diamond's rectangle is its middle half, a circle's its inscribed
+    square, a parallelogram's leaves out the slanted ends."""
+    preset = _FRAMED_TEXT_KINDS[shape.kind] or shape.preset
+    if shape.kind == "box" and shape.rad > 0:
+        preset = "roundRect"
+    adjust = None
+    if preset == "roundRect" and shape.rad > 0 and min(shape.w, shape.h) > 0:
+        # As pptx_writer sets it: the corner radius over the shorter side.
+        adjust = {"adj": min(0.5, shape.rad / min(shape.w, shape.h)) * 100000}
+    left, _top, right, _bottom = text_rect(preset, shape.w, shape.h, adjust)
+    return right - left - 2 * shape.text_margin
 
 
 def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
     """Warn when a fixed-size object's widest string is wider than its text
-    area -- its width less `margin` on each side (issue #8). A renderer
-    word-wraps such text (Shape.fit), which would otherwise go unnoticed.
-    A one-character string can't wrap, so it never counts."""
+    area -- its preset's text rectangle less `margin` on each side (issues
+    #8, #12). A renderer word-wraps such text (Shape.fit), which would
+    otherwise go unnoticed. A one-character string can't wrap, so it never
+    counts."""
     if shape.fit or shape.kind not in _FRAMED_TEXT_KINDS:
         return
     widest = max(
@@ -1179,7 +1203,7 @@ def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
     )
     if widest == 0.0:
         return
-    usable = shape.w / _TEXT_AREA_SCALE.get(shape.kind, 1.0) - 2 * shape.text_margin
+    usable = _text_area_width(shape)
     if widest > usable + 1e-6:
         what = label if label is not None else f'{shape.kind} "{shape.texts[0][0]}"'
         ctx.warnings.append(
@@ -1210,7 +1234,13 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     dy, split = _text_placement(shape, ctx)
     shape.h += 2 * abs(dy) + split
     scale = _TEXT_AREA_SCALE.get(shape.kind, 1.0)
-    if shape.kind == "diamond":
+    if shape.kind == "shape":
+        # A preset's text is set in its text rectangle, which for many is
+        # smaller than the shape: a parallelogram's leaves out the slanted
+        # ends. Size the shape for that rectangle to hold the text.
+        assert shape.preset is not None
+        shape.w, shape.h = fit_size(shape.preset, shape.w, shape.h)
+    elif shape.kind == "diamond":
         # A diamond's text sits well inside its points, so needs extra room.
         shape.w *= scale
         shape.h *= scale

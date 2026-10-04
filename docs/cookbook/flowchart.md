@@ -76,11 +76,14 @@ The branches and the loop are drawn afterwards, from the shapes' edges.
 `ht`, and the others copy it with `same`. Give it room: PowerPoint sets a
 diamond's text in the middle half of its width, so it has to be a bit
 over twice as wide as its widest line (plus `margin` on each side).
+pikslide warns when it isn't.
 
 **Inputs and outputs are a preset shape**, `flowChartInputOutput` (see
-[shapes.md](../shapes.md)), with a fixed size copied by `same as PrintI`.
-Don't `fit` one: `fit` sizes a preset shape as if it were a box, and
-the text ends up running into the slanted sides.
+[shapes.md](../shapes.md)), with a fixed size copied by `same as PrintI`,
+so that all four are one size. PowerPoint sets its text between the
+slanted sides, in the middle three fifths of its width: `fit` would make
+one that wide for its text, and a fixed size too narrow for it is a
+warning.
 
 **Lines meet the slanted sides.** A preset shape's edges (`.w`, `.e`) and
 `chop` belong to its bounding box, which sits outside a slanted side.

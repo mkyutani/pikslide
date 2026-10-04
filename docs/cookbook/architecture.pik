@@ -1,0 +1,35 @@
+# A Django web system: the parts that serve a request, and what each one
+# talks to. The server side runs as docker compose services.
+
+boxwid = 1.4in
+boxht = 0.65in
+cylwid = 1.4in
+cylht = 0.8in
+filewid = 1.4in
+fileht = 0.8in
+
+Browser: box "Browser"
+arrow "HTTPS" above right 1.2in
+Nginx: box "Nginx" bold "reverse proxy" small
+arrow "HTTP" above right 0.8in
+Django: box "Django" bold "Gunicorn (WSGI)" small
+arrow "SQL" above right 0.8in
+DB: cylinder "PostgreSQL" bold "database" small
+
+row2 = Django.y - 1.5in
+Static: file "Static files" bold "static/, media/" small at (Nginx.x, row2)
+Redis: cylinder "Redis" bold "cache, task queue" small at (Django.x, row2)
+Worker: box "Celery" bold "background tasks" small at (DB.x, row2)
+
+arrow "files" ljust from Nginx.s to Static.n
+arrow "cache, tasks" ljust from Django.s to Redis.n
+arrow "tasks" above from Worker.w to Redis.e
+arrow "SQL" ljust from Worker.n to DB.s
+
+# The services' frame, drawn behind everything: wide enough for both
+# rows, with room for its title at the top.
+midx = (Nginx.w.x + DB.e.x) / 2
+midy = (DB.n.y + Redis.s.y) / 2
+Compose: box wid (DB.e.x - Nginx.w.x) + 0.5in ht (DB.n.y - Redis.s.y) + 0.8in \
+    at (midx, midy + 0.15in) fill bg1 darker 5% stroke dashed behind Browser
+"docker compose" bold at 0.25in below Compose.n

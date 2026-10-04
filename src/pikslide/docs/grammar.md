@@ -501,8 +501,9 @@ built-in variables above are ordinary variables and can be reassigned to
 change every later default; they are defined by the prelude (see
 [spec.md](spec.md) §3.7). For later objects, `fill` sets the default
 interior color, `color` the default text color, `stroke` the default line
-and outline color, `thickness` the default line thickness and `margin` the
-space between text and an object's sides; and `small`, `medium` and `large` set the three text
+and outline color, `thickness` the default line thickness, `margin` the
+space between text and an object's sides and `vmargin` that between text
+and its top and bottom; and `small`, `medium` and `large` set the three text
 sizes. `print` and `assert` are parsed but have no effect on the drawing.
 
 ## Acknowledgments

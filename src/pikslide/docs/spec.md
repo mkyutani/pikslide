@@ -237,10 +237,13 @@ Japanese (`Jpan`) choice. `bold` and `italic` use those faces.
 space between an object's text and its left and right sides: the text
 frame's side insets, so justified text (`ljust`, `rjust`) stops that far
 from the outline, and a line's `ljust`/`rjust` labels start that far
-from its end (§3.1). `fit` makes an object as wide as its widest line plus
-`margin` on each side. Top and bottom have no inset; a `fit` object's
-height is its lines plus half a line. Like the text sizes,
-each object uses the value in effect where it is written.
+from its end (§3.1). `vmargin` (prelude: `0.05`) is the space between the
+text and the object's top and bottom: the top and bottom insets. The
+prelude's values are PowerPoint's own default insets; a `--template`
+whose default shape sets its own replaces them (§3.8). `fit` makes an
+object as wide as its widest line plus `margin` on each side, and as
+tall as its lines plus `vmargin` above and below. Like the text sizes,
+each object uses the values in effect where it is written.
 
 **Line height.** PowerPoint sets the lines of a paragraph 1.2 times the
 text size apart at single spacing, whatever the font (checked with Latin
@@ -396,7 +399,8 @@ thickness  = 0.015
 fill       = none
 color      = black     # text
 stroke     = black     # lines and outlines
-margin     = 0.1
+margin     = 0.1       # text to sides
+vmargin    = 0.05      # text to top and bottom
 
 small      = 9pt
 medium     = 10.5pt
@@ -416,8 +420,8 @@ emphasis   = accent1
   `bg1`, `bg2`, `link` and `followed`, with `theme` (§3.3). They are ordinary
   variables, so a template's settings file can redefine or add them.
 - **It defines the built-in defaults.** Default object sizes and drawing
-  style (`boxwid`, `linewid`, `charwid`, `margin`, `thickness`, `fill`,
-  `color`, `stroke`, and so on) are defined here, so the defaults are readable and
+  style (`boxwid`, `linewid`, `charwid`, `margin`, `vmargin`, `thickness`,
+  `fill`, `color`, `stroke`, and so on) are defined here, so the defaults are readable and
   changeable in one place.
 - **It defines the three text sizes** (§3.3). Lengths are inches internally,
   so `9pt` is 9/72 in; the PowerPoint writer converts back to points.
@@ -461,7 +465,29 @@ file**, found beside it or named with `--settings FILE`, which holds:
 The settings file is read after the prelude and before the program, so its
 definitions override the prelude's, and the program's override its own. A
 template without one gets the prelude's defaults and its first master's blank
-layout. A
+layout.
+
+**The template's own defaults.** A theme can have a default shape
+(`<a:objectDefaults>`'s `spDef`; PowerPoint's *Set as Default Shape*).
+PowerPoint uses it only for a shape inserted from its own UI, never for
+one already in the file, so pikslide reads it itself: its text insets
+set `margin` (left and right) and `vmargin` (top and bottom). The theme is
+that of the master `layout` chooses (§3.3). So the order is:
+
+1. the prelude;
+2. the template's default shape;
+3. the settings file;
+4. the program.
+
+Only insets the default shape actually writes count, and a side it leaves
+out keeps the prelude's value; when left and right (or top and bottom)
+differ, the larger is used. Nothing else in it is read: its fill, line
+and text colors would apply to every object and every string at once
+(`color` is the text color of a `text` object and a line's labels too); its text
+size would come out larger than `large`; its default line's arrowhead
+would turn every `line` into an arrow; and where and how text is placed
+is pikslide's own. The built-in Office theme's default shape sets no
+insets, so with no `--template` the prelude's values stand. A
 `.pik` still never names the file: the tool finds it from the template, or
 the caller names it (§4).
 

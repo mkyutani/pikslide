@@ -128,7 +128,40 @@ def default_theme_fonts() -> ThemeFonts:
 
 
 def _master_theme_fonts(master) -> ThemeFonts:
-    return theme_fonts_from_xml(master.part.part_related_by(RT.THEME).blob)
+    return theme_fonts_from_xml(_master_theme_xml(master))
+
+
+def _master_theme_xml(master) -> bytes:
+    return master.part.part_related_by(RT.THEME).blob
+
+
+# A text frame's insets, as `bodyPr` names them, and the variable each
+# pair sets.
+_INSET_VARIABLES = {"margin": ("lIns", "rIns"), "vmargin": ("tIns", "bIns")}
+
+
+def template_defaults_from_xml(theme_xml: bytes) -> dict[str, float]:
+    """The variables a template's theme sets for a diagram (docs/spec.md
+    SS3.8): its default shape's (`objectDefaults/spDef`, what PowerPoint
+    calls "Set as Default Shape") text insets, `margin` from the left and
+    right ones and `vmargin` from the top and bottom ones, in inches.
+
+    PowerPoint itself uses these only for a shape inserted from its own
+    UI, never for one already in the file, so they take effect only if
+    pikslide reads them. Only insets written there count: one left out is
+    not set, rather than PowerPoint's own default, and a theme style a
+    shape refers to (`lnRef` and the like) is not followed. When a pair's
+    two sides differ, the larger one is used, so text is never closer to
+    an edge than the template has it."""
+    body_pr = parse_xml(theme_xml).find(f"{qn('a:objectDefaults')}/{qn('a:spDef')}/{qn('a:bodyPr')}")
+    if body_pr is None:
+        return {}
+    defaults = {}
+    for name, sides in _INSET_VARIABLES.items():
+        given = [int(body_pr.get(side)) for side in sides if body_pr.get(side) is not None]
+        if given:
+            defaults[name] = max(given) / EMU_PER_INCH
+    return defaults
 
 
 def default_theme_colors() -> dict[str, int]:
@@ -243,12 +276,15 @@ def resolve_for_pptx(
     layout `layout_name` (--layout), or else the settings file's `layout`
     (docs/spec.md SS3.8) -- or the built-in Office theme with no template.
     A font the deck asks for that isn't installed is reported in the
-    result's `warnings`.
+    result's `warnings`. That theme's default shape also gives `margin`
+    and `vmargin` their values (template_defaults_from_xml()), over the
+    prelude's and under the settings file's.
 
     `base_dir` is the source file's own directory, against which an
     `image` object's path resolves (docs/spec.md SS3.5). `settings_text`/
     `settings_base_dir` are a template's settings file (docs/spec.md
     SS3.8), if any -- see find_settings_file()."""
+    template_defaults = {}
     if template_path is None:
         theme_fonts = default_theme_fonts()
     else:
@@ -260,13 +296,16 @@ def resolve_for_pptx(
             ).layout_name
         prs, tmp_path = _open_template_base(template_path)
         try:
-            theme_fonts = _master_theme_fonts(_resolve_template_layout(prs, layout_name).slide_master)
+            master = _resolve_template_layout(prs, layout_name).slide_master
+            theme_fonts = _master_theme_fonts(master)
+            template_defaults = template_defaults_from_xml(_master_theme_xml(master))
         finally:
             if tmp_path is not None:
                 os.remove(tmp_path)
     metrics = PilFontMetrics(theme_fonts=theme_fonts, font_index=font_index)
     result = resolve_layout(
-        doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir
+        doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir,
+        template_defaults=template_defaults,
     )
     substitute = os.path.basename(metrics.substitute) if metrics.substitute else "a flat estimate"
     result.stand_ins += [
@@ -461,18 +500,18 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
     # is for a fixed, author-chosen size instead, which this isn't.
     tf.word_wrap = not shape.fit
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    # The side margins are `margin` (docs/spec.md SS3.3), which
-    # _autosize_text() already added to a `fit` box's width -- not
-    # PowerPoint's own defaults. Top and bottom have none: a `fit` box's
-    # height already has room above and below the lines.
+    # The insets are `margin` at the sides and `vmargin` at the top and
+    # bottom (docs/spec.md SS3.3), which _autosize_text() already added to
+    # a `fit` box's size -- not PowerPoint's own defaults.
     tf.margin_left = tf.margin_right = Inches(shape.text_margin)
-    tf.margin_top = tf.margin_bottom = 0
+    top = bottom = shape.text_vmargin
     # above/below (Shape.text_dy): the text is still middle-anchored, but
     # in an area cut short on the far side, so its middle moves by text_dy.
     if shape.text_dy > 0:
-        tf.margin_bottom = Inches(2 * shape.text_dy)
+        bottom += 2 * shape.text_dy
     elif shape.text_dy < 0:
-        tf.margin_top = Inches(-2 * shape.text_dy)
+        top += -2 * shape.text_dy
+    tf.margin_top, tf.margin_bottom = Inches(top), Inches(bottom)
     # An explicit above/below split (Shape.text_split): open space between
     # the halves, before the first below-slotted string.
     first_below = None

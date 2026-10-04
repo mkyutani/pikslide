@@ -314,10 +314,11 @@ ENTRIES: tuple[Entry, ...] = (
                "from the one named.", example="box same as Web", group="attribute"),
     Entry(("fit",), "sizes the object to its text",
           body="Makes the object just big enough for its text, measured in the fonts the "
-               "deck is drawn in, plus margin at each side. A shape whose text goes in less "
+               "deck is drawn in, plus margin at each side and vmargin above and below. A "
+               "shape whose text goes in less "
                "than its whole box is made bigger to match: a circle or a diamond, or a preset "
                "shape such as flowChartInputOutput, whose text leaves out its slanted ends.",
-          example='box "a longer label" fit', group="attribute", see=("margin",)),
+          example='box "a longer label" fit', group="attribute", see=("margin", "vmargin")),
     Entry(("behind",), "draws the object just below another in z-order",
           synopsis=("behind OBJECT",), example="box fill bg2 behind Web", group="attribute"),
     Entry(("alt",), "an image's accessibility description", synopsis=('alt "TEXT"',),
@@ -402,7 +403,7 @@ _VARIABLE_DOCS = {
     "fill": "default fill color",
     "lineht": "default length of a vertical line",
     "linewid": "default length of a horizontal line",
-    "margin": "space between text and an object's sides, or a line's ends",
+    "margin": "space between text and an object's sides, or a line's ends; a --template may set it",
     "movewid": "default length of a move",
     "ovalht": "default oval height",
     "ovalwid": "default oval width",
@@ -411,6 +412,7 @@ _VARIABLE_DOCS = {
     "textht": "default height of a text object with no strings",
     "textwid": "default width of a text object with no strings",
     "thickness": "default line thickness",
+    "vmargin": "space between text and an object's top and bottom; a --template may set it",
     "small": "the small text size",
     "medium": "the medium (default) text size",
     "large": "the large text size",

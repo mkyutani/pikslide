@@ -368,6 +368,9 @@ class Shape:
     text_margin: float = 0.0
     """Like `text_sizes`, but for `margin` (docs/spec.md SS3.3): the
     space between the text and the object's left and right sides."""
+    text_vmargin: float = 0.0
+    """Like `text_margin`, but for `vmargin`: the space between the text
+    and the object's top and bottom."""
     label_width: float = 0.0
     """A line's labels' shared width (docs/spec.md SS3.1): its widest
     label's, measured as `fit` measures, so that the labels line up on a
@@ -735,6 +738,7 @@ class _Ctx:
         base_dir: str = ".",
         settings_text: str | None = None,
         settings_base_dir: str = ".",
+        template_defaults: dict[str, PikValue] | None = None,
     ) -> None:
         self.vars: dict[str, PikValue] = {}
         self.scope_stack: list[dict[str, Shape]] = [{}]
@@ -749,6 +753,9 @@ class _Ctx:
         # program starts (_eval_assignment() checks this).
         self._layout_assignment_allowed = True
         _load_prelude(self)
+        # The template's own defaults (docs/spec.md SS3.8): over the
+        # prelude's, under the settings file's.
+        self.vars.update(template_defaults or {})
         if settings_text is not None:
             _load_settings(self, settings_text, settings_base_dir)
         self._layout_assignment_allowed = False
@@ -1229,8 +1236,7 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     sizes = shape.text_sizes
     widest = max((m.text_width(text, flags, sizes, shape.typeface) for text, flags in shape.texts), default=0.0)
     shape.w = widest + 2 * shape.text_margin
-    # The lines, plus half a line: a quarter of one above and below.
-    shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 0.5 * m.line_height([], sizes)
+    shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 2 * shape.text_vmargin
     # The object stays centered on its own position with the text shifted
     # off that center, so it grows by the shift on both sides (as pikchr's
     # own size-to-fit does), keeping .n/.s clear of the text.
@@ -1579,6 +1585,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
     text_sizes_now = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
     typeface_now = _as_string(ctx.vars.get("typeface", ""), "typeface")
     text_margin_now = _as_number(ctx.vars.get("margin", 0.0), "margin")
+    text_vmargin_now = _as_number(ctx.vars.get("vmargin", 0.0), "vmargin")
 
     if isinstance(base, ast.BlockBase):
         ctx.scope_stack.append({})
@@ -1623,6 +1630,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
     shape.text_sizes = text_sizes_now
     shape.typeface = typeface_now
     shape.text_margin = text_margin_now
+    shape.text_vmargin = text_vmargin_now
     shape.in_dir = direction
     shape.out_dir = direction
 
@@ -1801,6 +1809,7 @@ def resolve_layout(
     base_dir: str = ".",
     settings_text: str | None = None,
     settings_base_dir: str = ".",
+    template_defaults: dict[str, PikValue] | None = None,
 ) -> LayoutResult:
     """Resolve a parsed pik :class:`~pikslide.pik.ast.Document` into concrete,
     ready-to-render geometry. See the module docstring for what this
@@ -1820,8 +1829,13 @@ def resolve_layout(
     SS3.8), read after the prelude and before `doc` itself, so its
     definitions override the prelude's and the program's override its in
     turn; `settings_base_dir` is the directory its own `include`s (if any)
-    resolve against."""
-    ctx = _Ctx(metrics, image_metrics, base_dir, settings_text, settings_base_dir)
+    resolve against.
+
+    `template_defaults`, if given, are variables a `--template` itself sets
+    (docs/spec.md SS3.8: its theme's default shape's text insets, as
+    `margin`/`vmargin`), assigned after the prelude and before the
+    settings file."""
+    ctx = _Ctx(metrics, image_metrics, base_dir, settings_text, settings_base_dir, template_defaults)
     shapes, _direction, _bbox = _layout_statements(doc.statements, DIR_RIGHT, ctx)
     flat = flatten_shapes(shapes)
     if flat:

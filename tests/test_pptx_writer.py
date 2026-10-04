@@ -246,10 +246,10 @@ def test_fit_sizing_tracks_a_medium_override_at_render_time_too(tmp_path: pathli
 
 def test_fit_height_is_powerpoints_line_pitch_per_line(tmp_path: pathlib.Path):
     # Issue #10: PowerPoint sets lines 1.2 times the text size apart, so
-    # four lines at 12 pt need 4 x 14.4 pt, plus half a line.
+    # four lines at 12 pt need 4 x 14.4 pt, plus `vmargin` above and below.
     shape = render('box "a" large "b" large "c" large "d" large fit\n', tmp_path).slides[0].shapes[0]
     line = 1.2 * 12 / 72
-    assert shape.height.inches == pytest.approx(4 * line + 0.5 * 1.2 * 10.5 / 72, abs=1e-4)
+    assert shape.height.inches == pytest.approx(4 * line + 2 * 0.05, abs=1e-4)
 
 
 def test_every_paragraph_is_single_spaced(tmp_path: pathlib.Path):
@@ -354,12 +354,13 @@ def test_line_and_image_shapes_are_named_too(tmp_path: pathlib.Path):
     assert names == ["arrow 1", "image 1"]
 
 
-def test_text_frame_side_insets_are_margin(tmp_path: pathlib.Path):
-    prs = render('box "a" width 2\nmargin = 0.2\nbox "b" width 2\n', tmp_path)
+def test_text_frame_insets_are_margin_and_vmargin(tmp_path: pathlib.Path):
+    prs = render('box "a" width 2\nmargin = 0.2\nvmargin = 0.08\nbox "b" width 2\n', tmp_path)
     a, b = (s for s in prs.slides[0].shapes if s.has_text_frame)
     assert (a.text_frame.margin_left, a.text_frame.margin_right) == (Inches(0.1), Inches(0.1))
     assert (b.text_frame.margin_left, b.text_frame.margin_right) == (Inches(0.2), Inches(0.2))
-    assert a.text_frame.margin_top == a.text_frame.margin_bottom == 0
+    assert (a.text_frame.margin_top, a.text_frame.margin_bottom) == (Inches(0.05), Inches(0.05))
+    assert (b.text_frame.margin_top, b.text_frame.margin_bottom) == (Inches(0.08), Inches(0.08))
 
 
 def test_east_asian_text_is_marked_japanese(tmp_path: pathlib.Path):
@@ -405,6 +406,76 @@ def test_fit_measures_with_the_templates_theme_fonts(tmp_path: pathlib.Path):
     # Not installed: measured with a substitute, and said so.
     assert any("Latin Theme Font" in w for w in result.stand_ins)
     assert any("和文テーマフォント" in w for w in result.stand_ins)
+
+
+# ---------------------------------------------------------------------------
+# A template's own defaults (docs/spec.md SS3.8): its theme's default
+# shape's text insets, as `margin` and `vmargin`.
+# ---------------------------------------------------------------------------
+
+_BUILT_IN_SP_DEF = "<a:spDef><a:spPr/><a:bodyPr/>"
+
+
+def _theme_with_default_shape(body_pr: str) -> bytes:
+    """The built-in template's theme, with `body_pr` as its default
+    shape's `<a:bodyPr>`."""
+    src = pathlib.Path(pptx.__file__).parent / "templates" / "default.pptx"
+    with zipfile.ZipFile(src) as z:
+        theme = z.read("ppt/theme/theme1.xml").decode("utf-8")
+    assert _BUILT_IN_SP_DEF in theme
+    return theme.replace(_BUILT_IN_SP_DEF, f"<a:spDef><a:spPr/>{body_pr}").encode("utf-8")
+
+
+def _template_with_default_shape(tmp_path: pathlib.Path, body_pr: str) -> pathlib.Path:
+    src = pathlib.Path(pptx.__file__).parent / "templates" / "default.pptx"
+    out = tmp_path / "template.pptx"
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "ppt/theme/theme1.xml":
+                data = _theme_with_default_shape(body_pr)
+            zout.writestr(item, data)
+    return out
+
+
+_TEMPLATE_INSETS = '<a:bodyPr lIns="54000" tIns="28800" rIns="54000" bIns="28800"/>'
+
+
+def test_template_default_shape_insets_become_margin_and_vmargin(tmp_path: pathlib.Path):
+    # Issue #15: PowerPoint applies them only to a shape inserted from its
+    # own UI, so pikslide writes them itself.
+    template = _template_with_default_shape(tmp_path, _TEMPLATE_INSETS)
+    [shape] = resolve_for_pptx(parse('box "a" fit\n'), template_path=str(template)).shapes
+    assert (shape.text_margin, shape.text_vmargin) == pytest.approx((54000 / 914400, 28800 / 914400))
+    # With no template, the prelude's.
+    [shape] = resolve_for_pptx(parse('box "a" fit\n')).shapes
+    assert (shape.text_margin, shape.text_vmargin) == (0.1, 0.05)
+
+
+def test_settings_file_and_program_override_the_template_defaults(tmp_path: pathlib.Path):
+    template = _template_with_default_shape(tmp_path, _TEMPLATE_INSETS)
+    result = resolve_for_pptx(
+        parse('box "a"\nmargin = 0.3\nbox "b"\n'), template_path=str(template), settings_text="vmargin = 0.07\n"
+    )
+    a, b = result.shapes
+    assert (a.text_margin, a.text_vmargin) == pytest.approx((54000 / 914400, 0.07))
+    assert (b.text_margin, b.text_vmargin) == pytest.approx((0.3, 0.07))
+
+
+@pytest.mark.parametrize(
+    ("body_pr", "expected"),
+    [
+        ("<a:bodyPr/>", {}),  # the built-in Office theme's: nothing to set
+        ('<a:bodyPr wrap="none" anchor="ctr"/>', {}),
+        # Only the insets written there; when the two sides differ, the larger.
+        ('<a:bodyPr lIns="45720" rIns="91440"/>', {"margin": 0.1}),
+        ('<a:bodyPr bIns="0"/>', {"vmargin": 0.0}),
+    ],
+)
+def test_template_defaults_are_the_insets_written_in_the_default_shape(body_pr: str, expected: dict):
+    from pikslide.pptx_writer import template_defaults_from_xml
+
+    assert template_defaults_from_xml(_theme_with_default_shape(body_pr)) == pytest.approx(expected)
 
 
 def test_fit_measures_with_typeface_over_the_theme(tmp_path: pathlib.Path):

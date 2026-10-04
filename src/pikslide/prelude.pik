@@ -181,7 +181,11 @@ link = theme "hlink"
 followed = theme "folHlink"
 
 # --- Built-in defaults ---------------------------------------------------
-# Default object sizes and drawing style, all in inches.
+# Default object sizes and drawing style, all in inches. `margin` and
+# `vmargin`, the space between an object's text and its sides and its top
+# and bottom, are PowerPoint's own default text insets; a --template
+# whose theme sets its default shape's insets replaces them (docs/spec.md
+# SS3.8).
 
 arcrad = 0.25
 arrowhead = 2.0
@@ -218,6 +222,7 @@ stroke = black
 textht = 0.5
 textwid = 0.75
 thickness = 0.015
+vmargin = 0.05
 
 # --- Text sizes (docs/spec.md SS3.3) --------------------------------------
 # Three fixed sizes in points. `small`/`medium`/`large` are reserved words (they also work as

@@ -931,10 +931,14 @@ _NON_CONTENT_PLACEHOLDER_TYPES = {
 }
 
 
+def _is_content(placeholder) -> bool:
+    return placeholder.placeholder_format.type not in _NON_CONTENT_PLACEHOLDER_TYPES
+
+
 def _content_placeholder(layout):
     """`layout`'s content placeholder, if it has exactly one, as a Title
     and Content layout does; else None."""
-    found = [p for p in layout.placeholders if p.placeholder_format.type not in _NON_CONTENT_PLACEHOLDER_TYPES]
+    found = [p for p in layout.placeholders if _is_content(p)]
     return found[0] if len(found) == 1 else None
 
 
@@ -947,35 +951,34 @@ def _placeholder_rect(placeholder) -> tuple[float, float, float, float] | None:
 
 def _content_area(
     prs: Presentation, layout, settings_area: tuple[float, float, float, float] | None
-) -> tuple[tuple[float, float, float, float], int | None, str]:
+) -> tuple[tuple[float, float, float, float], str]:
     """Where on a slide made from `layout` the diagram goes (docs/spec.md
-    SS3.8): (left, top, width, height) in inches; the idx of the layout's
-    placeholder it takes the place of, if any; and what the area is, for
-    a message. It is the settings file's content area, if it sets one;
+    SS3.8): (left, top, width, height) in inches, and what the area is,
+    for a message. It is the settings file's content area, if it sets one;
     else the layout's content placeholder, if it has exactly one
     (_content_placeholder()); else its master's body placeholder, where
     the template sets text when a layout says nothing else, and which
     spans a two-column layout's both columns; else the whole slide."""
     if settings_area is not None:
-        return settings_area, None, "the settings file's content area"
+        return settings_area, "the settings file's content area"
     placeholder = _content_placeholder(layout)
     if placeholder is not None:
         rect = _placeholder_rect(placeholder)
         if rect is not None:
-            return rect, placeholder.placeholder_format.idx, f"the {placeholder.name!r} placeholder of layout {layout.name!r}"
+            return rect, f"the {placeholder.name!r} placeholder of layout {layout.name!r}"
     for placeholder in layout.slide_master.placeholders:
         if placeholder.placeholder_format.type == PP_PLACEHOLDER.BODY:
             rect = _placeholder_rect(placeholder)
             if rect is not None:
-                return rect, None, f"the {placeholder.name!r} placeholder of the slide master"
-    return (0.0, 0.0, Emu(prs.slide_width).inches, Emu(prs.slide_height).inches), None, "the slide"
+                return rect, f"the {placeholder.name!r} placeholder of the slide master"
+    return (0.0, 0.0, Emu(prs.slide_width).inches, Emu(prs.slide_height).inches), "the slide"
 
 
 def _content_area_overflow(prs: Presentation, layout, result: LayoutResult) -> list[str]:
     """A warning, if the diagram is wider or taller than the content area
     it goes in: it is never scaled to fit (docs/spec.md SS4), so it runs
     past it, to the right and down."""
-    (_left, _top, area_w, area_h), _idx, what = _content_area(prs, layout, result.content_area)
+    (_left, _top, area_w, area_h), what = _content_area(prs, layout, result.content_area)
     x0, y0, x1, y1 = _content_bbox(result)
     w, h = x1 - x0, y1 - y0
     if w <= area_w + 1e-6 and h <= area_h + 1e-6:
@@ -1006,18 +1009,19 @@ def write_pptx_from_template(
     content area (SS3.8, _content_area()), its top left at the area's
     top left, so the master's and the layout's own graphics (a title
     rule, a footer) stay where the template has them, clear of it. The
-    layout's placeholders come along when `layout_name` names it, except
-    the one whose place the diagram takes. The default, empty
+    layout's title comes along when `layout_name` names it, but not its
+    content placeholders, whose place the diagram takes, however many it
+    has. The default, empty
     `layout_name` brings none: it resolves to a Title and Content layout
     (_resolve_template_layout()) for where its content goes, not for an
     empty title nobody asked for."""
     prs, tmp_path = _open_template_base(template_path)
     try:
         layout = _resolve_template_layout(prs, layout_name)
-        (left, top, _w, _h), content_idx, _what = _content_area(prs, layout, result.content_area)
+        (left, top, _w, _h), _what = _content_area(prs, layout, result.content_area)
         slide = prs.slides.add_slide(layout)
         for placeholder in list(slide.placeholders):
-            if not layout_name or placeholder.placeholder_format.idx == content_idx:
+            if not layout_name or _is_content(placeholder):
                 placeholder.element.getparent().remove(placeholder.element)
         _add_all_shapes(slide, result.shapes, _Transform(_content_bbox(result), 0.0, origin=(left, top)))
         prs.save(path)

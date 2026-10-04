@@ -528,8 +528,8 @@ content_bottom = 6.9in
   new slide, the diagram going where its content placeholder was. With no
   such layout, it is the first layout of type `blank` in the first master,
   or that master's first layout. A layout named here or with `--layout`
-  brings its placeholders along, except the content placeholder whose
-  place the diagram takes. If two masters have a layout of that name, the first one
+  brings its title along, but not its content placeholders, however many
+  it has: the diagram takes their place. If two masters have a layout of that name, the first one
   found wins. A name that no layout has is an error that lists the names it
   does have. `layout` can be set only in a settings file: assigning it in a
   program is an error, because a `.pik` never chooses the deck's structure.

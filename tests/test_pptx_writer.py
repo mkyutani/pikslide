@@ -739,6 +739,13 @@ def test_named_layout_puts_the_diagram_in_place_of_its_content_placeholder(tmp_p
     assert (box.left, box.top) == (content.left, content.top)
 
 
+def test_named_layout_with_two_content_placeholders_loses_both(tmp_path: pathlib.Path):
+    # The diagram goes in the master's body area, across both columns.
+    tmpl = _template_deck(tmp_path)
+    prs = _from_template('box "Web"\n', tmpl, tmp_path, layout_name="Two Content")
+    assert [p.name for p in prs.slides[0].placeholders] == ["Title 1"]
+
+
 def test_settings_file_content_area_wins_over_the_layouts(tmp_path: pathlib.Path):
     from pikslide.pptx_writer import write_pptx_from_template
 
@@ -813,7 +820,7 @@ def test_content_area_of_each_layout(layout_name: str, expected):
 
     prs = Presentation()
     layout = next(layout for layout in prs.slide_layouts if layout.name == layout_name)
-    area, _idx, what = _content_area(prs, layout, None)
+    area, what = _content_area(prs, layout, None)
     assert area == pytest.approx(expected[0], abs=0.01)
     assert expected[1] in what
 
@@ -842,12 +849,10 @@ def test_default_layout_brings_no_placeholders_even_when_it_has_some(tmp_path: p
     assert [s.name for s in slide.shapes] == ["box 1"]
 
 
-def test_template_named_layout_brings_its_placeholders(tmp_path: pathlib.Path):
+def test_template_named_layout_brings_its_title(tmp_path: pathlib.Path):
     tmpl = _template_deck(tmp_path)
     prs = _from_template('box "Web"\n', tmpl, tmp_path, layout_name="Title and Content")
-    names = [s.name for s in prs.slides[0].shapes]
-    assert "box 1" in names
-    assert len(names) > 1  # the layout's own placeholders came along too
+    assert [s.name for s in prs.slides[0].shapes] == ["Title 1", "box 1"]
 
 
 def test_template_unknown_layout_name_lists_the_known_ones(tmp_path: pathlib.Path):

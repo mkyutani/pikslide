@@ -491,7 +491,7 @@ whether its *value* also comes from the prelude or a settings file.
 (`"Label" large`), not because their values are prelude-supplied; the
 same is true of `fill`/`color`/`stroke`/`thickness`, which are attribute
 keywords and lvalues both. `margin`, by contrast, is an ordinary variable. Names that are never used as syntax —
-`content_left`, `layout`, `typeface`, `primary`, `accent1`, the CSS color
+`vmargin`, `layout`, `typeface`, `primary`, `accent1`, the CSS color
 names, … — are ordinary `ID`s and are never reserved, however important
 their value is.
 

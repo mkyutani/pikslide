@@ -450,12 +450,6 @@ class LayoutResult:
     prelude or a settings file, never a program (`_eval_assignment()`
     enforces this) -- used only when making a new slide from a
     `--template`."""
-    content_area: tuple[float, float, float, float] | None = None
-    """(left, top, width, height) in inches, from a settings file's
-    `content_left`/`content_top`/`content_right`/`content_bottom` (docs/
-    spec.md SS3.8): where on a `--template`'s slide the diagram goes.
-    `None` when the settings file doesn't set them, and the writer then
-    takes the area from the slide layout itself."""
     warnings: list[str] = field(default_factory=list)
     """Problems with the diagram that didn't stop layout (e.g. text
     overflowing a fixed-size box). --strict leaves these alone."""
@@ -661,12 +655,6 @@ def _prelude_document() -> ast.Document:
     return _prelude_document_cache
 
 
-# Where a diagram goes on a --template's slide (docs/spec.md SS3.8): all
-# four or none, in a settings file only.
-CONTENT_AREA_VARS = ("content_left", "content_top", "content_right", "content_bottom")
-_SETTINGS_ONLY = ("layout", *CONTENT_AREA_VARS)
-
-
 def _eval_assignment(stmt: ast.AssignStatement, ctx: "_Ctx") -> None:
     """Evaluate one `name = expr`/`+=`/`-=`/`*=`/`/=` statement into
     `ctx.vars` -- shared by the prelude, a settings file, an included
@@ -674,13 +662,12 @@ def _eval_assignment(stmt: ast.AssignStatement, ctx: "_Ctx") -> None:
     the same rules (docs/spec.md SS2: "arithmetic on a color is an
     error"; fill/color are always coerced to a Color or None).
 
-    `layout` and the content area (docs/spec.md SS3.8, ext) can be set
-    only while loading the prelude or a settings file, never by a program
-    (or anything a program brings in via `include`): "a .pik never chooses
-    the deck's structure"."""
-    if stmt.name in _SETTINGS_ONLY and not ctx._layout_assignment_allowed:
+    `layout` (docs/spec.md SS3.8, ext) can be set only while loading the
+    prelude or a settings file, never by a program (or anything a program
+    brings in via `include`): "a .pik never chooses the deck's structure"."""
+    if stmt.name == "layout" and not ctx._layout_assignment_allowed:
         raise LayoutError(
-            f"'{stmt.name}' can only be set in a template's settings file, not in a "
+            "'layout' can only be set in a template's settings file, not in a "
             "program (docs/spec.md SS3.8): a .pik never chooses the deck's structure"
         )
     current = ctx.vars.get(stmt.name, 0.0)
@@ -1864,19 +1851,5 @@ def resolve_layout(
     layout_name = _as_string(ctx.vars.get("layout", ""), "layout")
     return LayoutResult(
         shapes=shapes, bbox=bbox, text_sizes=text_sizes, typeface=typeface, layout_name=layout_name,
-        content_area=_content_area(ctx), warnings=list(ctx.warnings),
+        warnings=list(ctx.warnings),
     )
-
-
-def _content_area(ctx: _Ctx) -> tuple[float, float, float, float] | None:
-    given = [name for name in CONTENT_AREA_VARS if name in ctx.vars]
-    if not given:
-        return None
-    if len(given) < len(CONTENT_AREA_VARS):
-        missing = ", ".join(name for name in CONTENT_AREA_VARS if name not in given)
-        raise LayoutError(f"the content area needs all four of {', '.join(CONTENT_AREA_VARS)}: {missing} is not set")
-    left, top, right, bottom = (_as_number(ctx.vars[name], name) for name in CONTENT_AREA_VARS)
-    if right <= left or bottom <= top:
-        raise LayoutError("the content area is empty: content_right must be right of content_left, "
-                          "and content_bottom below content_top")
-    return left, top, right - left, bottom - top

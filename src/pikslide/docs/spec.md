@@ -461,9 +461,7 @@ file**, found beside it or named with `--settings FILE`, which holds:
 - the accent colors: which of the theme's colors the diagram uses for
   emphasis. `primary` and `emphasis` are the standard names (§3.7); a
   template may define others;
-- the default text sizes (`small`, `medium`, `large`, §3.7);
-- the content area: where on the slide the diagram goes (`content_left`,
-  `content_top`, `content_right`, `content_bottom`).
+- the default text sizes (`small`, `medium`, `large`, §3.7).
 
 The settings file is read after the prelude and before the program, so its
 definitions override the prelude's, and the program's override its own. A
@@ -501,10 +499,6 @@ medium        = 12pt       # this template's diagram text size
 primary       = text2      # the standard accent-color names
 emphasis      = accent1
 warning       = accent5    # any further names the template wants
-content_left   = 0.5in     # where the diagram goes on the slide
-content_top    = 1.2in
-content_right  = 12.8in
-content_bottom = 6.9in
 ```
 
 - **Format.** The prelude's own: a file of definitions only, as in §3.6. It
@@ -541,16 +535,13 @@ content_bottom = 6.9in
   settings file's (so a script choosing a layout per template needs no
   settings file written for it); it needs `--template`.
 - **The content area** is the rectangle of the slide the diagram goes in,
-  at its top left (§4): `content_left` and `content_right` are measured
-  from the slide's left edge, `content_top` and `content_bottom` from its
-  top, as lengths (`0.5in`, `36pt`). Like `layout`, they can be set only in a
-  settings file, and then all four of them. Without them, the area is the
-  layout's content placeholder, when it has exactly one (as above);
-  otherwise, as on a blank or a two-column layout, the master's body
-  placeholder, which is where the template sets text when a layout says
-  nothing else; with none of those, the whole slide. Either way it leaves
-  the master's and the layout's own graphics (a title rule, a logo, a
-  footer) where the template has them.
+  at its top left (§4). It comes from the layout: its content placeholder,
+  when it has exactly one (as above); otherwise, as on a blank or a
+  two-column layout, the master's body placeholder, which is where the
+  template sets text when a layout says nothing else; with none of those,
+  the whole slide. It leaves the master's and the layout's own graphics (a
+  title rule, a logo, a footer) where the template has them. To put the
+  diagram somewhere else, choose another layout, or change the template's.
 - **Strings.** A variable can hold a string, written as in text
   (`typeface = "…"`). A string is not a number and cannot be used in an
   expression; in v1 strings serve settings only, and a string variable is not

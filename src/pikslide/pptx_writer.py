@@ -976,18 +976,14 @@ def _placeholder_rect(placeholder) -> tuple[float, float, float, float] | None:
     return tuple(Emu(v).inches for v in values)
 
 
-def _content_area(
-    prs: Presentation, layout, settings_area: tuple[float, float, float, float] | None
-) -> tuple[tuple[float, float, float, float], str]:
+def _content_area(prs: Presentation, layout) -> tuple[tuple[float, float, float, float], str]:
     """Where on a slide made from `layout` the diagram goes (docs/spec.md
     SS3.8): (left, top, width, height) in inches, and what the area is,
-    for a message. It is the settings file's content area, if it sets one;
-    else the layout's content placeholder, if it has exactly one
-    (_content_placeholder()); else its master's body placeholder, where
-    the template sets text when a layout says nothing else, and which
-    spans a two-column layout's both columns; else the whole slide."""
-    if settings_area is not None:
-        return settings_area, "the settings file's content area"
+    for a message. It is the layout's content placeholder, if it has
+    exactly one (_content_placeholder()); else its master's body
+    placeholder, where the template sets text when a layout says nothing
+    else, and which spans a two-column layout's both columns; else the
+    whole slide."""
     placeholder = _content_placeholder(layout)
     if placeholder is not None:
         rect = _placeholder_rect(placeholder)
@@ -1005,7 +1001,7 @@ def _content_area_overflow(prs: Presentation, layout, result: LayoutResult) -> l
     """A warning, if the diagram is wider or taller than the content area
     it goes in: it is never scaled to fit (docs/spec.md SS4), so it runs
     past it, to the right and down."""
-    (_left, _top, area_w, area_h), what = _content_area(prs, layout, result.content_area)
+    (_left, _top, area_w, area_h), what = _content_area(prs, layout)
     x0, y0, x1, y1 = _content_bbox(result)
     w, h = x1 - x0, y1 - y0
     if w <= area_w + 1e-6 and h <= area_h + 1e-6:
@@ -1045,7 +1041,7 @@ def write_pptx_from_template(
     prs, tmp_path = _open_template_base(template_path)
     try:
         layout = _resolve_template_layout(prs, layout_name)
-        (left, top, _w, _h), _what = _content_area(prs, layout, result.content_area)
+        (left, top, _w, _h), _what = _content_area(prs, layout)
         slide = prs.slides.add_slide(layout)
         for placeholder in list(slide.placeholders):
             if not layout_name or _is_content(placeholder):

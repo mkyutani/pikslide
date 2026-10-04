@@ -746,32 +746,6 @@ def test_named_layout_with_two_content_placeholders_loses_both(tmp_path: pathlib
     assert [p.name for p in prs.slides[0].placeholders] == ["Title 1"]
 
 
-def test_settings_file_content_area_wins_over_the_layouts(tmp_path: pathlib.Path):
-    from pikslide.pptx_writer import write_pptx_from_template
-
-    tmpl = _template_deck(tmp_path)
-    settings = "content_left = 1in\ncontent_top = 2in\ncontent_right = 9in\ncontent_bottom = 7in\n"
-    result = resolve_for_pptx(parse('box "Web"\n'), template_path=str(tmpl), settings_text=settings)
-    assert result.content_area == (1, 2, 8, 5)
-    write_pptx_from_template(result, str(tmpl), str(tmp_path / "out.pptx"))
-    [box] = Presentation(str(tmp_path / "out.pptx")).slides[0].shapes
-    assert (box.left.inches, box.top.inches) == pytest.approx((1, 2), abs=1e-4)
-
-
-@pytest.mark.parametrize(
-    ("settings", "program", "message"),
-    [
-        ("", "content_left = 1in\n", "'content_left' can only be set in a template's settings file"),
-        ("content_left = 1in\ncontent_top = 1in\n", "", "content_right, content_bottom is not set"),
-        ("content_left = 2in\ncontent_top = 1in\ncontent_right = 1in\ncontent_bottom = 5in\n", "",
-         "the content area is empty"),
-    ],
-)
-def test_content_area_errors(settings: str, program: str, message: str):
-    with pytest.raises(LayoutError, match=message):
-        resolve_for_pptx(parse(program + 'box "Web"\n'), settings_text=settings)
-
-
 def test_diagram_bigger_than_the_content_area_is_a_warning(tmp_path: pathlib.Path):
     # Never scaled to fit (docs/spec.md SS4): it runs past the area.
     tmpl = _template_deck(tmp_path)
@@ -820,7 +794,7 @@ def test_content_area_of_each_layout(layout_name: str, expected):
 
     prs = Presentation()
     layout = next(layout for layout in prs.slide_layouts if layout.name == layout_name)
-    area, what = _content_area(prs, layout, None)
+    area, what = _content_area(prs, layout)
     assert area == pytest.approx(expected[0], abs=0.01)
     assert expected[1] in what
 

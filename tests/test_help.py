@@ -96,7 +96,7 @@ def test_color_help_lists_the_color_names():
 
 @pytest.mark.parametrize("topic", ["grammar", "spec", "keywords", "classes", "attributes", "flags",
                                    "colors", "shapes", "variables", "prelude", "boxwid", "NE", "Arrow",
-                                   "wedgeRectCallout", "template", "settings", "content_left", "vmargin"])
+                                   "wedgeRectCallout", "template", "settings", "vmargin"])
 def test_topics_render(topic: str):
     assert render(topic, PLAIN)
 
@@ -157,8 +157,7 @@ def test_syntax_error_topics(line, near, expected):
     [
         "no slide layout named 'Nope' in this template; it has: ...",
         "2 slide layouts in this template are named 'Title Only': ...",
-        "the content area needs all four of content_left, ...",
-        "'content_left' can only be set in a template's settings file, not in a program ...",
+        "'layout' can only be set in a template's settings file, not in a program ...",
     ],
 )
 def test_template_errors_point_to_the_template_topic(message: str):

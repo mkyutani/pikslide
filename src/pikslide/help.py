@@ -936,12 +936,11 @@ LAYOUT
 CONTENT AREA
     The diagram's top left goes at the content area's top left. It is
     never scaled: one bigger than the area runs past it, with a warning.
-    The area is the settings file's content_left, content_top,
-    content_right and content_bottom, if it sets all four; else the
-    layout's one content placeholder; else the master's body placeholder
-    (on a blank or a two-column layout); else the whole slide. A layout
-    named with --layout or `layout` keeps its title; the diagram takes the
-    place of its content placeholders.
+    The area is the layout's one content placeholder; else the master's
+    body placeholder (on a blank or a two-column layout); else the whole
+    slide. To put the diagram somewhere else, choose another layout. A
+    layout named with --layout or `layout` keeps its title; the diagram
+    takes the place of its content placeholders.
 
 SETTINGS FILE
     <template name>.theme.pik beside the template, or --settings FILE:
@@ -951,13 +950,9 @@ SETTINGS FILE
         typeface       = "BIZ UDPゴシック"
         medium         = 12pt
         primary        = text2
-        content_left   = 0.5in                 # all four, or none
-        content_top    = 1.2in
-        content_right  = 12.8in
-        content_bottom = 6.9in
 
-    `layout` and the content_* variables can be set only here, never in a
-    program: a .pik doesn't choose the deck's structure.
+    `layout` can be set only here, never in a program: a .pik doesn't
+    choose the deck's structure.
 
 THE TEMPLATE'S OWN DEFAULTS
     Its theme's default shape (PowerPoint's Set as Default Shape) sets
@@ -975,7 +970,6 @@ SEE ALSO
 
 _LAYOUT_ERROR_TOPICS = (
     ("slide layout", ("template",)),
-    ("content area", ("template",)),
     ("in a template's settings file", ("template",)),
     ("no such variable", ("variables", "colors")),
     ("unknown theme slot", ("theme",)),
@@ -1034,8 +1028,7 @@ _MANUALS = {"intro": "start here: the language in one page, with an example",
 _ALIASES = {"colours": "colors", "keyword": "keywords", "class": "classes", "attribute": "attributes",
             "text-flags": "flags", "variable": "variables", "vars": "variables", "presets": "shapes",
             "specification": "spec", "bnf": "grammar", "topics": "help",
-            "settings": "template", "content": "template", "content_left": "template", "content_top": "template",
-            "content_right": "template", "content_bottom": "template"}
+            "settings": "template", "content": "template"}
 
 
 def _entry_index() -> dict[str, Entry]:

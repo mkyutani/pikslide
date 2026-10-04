@@ -122,6 +122,22 @@ def _master_theme_fonts(master) -> ThemeFonts:
     return theme_fonts_from_xml(master.part.part_related_by(RT.THEME).blob)
 
 
+def default_theme_colors() -> dict[str, int]:
+    """The built-in Office theme's colors as RGB, keyed by the slot names a
+    shape refers to them with (`tx1`, `bg1`, `accent1`, ...; mapped onto the
+    theme's `dk1`/`lt1`/... by the master's `<p:clrMap>`). Only to show what
+    a theme color looks like with no --template (pikslide --help): a deck
+    itself keeps theme colors symbolic (docs/spec.md SS3.3)."""
+    master = Presentation().slide_masters[0]
+    scheme = parse_xml(master.part.part_related_by(RT.THEME).blob).find(".//" + qn("a:clrScheme"))
+    rgb = {}
+    for slot in scheme:  # <a:dk1><a:sysClr val="windowText" lastClr=.../>, <a:accent1><a:srgbClr val=.../>
+        color = slot[0]
+        rgb[slot.tag.rsplit("}", 1)[1]] = int(color.get("lastClr") or color.get("val"), 16)
+    clr_map = master._element.find(qn("p:clrMap"))
+    return {ref: rgb[clr_map.get(ref, ref)] for ref in _MSO_THEME_COLOR}
+
+
 class PilFontMetrics:
     """A pikslide.pik.layout.FontMetrics that measures with the fonts the
     deck will actually be drawn in (docs/spec.md SS3.3), via Pillow: the

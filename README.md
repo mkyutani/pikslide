@@ -109,8 +109,9 @@ text — see `pikslide --help` for every flag.
 
 `pikslide --help TOPIC` is the language reference: a keyword (`--help box`
 gives its synopsis, attributes and defaults), a list (`colors`, `shapes`,
-`keywords`, …), or a manual (`grammar`, `spec`). `pikslide --help` lists
-the topics.
+`keywords`, …), a color or a preset shape (`--help accent1`, `--help
+callout1`: what it looks like), or a manual (`grammar`, `spec`).
+`pikslide --help` lists the topics.
 
 With no arguments, `pikslide` prints its usage and points to
 `pikslide --help intro`, the language in one page.

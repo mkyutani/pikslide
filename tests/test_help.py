@@ -5,10 +5,11 @@ from __future__ import annotations
 import pytest
 
 from pikslide import main
-from pikslide.help import _VARIABLE_DOCS, ENTRIES, _css_colors, _Style, prelude_values, render
+from pikslide.help import _SHAPE_DOCS, _VARIABLE_DOCS, ENTRIES, _css_colors, _Style, prelude_values, render
 from pikslide.pik import parse
-from pikslide.pik.layout import resolve_layout
+from pikslide.pik.layout import PRESET_NAMES, THEME_SLOTS, resolve_layout
 from pikslide.pik.tokens import CLASS_NAMES, KEYWORDS
+from pikslide.pptx_writer import default_theme_colors
 
 PLAIN = _Style(tty=False)
 
@@ -23,6 +24,45 @@ def test_every_built_in_variable_is_described():
     missing = [n for n, v in prelude_values().items()
                if n not in colors and not v.startswith("theme ") and n not in _VARIABLE_DOCS]
     assert missing == []
+
+
+def test_color_name_help_shows_the_color_and_where_it_goes():
+    text = render("cyan", PLAIN)
+    assert text.startswith("CYAN — a named color")
+    assert "cyan = 0x00ffff" in text and "fill cyan" in text and "--help colors" in text
+
+
+def test_theme_color_help_shows_the_built_in_theme_rgb():
+    text = render("accent1", PLAIN)
+    assert 'accent1 = theme "accent1"' in text and "0x4f81bd with no --template" in text
+    # a variable naming another color is followed to it
+    assert 'primary = text2 = theme "tx2"' in render("primary", PLAIN)
+
+
+def test_built_in_theme_has_every_theme_slot():
+    assert sorted(default_theme_colors()) == sorted(THEME_SLOTS.values())
+
+
+def test_every_preset_shape_is_described():
+    assert sorted(_SHAPE_DOCS) == sorted(PRESET_NAMES.values())
+
+
+def test_shapes_help_describes_each_shape():
+    text = render("shapes", PLAIN)
+    assert f"Preset shapes ({len(PRESET_NAMES)})" in text
+    assert "callout1" in text and "leader line" in text
+
+
+def test_shape_name_is_a_help_topic():
+    text = render("Callout1", PLAIN)
+    assert text.startswith("callout1 — ")
+    assert "[Label:] shape callout1 [attribute ...]" in text and "leader line" in text
+    # "as callout1, but ...": points back at the shape it's described by
+    assert "--help callout1, --help shape" in render("callout2", PLAIN)
+
+
+def test_class_entry_wins_over_a_preset_of_the_same_name():
+    assert render("ellipse", PLAIN).startswith("ELLIPSE")
 
 
 # The names the entries' examples refer to.
@@ -55,7 +95,8 @@ def test_color_help_lists_the_color_names():
 
 
 @pytest.mark.parametrize("topic", ["grammar", "spec", "keywords", "classes", "attributes", "flags",
-                                   "colors", "shapes", "variables", "prelude", "boxwid", "NE", "Arrow"])
+                                   "colors", "shapes", "variables", "prelude", "boxwid", "NE", "Arrow",
+                                   "wedgeRectCallout"])
 def test_topics_render(topic: str):
     assert render(topic, PLAIN)
 

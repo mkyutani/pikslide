@@ -3,11 +3,12 @@ keyword, for people and for LLMs driving pikslide.
 
 TOPIC is a manual (`grammar`, `spec`: docs/*.md), a list (`keywords`,
 `classes`, `attributes`, `flags`, `colors`, `shapes`, `variables`,
-`prelude`), or any keyword or built-in variable (`box`, `chop`, `fill`,
-`boxwid`, ...). Lists are built from the source itself -- the lexer's
-keyword table, the prelude, the preset shape names -- so they can't go
-stale; the keyword entries below are written by hand, and a test checks
-that every reserved word has one.
+`prelude`), or any keyword, built-in variable, color or preset shape
+(`box`, `chop`, `fill`, `boxwid`, `cyan`, `callout1`, ...). Lists are built
+from the source itself -- the lexer's keyword table, the prelude, the preset
+shape names -- so they can't go stale; the keyword entries and the shape
+descriptions below are written by hand, and tests check that every reserved
+word and every preset shape has one.
 
 Printed to a terminal, the text is formatted (bold headings, color
 swatches) and long output goes through $PAGER; piped, it is plain text,
@@ -17,6 +18,7 @@ and the manuals are their Markdown source as is.
 from __future__ import annotations
 
 import difflib
+import functools
 import os
 import re
 import shutil
@@ -129,7 +131,9 @@ ENTRIES: tuple[Entry, ...] = (
           synopsis=("[Label:] shape PRESET [attribute ...]",),
           body="One of PowerPoint's ~180 preset geometries (chevron, roundRect, "
                "wedgeRectCallout, ...), matched case-insensitively. It behaves like a box: "
-               "same default size, attributes and edges (of its bounding rectangle).",
+               "same default size, attributes and edges (of its bounding rectangle). "
+               "`--help shapes` lists them all with what each looks like; `--help NAME` "
+               "describes one.",
           sections=(("ATTRIBUTES", _CLOSED_ATTRIBUTES),),
           example='shape chevron "Step 1" fit',
           see=("shapes", "box"), group="class", defaults=("boxwid", "boxht")),
@@ -436,6 +440,240 @@ def _theme_colors() -> dict[str, str]:
     return {name: v for name, v in prelude_values().items() if v.startswith("theme ")}
 
 
+# What each theme slot is for, by the name `theme "SLOT"` takes.
+_THEME_SLOT_DOCS = {
+    "tx1": "dark 1 color, for text", "bg1": "light 1 color, for backgrounds",
+    "tx2": "dark 2 color", "bg2": "light 2 color",
+    **{f"accent{i}": f"accent color {i}" for i in range(1, 7)},
+    "hlink": "hyperlink color", "folHlink": "followed-hyperlink color",
+}
+
+
+@functools.cache
+def _builtin_theme_colors() -> dict[str, int]:
+    from .pptx_writer import default_theme_colors  # opens python-pptx's template: only when shown
+
+    return default_theme_colors()
+
+
+def _color_chain(name: str) -> list[str]:
+    """Variable `name`'s value, and on through any variable it names, to a
+    color: `primary` gives [`text2`, `theme "tx2"`]. [] if `name` isn't a
+    color."""
+    values, chain = prelude_values(), []
+    while name in values and values[name] not in chain:
+        name = values[name]
+        chain.append(name)
+        if re.fullmatch(r"0x[0-9a-fA-F]{6}", name) or name.startswith("theme "):
+            return chain
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Preset shapes: what each one looks like
+#
+# Written by hand from each preset as PowerPoint draws it at its default
+# geometry (pikslide sets no adjustment handles); a test checks the keys are
+# exactly PRESET_NAMES.
+# ---------------------------------------------------------------------------
+
+# Above the list (`--help shapes`), and below one shape's description
+# (`--help NAME`).
+_SHAPES_NOTE = (
+    "Each is drawn with PowerPoint's default geometry (no adjustment handles), stretched to "
+    "the object's box. A callout's leader line or pointer reaches outside the box; edges and "
+    "chop still use the box. Action buttons are pictures only: no click action is attached."
+)
+_SHAPE_NOTE = (
+    "Drawn with PowerPoint's default geometry (no adjustment handles), stretched to the "
+    "object's box. Edges and chop use the box, even where the shape reaches outside it."
+)
+
+_SHAPE_DOCS = {
+    "accentBorderCallout1": "as borderCallout1, with a vertical accent bar between the box and the line",
+    "accentBorderCallout2": "as borderCallout2, with a vertical accent bar between the box and the line",
+    "accentBorderCallout3": "as borderCallout3, with a vertical accent bar between the box and the line",
+    "accentCallout1": "as callout1, with a vertical accent bar between the box and the line",
+    "accentCallout2": "as callout2, with a vertical accent bar between the box and the line",
+    "accentCallout3": "as callout3, with a vertical accent bar between the box and the line",
+    "actionButtonBackPrevious": "a button with a left-pointing triangle (back)",
+    "actionButtonBeginning": "a button with a triangle pointing left at a bar (to the start)",
+    "actionButtonBlank": "a plain button, no icon",
+    "actionButtonDocument": "a button with a page icon",
+    "actionButtonEnd": "a button with a triangle pointing right at a bar (to the end)",
+    "actionButtonForwardNext": "a button with a right-pointing triangle (next)",
+    "actionButtonHelp": "a button with a question mark",
+    "actionButtonHome": "a button with a house",
+    "actionButtonInformation": 'a button with an "i" in a circle',
+    "actionButtonMovie": "a button with a movie camera",
+    "actionButtonReturn": "a button with a U-turn arrow",
+    "actionButtonSound": "a button with a loudspeaker",
+    "arc": "a curved line: the top-right quarter of an ellipse's outline",
+    "bentArrow": "a block arrow rising from the lower left, curving round, pointing right",
+    "bentUpArrow": "a block arrow running right along the bottom, turning sharply up",
+    "bevel": "a box framed by a sloped rim, like a raised button",
+    "blockArc": "a thick arch: the top half of a ring",
+    "borderCallout1": "an outlined box with a straight leader line out of its left side, "
+                      "ending below and to the left",
+    "borderCallout2": "as borderCallout1, but the leader line bends once",
+    "borderCallout3": "as borderCallout1, but the leader line bends twice",
+    "bracePair": "a pair of curly braces { } on the box's sides",
+    "bracketPair": "a pair of round-cornered brackets ( ) on the box's sides",
+    "callout1": "a box with no outline (unfilled, only the line shows) and a straight leader "
+                "line out of its left side, ending below and to the left",
+    "callout2": "as callout1, but the leader line bends once",
+    "callout3": "as callout1, but the leader line bends twice",
+    "can": "an upright cylinder, as the cylinder class",
+    "chartPlus": "a plus (+) of two lines across the box, no outline",
+    "chartStar": "an asterisk of three lines across the box: an X and a vertical",
+    "chartX": "an X of two lines from corner to corner, no outline",
+    "chevron": "a band pointing right, notched on the left: a > arrow",
+    "chord": "an ellipse with its upper right sliced off by a straight line",
+    "circularArrow": "a thin curved block arrow arching over the top, clockwise",
+    "cloud": "a cloud",
+    "cloudCallout": "a thought bubble: a cloud with a trail of small circles to the lower left",
+    "corner": "an L: a thick right angle",
+    "cornerTabs": "small triangles in the four corners, nothing between",
+    "cube": "a 3-D box: a front face with the top and right sides showing",
+    "curvedDownArrow": "a block arrow arching up from the lower left and down to the right",
+    "curvedLeftArrow": "a block arrow looping round on the right, pointing back left",
+    "curvedRightArrow": "a block arrow looping round on the left, pointing back right",
+    "curvedUpArrow": "a block arrow dipping down in a U, pointing up at the right",
+    "decagon": "a 10-sided polygon",
+    "diagStripe": "a diagonal band across the upper left, from corner to corner",
+    "diamond": "a diamond, as the diamond class",
+    "dodecagon": "a 12-sided polygon",
+    "donut": "a ring: an ellipse with an elliptical hole",
+    "doubleWave": "a flag: a band whose top and bottom edges wave twice",
+    "downArrow": "a block arrow pointing down",
+    "downArrowCallout": "a box with a block arrow pointing down from its bottom",
+    "ellipse": "an ellipse, as the ellipse class",
+    "ellipseRibbon": "a banner curving down in the middle: a front panel between folded-back ends",
+    "ellipseRibbon2": "a banner arching up in the middle: a front panel between folded-back ends",
+    "flowChartAlternateProcess": "flowchart alternate process: a rounded rectangle",
+    "flowChartCollate": "flowchart collate: an hourglass of two triangles tip to tip",
+    "flowChartConnector": "flowchart connector: an ellipse",
+    "flowChartDecision": "flowchart decision: a diamond",
+    "flowChartDelay": "flowchart delay: a D, flat on the left and round on the right",
+    "flowChartDisplay": "flowchart display: pointed on the left, round on the right",
+    "flowChartDocument": "flowchart document: a rectangle with a wavy bottom",
+    "flowChartExtract": "flowchart extract: a triangle pointing up",
+    "flowChartInputOutput": "flowchart data (input/output): a parallelogram",
+    "flowChartInternalStorage": "flowchart internal storage: a rectangle with lines along its top "
+                                "and left",
+    "flowChartMagneticDisk": "flowchart disk (database): an upright cylinder",
+    "flowChartMagneticDrum": "flowchart direct access storage: a cylinder on its side",
+    "flowChartMagneticTape": "flowchart tape: a circle with a tail at the lower right",
+    "flowChartManualInput": "flowchart manual input: a box whose top slopes up to the right",
+    "flowChartManualOperation": "flowchart manual operation: a trapezoid, wide at the top",
+    "flowChartMerge": "flowchart merge: a triangle pointing down",
+    "flowChartMultidocument": "flowchart documents: a stack of wavy-bottomed pages",
+    "flowChartOfflineStorage": "flowchart offline storage: a down triangle with a line across its tip",
+    "flowChartOffpageConnector": "flowchart off-page connector: a box pointed at the bottom",
+    "flowChartOnlineStorage": "flowchart stored data: round on the left, hollowed on the right",
+    "flowChartOr": "flowchart or: an ellipse with a plus (+) inside",
+    "flowChartPredefinedProcess": "flowchart predefined process: a box with doubled sides",
+    "flowChartPreparation": "flowchart preparation: a hexagon pointed left and right",
+    "flowChartProcess": "flowchart process: a rectangle",
+    "flowChartPunchedCard": "flowchart card: a box with its top left corner cut off",
+    "flowChartPunchedTape": "flowchart punched tape: a band with wavy top and bottom edges",
+    "flowChartSort": "flowchart sort: a diamond split by a horizontal line",
+    "flowChartSummingJunction": "flowchart summing junction: an ellipse with an X inside",
+    "flowChartTerminator": "flowchart terminator: a box with half-round ends",
+    "foldedCorner": "a page with its lower right corner folded, as the file class",
+    "frame": "a picture frame: a thick border round a rectangular hole",
+    "funnel": "a funnel: a cone, point down, under an open rim",
+    "gear6": "a gear with 6 teeth",
+    "gear9": "a gear with 9 teeth",
+    "halfFrame": "the top and left sides of a frame: an upside-down L",
+    "heart": "a heart",
+    "heptagon": "a 7-sided polygon",
+    "hexagon": "a hexagon, pointed left and right",
+    "homePlate": "a box pointed on the right, like a process-step arrow",
+    "horizontalScroll": "a parchment scroll, unrolled sideways",
+    "irregularSeal1": "an explosion: a jagged starburst",
+    "irregularSeal2": "an explosion: a jagged starburst, more irregular",
+    "leftArrow": "a block arrow pointing left",
+    "leftArrowCallout": "a box with a block arrow pointing left from its left side",
+    "leftBrace": "a left curly brace {",
+    "leftBracket": "a left bracket [ with rounded corners",
+    "leftCircularArrow": "a thin curved block arrow along the bottom, counterclockwise",
+    "leftRightArrow": "a block arrow pointing both left and right",
+    "leftRightArrowCallout": "a box with block arrows out of its left and right sides",
+    "leftRightCircularArrow": "a thin curved block arrow arching over the top, a head at each end",
+    "leftRightRibbon": "a ribbon: an arrow pointing left at the top, folding under to point right "
+                       "at the bottom",
+    "leftRightUpArrow": "a T of block arrows, heads left, right and up",
+    "leftUpArrow": "an L of block arrows, heads left and up",
+    "lightningBolt": "a lightning bolt",
+    "lineInv": "a straight line from the lower left corner to the upper right",
+    "mathDivide": "a thick division sign: a bar between two dots",
+    "mathEqual": "a thick equals sign (=)",
+    "mathMinus": "a thick minus sign (-)",
+    "mathMultiply": "a thick multiplication sign (x)",
+    "mathNotEqual": "a thick not-equal sign: = struck through",
+    "mathPlus": "a thick plus sign (+)",
+    "moon": "a crescent moon, its points to the right",
+    "noSmoking": 'a "no" sign: a ring with a diagonal bar',
+    "nonIsoscelesTrapezoid": "a trapezoid whose sides may slope differently (by default, as trapezoid)",
+    "notchedRightArrow": "a block arrow pointing right, with a notch in its tail",
+    "octagon": "an octagon: a box with its four corners cut off",
+    "parallelogram": "a parallelogram leaning right",
+    "pentagon": "a pentagon, point up",
+    "pie": "a pie with its upper right quarter cut out",
+    "pieWedge": "a quarter disc, its square corner at the lower right",
+    "plaque": "a box with scooped-out corners",
+    "plaqueTabs": "quarter-circle tabs in the four corners, nothing between",
+    "plus": "a thick cross (+) filling the box",
+    "quadArrow": "block arrows pointing up, down, left and right",
+    "quadArrowCallout": "a box with block arrows out of all four sides",
+    "rect": "a rectangle, as the box class",
+    "ribbon": "a banner: a front panel set lower than its two folded-back ends",
+    "ribbon2": "a banner: a front panel set higher than its two folded-back ends",
+    "rightArrow": "a block arrow pointing right",
+    "rightArrowCallout": "a box with a block arrow pointing right from its right side",
+    "rightBrace": "a right curly brace }",
+    "rightBracket": "a right bracket ] with rounded corners",
+    "round1Rect": "a rectangle with its top right corner rounded",
+    "round2DiagRect": "a rectangle with its top left and bottom right corners rounded",
+    "round2SameRect": "a rectangle with its top two corners rounded",
+    "roundRect": "a rounded rectangle, as a box with rad",
+    "rtTriangle": "a right triangle, the right angle at the lower left",
+    "smileyFace": "a smiley face",
+    "snip1Rect": "a rectangle with its top right corner cut off",
+    "snip2DiagRect": "a rectangle with its top right and bottom left corners cut off",
+    "snip2SameRect": "a rectangle with its top two corners cut off",
+    "snipRoundRect": "a rectangle with its top left corner rounded and its top right cut off",
+    "squareTabs": "small squares in the four corners, nothing between",
+    "star10": "a 10-point star",
+    "star12": "a 12-point star",
+    "star16": "a 16-point star",
+    "star24": "a 24-point star",
+    "star32": "a 32-point star",
+    "star4": "a 4-point star",
+    "star5": "a 5-point star",
+    "star6": "a 6-point star",
+    "star7": "a 7-point star",
+    "star8": "an 8-point star",
+    "stripedRightArrow": "a block arrow pointing right, with stripes at its tail",
+    "sun": "a sun: an ellipse ringed by triangular rays",
+    "swooshArrow": "a sweeping curved arrow, rising to the right",
+    "teardrop": "a teardrop: an ellipse with a pointed upper right corner",
+    "trapezoid": "a trapezoid, narrow at the top",
+    "triangle": "an isosceles triangle, point up",
+    "upArrow": "a block arrow pointing up",
+    "upArrowCallout": "a box with a block arrow pointing up from its top",
+    "upDownArrow": "a block arrow pointing both up and down",
+    "upDownArrowCallout": "a box with block arrows out of its top and bottom",
+    "uturnArrow": "a U-turn block arrow: up, over the top, and back down",
+    "verticalScroll": "a parchment scroll, unrolled downward",
+    "wave": "a flag: a band whose top and bottom edges wave once",
+    "wedgeEllipseCallout": "a speech bubble: an ellipse with a pointer below, left of center",
+    "wedgeRectCallout": "a speech bubble: a rectangle with a pointer below, left of center",
+    "wedgeRoundRectCallout": "a speech bubble: a rounded rectangle with a pointer below, left of center",
+}
+
+
 # ---------------------------------------------------------------------------
 # Text: formatting, for a terminal or plain
 # ---------------------------------------------------------------------------
@@ -468,9 +706,11 @@ def _wrap(text: str, width: int, n: int = 4) -> str:
 
 
 def _color_list(style: _Style) -> str:
-    theme = _theme_colors()
-    lines = ["Theme colors (follow the deck's theme):"]
-    lines += [f"  {name:<10} {value}" for name, value in theme.items()]
+    builtin = _builtin_theme_colors()
+    lines = ["Theme colors (follow the deck's theme; RGB as in the built-in Office theme):"]
+    for name, value in _theme_colors().items():
+        rgb = builtin[value.split('"')[1]]
+        lines.append(f"  {style.swatch(rgb)}{name:<10} {value:<18} 0x{rgb:06x}")
     lines += ["  theme \"SLOT\"  any OOXML scheme color; COLOR lighter N% / darker N% for tints",
               "  none, off    no color", "", "Named colors (CSS):"]
     for name, rgb in _css_colors().items():
@@ -501,25 +741,70 @@ def _format_entry(entry: Entry, style: _Style) -> str:
     return "\n".join(out) + "\n"
 
 
+_VARIABLE_NOTE = ("A built-in variable, set by the prelude: assign it to change it from then on, in the\n"
+                  "program or in a template's settings file.")
+
+
 def _format_variable(name: str, style: _Style) -> str:
     value = prelude_values()[name]
-    desc = _VARIABLE_DOCS.get(name) or ("a named color" if name in _css_colors() else "a theme color")
+    desc = _VARIABLE_DOCS.get(name, "a built-in variable")
     return (f"{style.bold(name.upper())} — {desc}\n\n{style.bold('DEFAULT')}\n    {name} = {value}\n\n"
-            "A built-in variable, set by the prelude: assign it to change it from then on, in the\n"
-            "program or in a template's settings file.\n\n"
-            f"{style.bold('SEE ALSO')}\n    --help variables, --help prelude\n")
+            f"{_VARIABLE_NOTE}\n\n{style.bold('SEE ALSO')}\n    --help variables, --help prelude\n")
 
 
-def _columns(words: list[str], width: int) -> str:
-    """`words` in as many columns as fit `width`, read down each column."""
-    cell = max(len(w) for w in words) + 2
-    cols = max(1, (width - 2) // cell)
-    rows = -(-len(words) // cols)
-    lines = []
-    for r in range(rows):
-        row = [words[c * rows + r] for c in range(cols) if c * rows + r < len(words)]
-        lines.append("  " + "".join(f"{w:<{cell}}" for w in row).rstrip())
-    return "\n".join(lines) + "\n"
+def _format_color(name: str, chain: list[str], style: _Style) -> str:
+    """A color variable's page (`chain` from _color_chain()): what it
+    looks like, and where a color goes."""
+    m = re.fullmatch(r'theme "(\w+)"', chain[-1])
+    value = " = ".join([name, *chain])
+    out = []
+    if m:
+        rgb = _builtin_theme_colors()[m.group(1)]
+        desc = f"a theme color: the theme's {_THEME_SLOT_DOCS[m.group(1)]}"
+        value += f"\n{style.swatch(rgb)}0x{rgb:06x} with no --template (the built-in Office theme)"
+        out += ["", style.bold("DESCRIPTION"),
+                _wrap("Kept linked to the deck's theme, not its RGB: the diagram recolors with "
+                      "the template.", style.width)]
+        see = ("colors", "theme", "lighter", "fill", "stroke", "color")
+    else:
+        desc, value = "a named color (CSS)", style.swatch(int(chain[-1], 16)) + value
+        see = ("colors", "lighter", "fill", "stroke", "color")
+    synopsis = (f"fill {name}", f"stroke {name}", f'"string" color {name}',
+                f"{name} lighter N%, {name} darker N%")
+    return "\n".join([
+        f"{style.bold(name.upper())} — {_VARIABLE_DOCS.get(name, desc)}",
+        "", style.bold("SYNOPSIS"), _indent("\n".join(synopsis)), *out,
+        "", style.bold("DEFAULT"), _indent(value),
+        "", _VARIABLE_NOTE,
+        "", style.bold("SEE ALSO"), _indent(", ".join(f"--help {s}" for s in see)),
+    ]) + "\n"
+
+
+def _shape_list(style: _Style) -> str:
+    """Every preset shape and what it looks like, the description wrapped
+    under its own column."""
+    import textwrap
+
+    names = sorted(PRESET_NAMES.values(), key=str.lower)
+    cell = max(len(n) for n in names) + 2
+    width = max(style.width - 2, cell + 32)
+    return "\n".join(textwrap.fill(_SHAPE_DOCS[n], width=width, initial_indent=f"  {n:<{cell}}",
+                                   subsequent_indent=" " * (2 + cell)) for n in names) + "\n"
+
+
+def _format_shape(name: str, style: _Style) -> str:
+    doc = _SHAPE_DOCS[name]
+    body = f"{doc[0].upper()}{doc[1:]}.\n\n{_SHAPE_NOTE}"
+    if name.startswith("actionButton"):
+        body += " A picture only: no click action is attached."
+    see = ["shape", "shapes"]
+    m = re.match(r"as (\w+)", doc)  # "as callout1, but ...": see that one too
+    if m and m.group(1).lower() in PRESET_NAMES:
+        see.insert(0, m.group(1))
+    return (f"{style.bold(name)} — a PowerPoint preset shape\n\n"
+            f"{style.bold('SYNOPSIS')}\n    [Label:] shape {name} [attribute ...]\n\n"
+            f"{style.bold('DESCRIPTION')}\n{_wrap(body, style.width)}\n\n"
+            f"{style.bold('SEE ALSO')}\n    {', '.join(f'--help {s}' for s in see)}\n")
 
 
 def _format_list(title: str, rows: list[tuple[str, str]], style: _Style) -> str:
@@ -668,7 +953,7 @@ _LISTS = {
     "attributes": "the attributes objects take",
     "flags": "the string attributes",
     "colors": "color names and theme colors",
-    "shapes": "PowerPoint preset shape names, for `shape NAME`",
+    "shapes": "PowerPoint preset shapes, for `shape NAME`, and what each looks like",
     "variables": "the built-in variables and their defaults",
     "prelude": "the prelude itself: every built-in definition",
 }
@@ -688,7 +973,8 @@ def topics_text(style: _Style | None = None) -> str:
     rows = [(k, v) for k, v in _MANUALS.items()] + [(k, v) for k, v in _LISTS.items()]
     return (style.bold("Help topics") + "  (pikslide --help TOPIC)\n\n"
             + "\n".join(f"  {k:<12}{v}" for k, v in rows)
-            + "\n\n  and any keyword or built-in variable, e.g. box, arrow, chop, fill, ljust, boxwid\n")
+            + "\n\n  and any keyword, built-in variable, color or preset shape, e.g. box, arrow, chop, fill,"
+            "\n  ljust, boxwid, accent1, cyan, callout1\n")
 
 
 def render(topic: str, style: _Style) -> str | None:
@@ -709,8 +995,8 @@ def render(topic: str, style: _Style) -> str | None:
     if key == "colors":
         return style.bold("Colors") + "  (fill COLOR, color COLOR)\n\n" + _color_list(style) + "\n"
     if key == "shapes":
-        names = sorted(PRESET_NAMES.values(), key=str.lower)
-        return style.bold(f"Preset shapes ({len(names)})") + "  (shape NAME)\n\n" + _columns(names, style.width)
+        return (style.bold(f"Preset shapes ({len(PRESET_NAMES)})") + "  (shape NAME)\n\n"
+                + _wrap(_SHAPES_NOTE, style.width, 0) + "\n\n" + _shape_list(style))
     if key == "variables":
         rows = [(n, f"{values[n]:<10} {d}") for n, d in _VARIABLE_DOCS.items() if n in values]
         return _format_list("Built-in variables  (NAME = VALUE to change)", rows, style) + (
@@ -722,12 +1008,15 @@ def render(topic: str, style: _Style) -> str | None:
     if key in entries:
         return _format_entry(entries[key], style)
     if key in values:
-        return _format_variable(key, style)
+        chain = _color_chain(key)
+        return _format_color(key, chain, style) if chain else _format_variable(key, style)
+    if key in PRESET_NAMES:
+        return _format_shape(PRESET_NAMES[key], style)
     return None
 
 
 def _all_topics() -> list[str]:
-    return list(dict.fromkeys([*_MANUALS, *_LISTS, *_entry_index(), *prelude_values()]))
+    return list(dict.fromkeys([*_MANUALS, *_LISTS, *_entry_index(), *prelude_values(), *PRESET_NAMES]))
 
 
 def show(topic: str | None) -> int:

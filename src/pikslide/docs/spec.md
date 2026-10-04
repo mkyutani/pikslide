@@ -468,8 +468,8 @@ file**, found beside it or named with `--settings FILE`, which holds:
 The settings file is read after the prelude and before the program, so its
 definitions override the prelude's, and the program's override its own. A
 template without one gets the prelude's defaults and its Title and Content
-layout (`layout`, below). A `.pik` still never names the file: the tool finds it from the
-template, or the caller names it (§4).
+layout (`layout`, below). A `.pik` still never names the file: the tool
+finds it from the template, or the caller names it (§4).
 
 **The template's own defaults.** A theme can have a default shape
 (`<a:objectDefaults>`'s `spDef`; PowerPoint's *Set as Default Shape*).
@@ -518,9 +518,9 @@ content_bottom = 6.9in
   accent colors for the built-in theme.
 - **Name.** `<template name>.theme.pik` beside the template
   (`corporate.potx` → `corporate.theme.pik`).
-- **`layout`** is the name of a slide layout, used when pikslide makes a new
-  slide from the template. A layout belongs to one master, so naming it also chooses the master and
-  the theme. The prelude gives it the empty string, which means the first
+- **`layout`** names a slide layout, used when pikslide makes a new slide
+  from the template. A layout belongs to one master, so naming it also
+  chooses the master and the theme. The prelude gives it the empty string, which means the first
   layout, master by master, with exactly one placeholder besides its
   title, subtitle, date, footer and slide number: a Title and Content
   layout, which most templates have. It is found by its placeholders, since
@@ -537,7 +537,7 @@ content_bottom = 6.9in
   layout has is an error that lists every layout the template has, with
   the same. `layout` can be set only in a settings file: assigning it in a
   program is an error, because a `.pik` never chooses the deck's structure.
-  The caller can also name it with `--layout NAME`, which overrides the
+  The caller can also name it with `--layout NAME` (or `ID`), which overrides the
   settings file's (so a script choosing a layout per template needs no
   settings file written for it); it needs `--template`.
 - **The content area** is the rectangle of the slide the diagram goes in,
@@ -548,8 +548,9 @@ content_bottom = 6.9in
   layout's content placeholder, when it has exactly one (as above);
   otherwise, as on a blank or a two-column layout, the master's body
   placeholder, which is where the template sets text when a layout says
-  nothing else; with none of those, the whole slide. Either way it leaves the master's and the layout's own
-  graphics (a title rule, a logo, a footer) where the template has them.
+  nothing else; with none of those, the whole slide. Either way it leaves
+  the master's and the layout's own graphics (a title rule, a logo, a
+  footer) where the template has them.
 - **Strings.** A variable can hold a string, written as in text
   (`typeface = "…"`). A string is not a number and cannot be used in an
   expression; in v1 strings serve settings only, and a string variable is not
@@ -565,22 +566,23 @@ A `.pik` never names a deck, slide or theme file. Those come from the command
 line or the caller, so the same diagram can be reused in any deck.
 
 ```sh
-pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--layout NAME] [--settings FILE] [--png [PATH]] [--pdf [PATH]] [--renderer R]
+pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--layout NAME|ID] [--settings FILE] [--png [PATH]] [--pdf [PATH]] [--renderer R]
 ```
 
 `OUTPUT` omitted, the parsed tree is dumped instead of writing anything
 (unless `--template` is given, see below). Otherwise a new one-slide
-presentation is written there, sized to the diagram plus a margin, and an
-existing file is overwritten. `--template deck.pptx` (or a `.potx`) starts
-from that file's theme instead of the built-in Office theme, so theme colors
-and fonts resolve the way the real deck will (see §3.3); when `OUTPUT` is
-omitted but `--template` is given, it defaults to `INPUT` with its extension
-changed to `.pptx` (`diagram.pik` → `diagram.pptx`).
+presentation is written there, and an existing file is overwritten. With
+no `--template`, it has the built-in Office theme, and the slide is sized
+to the diagram plus a margin.
 
-With `--template`, the slide is not sized to the diagram: it is the
-template's own size, and the diagram's top left is at the top left of the
-content area (§3.8), so the slide looks as it will in the real deck, the
-master's title rule, logo and footer clear of the diagram.
+`--template deck.pptx` (or a `.potx`) makes it from that file instead, so
+theme colors and fonts resolve the way the real deck will (see §3.3). The
+slide is then the template's own size, made from a layout of its own
+(§3.8), and the diagram's top left is at the top left of the content area
+(§3.8): the slide looks as it will in the real deck, the master's title
+rule, logo and footer clear of the diagram. When `OUTPUT` is omitted but
+`--template` is given, it defaults to `INPUT` with its extension changed to
+`.pptx` (`diagram.pik` → `diagram.pptx`).
 
 A diagram is never scaled: the text sizes and line widths are the author's.
 One bigger than its content area runs past it, to the right and down, and
@@ -610,10 +612,14 @@ Humans and LLMs both need errors they can act on.
   `define`.
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
 - Text wider than a fixed-size object's text area is a **warning** (§3.3).
+- A diagram bigger than the content area of a `--template`'s slide is a
+  **warning** (§4).
 - A font that is not installed, so `fit` measured with a substitute, is a
   **warning** (§3.3).
 - Unknown names (color, theme slot, preset, image path) are
-  **errors with suggestions**, not silent fallbacks.
+  **errors with suggestions**, not silent fallbacks. A slide layout name
+  that no layout has, or that two share, is an error that lists the
+  template's layouts, each with its id and master (§3.8).
 - `--strict` makes a **stand-in** an error: the built-in theme in place of
   a `--template`, or a substitute for a font that is not installed. Both
   mean the output is not what the deck will really show. Text overflowing

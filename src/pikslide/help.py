@@ -417,8 +417,8 @@ _VARIABLE_DOCS = {
     "medium": "the medium (default) text size",
     "large": "the large text size",
     "typeface": 'font family for all text; "" means the theme\'s',
-    "layout": "the --template slide layout to use (settings file only; content_left, content_top, "
-              "content_right and content_bottom set where on it the diagram goes)",
+    "layout": 'the --template slide layout, by name or id; "" is Title and Content '
+              "(settings file only; --help template)",
     "primary": "a house color, for a template's settings file to repoint",
     "emphasis": "a house accent color, for a template's settings file to repoint",
 }
@@ -904,8 +904,68 @@ GOING FURTHER
     --help keywords       every keyword, one line each; then --help WORD
     --help box            a class: synopsis, attributes, defaults (arrow, ...)
     --help attributes     also: flags, colors, shapes, variables, prelude
+    --help template       drawing on a --template's slide: layout, content area
     --help grammar        the full grammar; --help spec for the design
     --check               lay a diagram out without writing, to test it
+"""
+
+
+# ---------------------------------------------------------------------------
+# template: drawing on a --template's slide
+# ---------------------------------------------------------------------------
+
+_TEMPLATE = """\
+TEMPLATE — drawing on a template's slide
+
+    pikslide diagram.pik [OUTPUT.pptx] --template corp.potx [--layout NAME|ID] [--settings FILE]
+
+With --template, the deck is made from the template: its theme gives the
+colors and fonts, and the slide is the template's own size, with the
+diagram in its content area. With no --template, the built-in Office theme
+stands in (a warning), and the slide is sized to the diagram.
+
+LAYOUT
+    The slide's layout, which also picks the master and so the theme. By
+    default, the first layout with exactly one placeholder besides its
+    title, subtitle, date, footer and slide number: Title and Content, in
+    most templates; with no such layout, the first blank one. --layout, or
+    `layout` in the settings file, names another, by its name or, all
+    digits, its id. A name two layouts share is an error that lists each
+    with its id and master, and so is a name no layout has.
+
+CONTENT AREA
+    The diagram's top left goes at the content area's top left. It is
+    never scaled: one bigger than the area runs past it, with a warning.
+    The area is the settings file's content_left, content_top,
+    content_right and content_bottom, if it sets all four; else the
+    layout's one content placeholder; else the master's body placeholder
+    (on a blank or a two-column layout); else the whole slide. A layout
+    named with --layout or `layout` keeps its title; the diagram takes the
+    place of its content placeholders.
+
+SETTINGS FILE
+    <template name>.theme.pik beside the template, or --settings FILE:
+    definitions only, read after the prelude and before the program.
+
+        layout         = "Title and Content"   # or its id
+        typeface       = "BIZ UDPゴシック"
+        medium         = 12pt
+        primary        = text2
+        content_left   = 0.5in                 # all four, or none
+        content_top    = 1.2in
+        content_right  = 12.8in
+        content_bottom = 6.9in
+
+    `layout` and the content_* variables can be set only here, never in a
+    program: a .pik doesn't choose the deck's structure.
+
+THE TEMPLATE'S OWN DEFAULTS
+    Its theme's default shape (PowerPoint's Set as Default Shape) sets
+    margin and vmargin from its text insets. The order is the prelude, the
+    template, the settings file, the program.
+
+SEE ALSO
+    --help margin, --help vmargin, --help spec (§3.3, §3.8, §4)
 """
 
 
@@ -914,6 +974,9 @@ GOING FURTHER
 # ---------------------------------------------------------------------------
 
 _LAYOUT_ERROR_TOPICS = (
+    ("slide layout", ("template",)),
+    ("content area", ("template",)),
+    ("in a template's settings file", ("template",)),
     ("no such variable", ("variables", "colors")),
     ("unknown theme slot", ("theme",)),
     ("unknown preset shape", ("shapes",)),
@@ -966,10 +1029,13 @@ _LISTS = {
     "prelude": "the prelude itself: every built-in definition",
 }
 _MANUALS = {"intro": "start here: the language in one page, with an example",
+            "template": "drawing on a --template's slide: layout, content area, settings file",
             "grammar": "the grammar, in BNF", "spec": "the language specification"}
 _ALIASES = {"colours": "colors", "keyword": "keywords", "class": "classes", "attribute": "attributes",
             "text-flags": "flags", "variable": "variables", "vars": "variables", "presets": "shapes",
-            "specification": "spec", "bnf": "grammar", "topics": "help"}
+            "specification": "spec", "bnf": "grammar", "topics": "help",
+            "settings": "template", "content": "template", "content_left": "template", "content_top": "template",
+            "content_right": "template", "content_bottom": "template"}
 
 
 def _entry_index() -> dict[str, Entry]:
@@ -995,6 +1061,8 @@ def render(topic: str, style: _Style) -> str | None:
         return topics_text(style)
     if key == "intro":
         return _INTRO
+    if key == "template":
+        return _TEMPLATE
     if key in _MANUALS:
         text = resources.files("pikslide").joinpath("docs", f"{key}.md").read_text(encoding="utf-8")
         return _format_markdown(text, style)

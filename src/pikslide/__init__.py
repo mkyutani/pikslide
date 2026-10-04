@@ -65,16 +65,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--template", metavar="FILE", default=None,
-        help="start a new standalone deck from this .pptx/.potx's theme instead of the built-in Office one",
+        help="make the deck from this .pptx/.potx instead of the built-in Office theme: its theme, its "
+        "slide size, and the diagram in the slide's content area (pikslide --help template)",
     )
     parser.add_argument(
         "--settings", metavar="FILE", default=None,
-        help="a template's settings file (docs/spec.md SS3.8); default: <template name>.theme.pik beside it, if any",
+        help="a template's settings file (pikslide --help template); default: <template name>.theme.pik "
+        "beside it, if any",
     )
     parser.add_argument(
         "--layout", metavar="NAME", default=None,
         help="the --template slide layout to make the new slide from, by its name or its id, overriding "
-        "the settings file's `layout` (docs/spec.md SS3.8)",
+        "the settings file's `layout` (pikslide --help template)",
     )
     parser.add_argument(
         "--include-path", metavar="DIR", action="append", default=None,

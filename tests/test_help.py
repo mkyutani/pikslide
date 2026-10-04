@@ -96,7 +96,7 @@ def test_color_help_lists_the_color_names():
 
 @pytest.mark.parametrize("topic", ["grammar", "spec", "keywords", "classes", "attributes", "flags",
                                    "colors", "shapes", "variables", "prelude", "boxwid", "NE", "Arrow",
-                                   "wedgeRectCallout"])
+                                   "wedgeRectCallout", "template", "settings", "content_left", "vmargin"])
 def test_topics_render(topic: str):
     assert render(topic, PLAIN)
 
@@ -150,6 +150,22 @@ def test_syntax_error_topics(line, near, expected):
     from pikslide.help import syntax_error_topics
 
     assert syntax_error_topics(line, near) == expected
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "no slide layout named 'Nope' in this template; it has: ...",
+        "2 slide layouts in this template are named 'Title Only': ...",
+        "the content area needs all four of content_left, ...",
+        "'content_left' can only be set in a template's settings file, not in a program ...",
+    ],
+)
+def test_template_errors_point_to_the_template_topic(message: str):
+    from pikslide.help import layout_error_topics
+
+    assert layout_error_topics(message) == ["template"]
+    assert render("template", PLAIN).startswith("TEMPLATE")
 
 
 def test_errors_point_to_help(monkeypatch, capsys, tmp_path):

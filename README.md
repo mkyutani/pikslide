@@ -90,23 +90,23 @@ uv run pikslide diagram.pik diagram.pptx
 The result is a new one-slide deck sized to the diagram; an existing
 OUTPUT is overwritten.
 
-For a standalone preview that uses a real template's theme and fonts
-instead of the built-in Office ones:
+To draw on a real template's slide, in its theme and fonts, instead of
+the built-in Office ones:
 
 ```sh
 uv run pikslide diagram.pik diagram.pptx --template corporate.potx
+uv run pikslide diagram.pik diagram.pptx --template corporate.potx --layout "Two Content"
 ```
 
 (OUTPUT may be omitted when `--template` is given: it then defaults to
-INPUT's own path with its extension changed to `.pptx`.) The new slide is
-made from the template's Title and Content layout (the first with one
-placeholder besides its title, date, footer and slide number), unless its settings file
-names one with `layout`, or `--layout NAME` does (which wins over the
-settings file). Where two layouts share a name, name one by its id instead:
-the error for the ambiguous name lists each with its id. It is the template's own size, and the diagram goes at
-the top left of its content area: the layout's content placeholder, or
-the master's body area, or the settings file's `content_left`,
-`content_top`, `content_right` and `content_bottom`.
+INPUT's own path with its extension changed to `.pptx`.) The slide is the
+template's own size, and the diagram goes at the top left of its content
+area, clear of the title and footer. Its layout is the template's Title
+and Content layout (the first with one placeholder besides its title,
+date, footer and slide number), unless `--layout` or the template's
+settings file names another, by its name or, where two layouts share a
+name, its id. `pikslide --help template` has the details: the content
+area, the settings file, and the defaults a template sets.
 
 `--check` parses and lays out a source without writing anything, and
 `--format json` emits diagnostics as one JSON object instead of plain

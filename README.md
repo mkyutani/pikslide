@@ -102,7 +102,8 @@ INPUT's own path with its extension changed to `.pptx`.) The new slide is
 made from the template's Title and Content layout (the first with one
 placeholder besides its title, date, footer and slide number), unless its settings file
 names one with `layout`, or `--layout NAME` does (which wins over the
-settings file). It is the template's own size, and the diagram goes at
+settings file). Where two layouts share a name, name one by its id instead:
+the error for the ambiguous name lists each with its id. It is the template's own size, and the diagram goes at
 the top left of its content area: the layout's content placeholder, or
 the master's body area, or the settings file's `content_left`,
 `content_top`, `content_right` and `content_bottom`.

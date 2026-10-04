@@ -529,9 +529,13 @@ content_bottom = 6.9in
   such layout, it is the first layout of type `blank` in the first master,
   or that master's first layout. A layout named here or with `--layout`
   brings its title along, but not its content placeholders, however many
-  it has: the diagram takes their place. If two masters have a layout of that name, the first one
-  found wins. A name that no layout has is an error that lists the names it
-  does have. `layout` can be set only in a settings file: assigning it in a
+  it has: the diagram takes their place. A layout can also be named by
+  its id, all digits (`layout = "2147483665"`): the number its master
+  gives it, unique in the file, though PowerPoint doesn't show it. That is
+  for a name two layouts share, often in different masters, which is an
+  error that lists them, each with its id and master. A name that no
+  layout has is an error that lists every layout the template has, with
+  the same. `layout` can be set only in a settings file: assigning it in a
   program is an error, because a `.pik` never chooses the deck's structure.
   The caller can also name it with `--layout NAME`, which overrides the
   settings file's (so a script choosing a layout per template needs no

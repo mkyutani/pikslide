@@ -857,8 +857,28 @@ def test_template_named_layout_brings_its_title(tmp_path: pathlib.Path):
 
 def test_template_unknown_layout_name_lists_the_known_ones(tmp_path: pathlib.Path):
     tmpl = _template_deck(tmp_path)
-    with pytest.raises(LayoutError, match="Blank"):  # one of the built-in layout names
+    with pytest.raises(LayoutError, match=r"'Blank' \(id 2147483655, master 1\)"):
         _from_template('box "Web"\n', tmpl, tmp_path, layout_name="Nope")
+
+
+def test_layout_can_be_named_by_its_id():
+    from pikslide.pptx_writer import _resolve_template_layout
+
+    assert _resolve_template_layout(Presentation(), "2147483650").name == "Title and Content"
+
+
+def test_a_layout_name_two_layouts_share_is_an_error_naming_their_ids():
+    from pikslide.pptx_writer import _resolve_template_layout
+
+    prs = Presentation()
+    prs.slide_layouts[6]._element.cSld.set("name", "Title Only")  # Blank, renamed
+    with pytest.raises(LayoutError) as e:
+        _resolve_template_layout(prs, "Title Only")
+    assert str(e.value) == (
+        "2 slide layouts in this template are named 'Title Only': 'Title Only' (id 2147483654, master 1), "
+        "'Title Only' (id 2147483655, master 1); name one by its id instead"
+    )
+    assert _resolve_template_layout(prs, "2147483655") is not None
 
 
 def test_template_colors_and_fonts_stay_symbolic(tmp_path: pathlib.Path):

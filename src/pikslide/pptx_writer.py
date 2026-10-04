@@ -894,21 +894,38 @@ def _open_template_base(path: str) -> tuple[Presentation, str | None]:
     return prs, tmp_path
 
 
+def _template_layouts(prs: Presentation) -> list[tuple[int, str, object]]:
+    """Every slide layout in `prs`, master by master, as (its master's
+    number, from 1; its id; the layout). The id is the master's
+    `sldLayoutId` for it: unique in the file, unlike a name, though
+    PowerPoint doesn't show it."""
+    return [
+        (n, entry.get("id"), master.part.related_slide_layout(entry.rId))
+        for n, master in enumerate(prs.slide_masters, start=1)
+        for entry in master._element.sldLayoutIdLst
+    ]
+
+
+def _describe_layouts(layouts: list[tuple[int, str, object]]) -> str:
+    return ", ".join(f"{layout.name!r} (id {layout_id}, master {n})" for n, layout_id, layout in layouts)
+
+
 def _resolve_template_layout(prs: Presentation, layout_name: str):
     """The slide layout a new slide is made from (docs/spec.md SS3.8
     `layout`), which also fixes the master and so the theme (SS3.3):
-    named, found in any master (the first match wins if more than one
-    master has a layout of that name); empty, the first layout, master by
+    named, by its name or, all digits, its id (_template_layouts()), in
+    any master -- a name two layouts share is an error that lists them,
+    so that one can be named by its id; empty, the first layout, master by
     master, with exactly one content placeholder (_content_placeholder()):
     a Title and Content layout, which most templates have, found by its
     placeholders since a template's layouts often have no `type`. With no
     such layout, the first `blank`-type layout of the first master, or
     that master's own first layout."""
-    all_layouts = [(m, layout) for m in prs.slide_masters for layout in m.slide_layouts]
+    all_layouts = _template_layouts(prs)
     if not all_layouts:
         raise LayoutError("this template has no slide masters/layouts at all")
     if not layout_name:
-        for _master, layout in all_layouts:
+        for _n, _id, layout in all_layouts:
             if _content_placeholder(layout) is not None:
                 return layout
         first_master = prs.slide_masters[0]
@@ -916,11 +933,21 @@ def _resolve_template_layout(prs: Presentation, layout_name: str):
             if layout.element.get("type") == "blank":
                 return layout
         return first_master.slide_layouts[0]
-    for _master, layout in all_layouts:
-        if layout.name == layout_name:
-            return layout
-    known = sorted({layout.name for _master, layout in all_layouts})
-    raise LayoutError(f"no slide layout named {layout_name!r} in this template; it has: {', '.join(known)}")
+    if layout_name.isdigit():
+        for _n, layout_id, layout in all_layouts:
+            if layout_id == layout_name:
+                return layout
+    named = [entry for entry in all_layouts if entry[2].name == layout_name]
+    if len(named) > 1:
+        raise LayoutError(
+            f"{len(named)} slide layouts in this template are named {layout_name!r}: {_describe_layouts(named)}; "
+            "name one by its id instead"
+        )
+    if named:
+        return named[0][2]
+    raise LayoutError(
+        f"no slide layout named {layout_name!r} in this template; it has: {_describe_layouts(all_layouts)}"
+    )
 
 
 # A layout's title, date, footer and slide number placeholders; any other

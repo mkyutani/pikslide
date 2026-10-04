@@ -73,8 +73,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--layout", metavar="NAME", default=None,
-        help="the --template slide layout to make the new slide from, overriding the settings file's "
-        "`layout` (docs/spec.md SS3.8)",
+        help="the --template slide layout to make the new slide from, by its name or its id, overriding "
+        "the settings file's `layout` (docs/spec.md SS3.8)",
     )
     parser.add_argument(
         "--include-path", metavar="DIR", action="append", default=None,

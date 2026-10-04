@@ -684,13 +684,16 @@ class Parser:
     # -- positions / places / objects ---------------------------------------
 
     def parse_position(self) -> ast.Position:
-        if self.at(TokType.LP):
-            return self._parse_paren_position()
+        # A leading '(' opens either a parenthesized position, `(A, B)`,
+        # or an expression, `((1 + 1) / 2, 0)`: try the expression first,
+        # as for any other position, and fall back on a failure.
         mark = self.i
         try:
             return self._parse_expr_led_position()
         except PikSyntaxError:
             self.i = mark
+        if self.at(TokType.LP):
+            return self._parse_paren_position()
         return self._parse_place_led_position()
 
     def _parse_paren_position(self) -> ast.Position:

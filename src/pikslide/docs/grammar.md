@@ -363,9 +363,11 @@ objectname      ::= "this"
                    | PLACENAME { "." PLACENAME }
 ```
 
-The `expr`-led alternatives of `position` are all tried before the
-`place`-led one; if none of the former match, the parser backtracks and
-tries `place [(+|-) (dx,dy)]` instead (`Parser.parse_position()`).
+The `expr`-led alternatives of `position` are all tried first; if none
+of them match, the parser backtracks and tries `"(" position ... ")"`
+when the position starts with `(`, and `place [(+|-) (dx,dy)]` otherwise
+(`Parser.parse_position()`). So a leading `(` can open an expression:
+`((1 + 1) / 2, 0)` is the point (1, 0).
 
 ## Reserved words
 

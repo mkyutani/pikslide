@@ -80,7 +80,7 @@ extra room at the top for its title, and its fill is a theme color, so it
 follows a `--template`. `behind Browser` puts it under the very first
 object, at the back: behind Nginx, it would hide the end of the HTTPS
 arrow, drawn before Nginx. The center is computed into variables first
-(`midx`, `midy`): a position can't start with `((`.
+(`midx`, `midy`), which keeps the `at` short.
 
 ## Variations
 

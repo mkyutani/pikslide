@@ -141,6 +141,36 @@ def test_offset_position():
     )
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # A parenthesized expression as either coordinate (issue #13).
+        ("((1 + 1) / 2, 0)", ast.Coord(ast.BinOp("/", ast.BinOp("+", ast.Num(1.0), ast.Num(1.0)), ast.Num(2.0)), ast.Num(0.0))),
+        ("(0, (1 + 1) / 2)", ast.Coord(ast.Num(0.0), ast.BinOp("/", ast.BinOp("+", ast.Num(1.0), ast.Num(1.0)), ast.Num(2.0)))),
+        ("(1), (2)", ast.Coord(ast.Num(1.0), ast.Num(2.0))),
+        ("(1 + 1) / 2 between A and B", ast.Between(
+            ast.BinOp("/", ast.BinOp("+", ast.Num(1.0), ast.Num(1.0)), ast.Num(2.0)),
+            ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["A"]), None)),
+            ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["B"]), None)),
+        )),
+        # Still a parenthesized position.
+        ("(A, B)", ast.XYFromPositions(
+            ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["A"]), None)),
+            ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["B"]), None)),
+        )),
+        ("(A.n)", ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["A"]), "n"))),
+        ("((A.x + B.x) / 2, 0)", ast.Coord(
+            ast.BinOp("/", ast.BinOp("+", ast.PlaceCoord(ast.ObjectEdge(ast.NameRef(["A"]), None), "x"),
+                                     ast.PlaceCoord(ast.ObjectEdge(ast.NameRef(["B"]), None), "x")), ast.Num(2.0)),
+            ast.Num(0.0),
+        )),
+    ],
+)
+def test_position_starting_with_a_paren(text: str, expected: ast.Position):
+    doc = parse(f"box at {text}\n")
+    assert doc.statements[0].attributes[0].position == expected
+
+
 def test_nested_dotted_name_chain():
     doc = parse("G: Container.Sub.e\n")
     stmt = doc.statements[0]

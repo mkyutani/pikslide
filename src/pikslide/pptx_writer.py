@@ -925,8 +925,12 @@ def write_pptx_from_template(
     The output slide is still sized to the diagram, not the template's
     own slide size (SS4): only the theme (via the resolved layout's
     master) comes along, plus the layout's own placeholder shapes, if it
-    has any and `layout_name` named it explicitly (the default, empty
-    `layout_name` resolves to a *blank* layout precisely to avoid that)."""
+    has any and `layout_name` named it explicitly. The default, empty
+    `layout_name` brings none: it resolves to a *blank* layout where
+    there is one, but a template's layouts often have no `type` (see
+    _resolve_template_layout()), so it can as well be one with a title
+    and a body, and its placeholders, sized for the template's own slide,
+    are removed from the new one."""
     prs, tmp_path = _open_template_base(template_path)
     try:
         layout = _resolve_template_layout(prs, layout_name)
@@ -934,6 +938,9 @@ def write_pptx_from_template(
         prs.slide_width = Emu(int(tf.slide_width * EMU_PER_INCH))
         prs.slide_height = Emu(int(tf.slide_height * EMU_PER_INCH))
         slide = prs.slides.add_slide(layout)
+        if not layout_name:
+            for placeholder in list(slide.placeholders):
+                placeholder.element.getparent().remove(placeholder.element)
         _add_all_shapes(slide, result.shapes, tf)
         prs.save(path)
     finally:

@@ -516,7 +516,10 @@ warning       = accent5    # any further names the template wants
   slide from the template. A layout belongs to one master, so naming it also chooses the master and
   the theme. The prelude gives it the empty string, which means the first
   layout of type `blank` in the first master, or that master's first layout
-  if it has none. If two masters have a layout of that name, the first one
+  if it has none. Many templates set no layout's type, so that first
+  layout often has a title and a body; their placeholders, laid out for the
+  template's own slide, are left off the new slide. A layout named here or
+  with `--layout` brings its placeholders along. If two masters have a layout of that name, the first one
   found wins. A name that no layout has is an error that lists the names it
   does have. `layout` can be set only in a settings file: assigning it in a
   program is an error, because a `.pik` never chooses the deck's structure.

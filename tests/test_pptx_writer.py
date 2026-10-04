@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pathlib
+import re
 import zipfile
 
 import pptx
@@ -716,6 +717,30 @@ def test_template_uses_a_blank_layout_by_default(tmp_path: pathlib.Path):
     prs = _from_template('box "Web"\n', tmpl, tmp_path)
     names = [s.name for s in prs.slides[0].shapes]
     assert names == ["box 1"]  # no placeholders brought in
+
+
+def _template_without_layout_types(tmp_path: pathlib.Path) -> pathlib.Path:
+    """The built-in template with no layout's `type` set, as is common in
+    real ones: none is `blank`, so the default is the first layout,
+    Title Slide, which has placeholders."""
+    src = pathlib.Path(pptx.__file__).parent / "templates" / "default.pptx"
+    out = tmp_path / "untyped.pptx"
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename.startswith("ppt/slideLayouts/slideLayout") and item.filename.endswith(".xml"):
+                data = re.sub(rb'(<p:sldLayout\b[^>]*?) type="\w+"', rb"\1", data, count=1)
+            zout.writestr(item, data)
+    return out
+
+
+def test_default_layout_brings_no_placeholders_even_when_it_has_some(tmp_path: pathlib.Path):
+    # Issue #16: they'd sit, empty, over a slide sized to the diagram.
+    tmpl = _template_without_layout_types(tmp_path)
+    prs = _from_template('box "Web"\n', tmpl, tmp_path)
+    slide = prs.slides[0]
+    assert slide.slide_layout.name == "Title Slide"
+    assert [s.name for s in slide.shapes] == ["box 1"]
 
 
 def test_template_named_layout_brings_its_placeholders(tmp_path: pathlib.Path):

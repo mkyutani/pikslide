@@ -13,6 +13,9 @@ pictures they render to.
 
 - [examples/](examples/): example diagrams, each `.pik` with the `.pptx`
   and `.png` it renders to (`pikslide x.pik x.pptx --png`)
+- [shapes.md](shapes.md): every preset shape `shape NAME` draws, as a
+  picture. Written by `scripts/gen_shape_gallery.py` (`--png` to render
+  the pictures, with PowerPoint)
 
 Every `.pik` here, and every ` ```pikslide ` block in this directory's
 Markdown and in the top-level README, must parse and lay out

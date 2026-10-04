@@ -1,6 +1,7 @@
 """The diagrams in the docs: every `.pik` under docs/, and every
 ```pikslide block in docs/'s Markdown and the top-level README, must parse
-and lay out (docs/README.md).
+and lay out (docs/README.md); and the shape gallery must be what
+scripts/gen_shape_gallery.py writes.
 
 The packaged manuals (src/pikslide/docs/) are left out: spec.md's blocks
 are fragments of a design -- an image or include file that isn't there, a
@@ -8,6 +9,7 @@ template's settings file -- not diagrams to run."""
 
 from __future__ import annotations
 
+import importlib.util
 import pathlib
 import re
 
@@ -52,3 +54,22 @@ def test_pik_file_lays_out(path: pathlib.Path):
 def test_markdown_block_lays_out(block):
     _, source, base_dir = block
     _lays_out(source, base_dir)
+
+
+def _gallery_script():
+    spec = importlib.util.spec_from_file_location("gen_shape_gallery", ROOT / "scripts" / "gen_shape_gallery.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_shape_gallery_is_current():
+    """docs/shapes.md and docs/shapes/ hold what scripts/gen_shape_gallery.py
+    writes: every preset shape, a PNG for each page. (Whether the PNGs show
+    what the .pik pages draw is only as good as their last `--png` run.)"""
+    gallery = _gallery_script()
+    files = gallery.expected_files()
+    for path, text in files.items():
+        assert path.read_text(encoding="utf-8") == text, f"{path} is stale: run scripts/gen_shape_gallery.py"
+    expected = {p for p in files if p.parent == DOCS / "shapes"} | set(gallery.png_paths())
+    assert set((DOCS / "shapes").iterdir()) == expected

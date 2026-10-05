@@ -2,7 +2,8 @@
 
 [japan-capitals.pik](japan-capitals.pik) was drawn by Claude Code: the
 prompt below, given as it is to a new Claude Code session at the
-repository's root, in one run.
+repository's root, in one run. That run rendered it to
+[japan-capitals.pptx](japan-capitals.pptx) and the PNG below.
 
 ![japan-capitals.png: a map of Japan with pins on Nara (710), Kyoto (794) and Tokyo (1869), joined by arrows in that order](japan-capitals.png)
 

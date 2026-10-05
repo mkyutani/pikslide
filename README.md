@@ -163,6 +163,8 @@ uv run pikslide docs/examples/pipeline.pik docs/examples/pipeline.pptx --png
 
 [docs/examples/](docs/examples/) has more, each with the PPTX and PNG it
 renders to.
+[docs/examples/japan-capitals.md](docs/examples/japan-capitals.md) is one
+that Claude Code drew, with the prompt it was given.
 
 ## Limits of the current layout stage
 

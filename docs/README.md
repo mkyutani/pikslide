@@ -13,6 +13,8 @@ pictures they render to.
 
 - [examples/](examples/): example diagrams, each `.pik` with the `.pptx`
   and `.png` it renders to (`pikslide x.pik x.pptx --png`)
+  ([japan-capitals.md](examples/japan-capitals.md) is one drawn by
+  Claude Code, with the prompt it was given)
 - [shapes.md](shapes.md): every preset shape `shape NAME` draws, as a
   picture. Written by `scripts/gen_shape_gallery.py` (`--png` to render
   the pictures, with PowerPoint)

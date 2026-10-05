@@ -1,0 +1,23 @@
+# How Japan's capital moved, on a blank map of Japan
+# (japan-map.png: Wikimedia Commons, File:日本地図.png, public domain).
+
+large = 24pt
+M: image "japan-map.png" width 7.5 alt "Map of Japan"
+text "How Japan's capital moved" bold large with .nw at (M.w.x+0.3, M.n.y-0.3)
+
+# The map is 300 px wide, so pp is one of its pixels; a pin goes at the
+# pixel (x, y), counted from the map's top left.
+pp = M.wid/300
+define pin { circle diameter 0.1 fill accent2 stroke white at (M.w.x+$1*pp, M.n.y-$2*pp) }
+Nara:  pin(119.9, 229.3)
+Kyoto: pin(119.3, 222.5)
+Tokyo: pin(182, 210)
+
+# Nara and Kyoto are too close for a straight arrow: go round the west.
+arrow from Nara.w left 0.25 then up until even with Kyoto then to Kyoto.w stroke accent2 thick
+arrow from Kyoto to Tokyo chop stroke accent2 thick
+
+define tag { box $1 bold $2 fit fill white stroke gray thin rad 0.05 }
+tag("Kyoto", "794") with .s at 0.1 above Kyoto.n
+tag("Nara", "710") with .n at 0.1 below Nara.s
+tag("Tokyo", "1869") with .s at 0.1 above Tokyo.n

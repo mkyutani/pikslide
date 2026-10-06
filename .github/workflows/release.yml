@@ -22,6 +22,8 @@ jobs:
           python-version: "3.14"
       - name: Check the tag matches the version in pyproject.toml
         run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
+      - name: Install rsvg-convert, for the SVG image tests
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
       - run: uv run --locked pytest
       - run: uv build
       - uses: actions/upload-artifact@v4

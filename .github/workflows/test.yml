@@ -20,4 +20,6 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install rsvg-convert, for the SVG image tests
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
       - run: uv run --locked pytest

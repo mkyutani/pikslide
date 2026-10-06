@@ -1,0 +1,74 @@
+name: release
+
+# On a v* tag: test, build, publish to TestPyPI, then to PyPI, with
+# Trusted Publishing (OIDC; no API token is stored). Each index needs a
+# publisher registered for this repository, this workflow file
+# (release.yml), and the environment named below.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+      - name: Check the tag matches the version in pyproject.toml
+        run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
+      - run: uv run --locked pytest
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+      - uses: astral-sh/setup-uv@v7
+      - run: uv publish --publish-url https://test.pypi.org/legacy/
+      - name: Smoke-test the TestPyPI release from a clean environment
+        run: |
+          uv venv "$RUNNER_TEMP/smoke"
+          # The new release can take a moment to show up in the index.
+          for i in 1 2 3 4 5 6; do
+            uv pip install --python "$RUNNER_TEMP/smoke" --no-cache \
+              --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ \
+              --index-strategy unsafe-best-match "pikslide==${GITHUB_REF_NAME#v}" && break
+            sleep 20
+          done
+          pikslide="$RUNNER_TEMP/smoke/bin/pikslide"
+          "$pikslide" --version
+          "$pikslide" --help spec > /dev/null
+          printf 'box "Source"\narrow\nbox "Deck"\n' > smoke.pik
+          "$pikslide" smoke.pik smoke.pptx
+          test -s smoke.pptx
+
+  pypi:
+    needs: testpypi
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist/
+      - uses: astral-sh/setup-uv@v7
+      - run: uv publish

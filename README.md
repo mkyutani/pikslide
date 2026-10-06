@@ -7,8 +7,8 @@ direction, and refer to earlier objects by name. A diagram becomes
 **native, editable PowerPoint objects** — shapes a person can select,
 restyle and move afterwards.
 
-The language is specified in [docs/spec.md](src/pikslide/docs/spec.md) and defined, in
-BNF, in [docs/grammar.md](src/pikslide/docs/grammar.md). (pikslide's own design traces
+The language is specified in [docs/spec.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md) and defined, in
+BNF, in [docs/grammar.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/grammar.md). (pikslide's own design traces
 back through two earlier languages; see Acknowledgments, below.)
 
 ## Status
@@ -55,22 +55,34 @@ true Bézier curves, shape adjustment handles, arithmetic on colors.
 
 ## Requirements
 
-- Python 3.14+
-- [uv](https://docs.astral.sh/uv/)
+- Python 3.12+
 
 ## Install
 
-Every example below runs `pikslide` through `uv run`, which needs no install
-step. To get a standalone `pikslide` command instead (placed in
-`~/.local/bin`, no `uv run` prefix needed), install it as a uv tool from the
-project root:
+From PyPI, as a standalone `pikslide` command:
+
+```sh
+uv tool install pikslide
+# or
+pipx install pikslide
+```
+
+`pikslide --version` prints the version installed. To remove it later:
+`uv tool uninstall pikslide` (or `pipx uninstall pikslide`).
+
+### From source
+
+To work on pikslide itself, clone the repository and use
+[uv](https://docs.astral.sh/uv/). The examples below call an installed
+`pikslide`; in a clone, `uv run pikslide ...` runs it with no install step.
+To install the clone as a standalone command instead (placed in
+`~/.local/bin`), from the project root:
 
 ```sh
 uv tool install .
 ```
 
-If `~/.local/bin` isn't on your `PATH` yet, run `uv tool update-shell`. To
-remove it later: `uv tool uninstall pikslide`.
+If `~/.local/bin` isn't on your `PATH` yet, run `uv tool update-shell`.
 
 ## Usage
 
@@ -78,13 +90,13 @@ Dump the parsed tree for a `.pik` file (useful for inspecting how a script was
 understood, or for debugging):
 
 ```sh
-uv run pikslide diagram.pik
+pikslide diagram.pik
 ```
 
 Render a `.pik` file straight to PowerPoint:
 
 ```sh
-uv run pikslide diagram.pik diagram.pptx
+pikslide diagram.pik diagram.pptx
 ```
 
 The result is a new one-slide deck sized to the diagram; an existing
@@ -94,8 +106,8 @@ To draw on a real template's slide, in its theme and fonts, instead of
 the built-in Office ones:
 
 ```sh
-uv run pikslide diagram.pik diagram.pptx --template corporate.potx
-uv run pikslide diagram.pik diagram.pptx --template corporate.potx --layout "Two Content"
+pikslide diagram.pik diagram.pptx --template corporate.potx
+pikslide diagram.pik diagram.pptx --template corporate.potx --layout "Two Content"
 ```
 
 (OUTPUT may be omitted when `--template` is given: it then defaults to
@@ -125,8 +137,8 @@ With no arguments, `pikslide` prints its usage and points to
 beside OUTPUT with the extension changed, or at an explicit path:
 
 ```sh
-uv run pikslide diagram.pik diagram.pptx --png --pdf
-uv run pikslide diagram.pik diagram.pptx --png images/diagram.png
+pikslide diagram.pik diagram.pptx --png --pdf
+pikslide diagram.pik diagram.pptx --png images/diagram.png
 ```
 
 (Give OUTPUT before `--png`/`--pdf`, since their PATH is optional.) This
@@ -156,14 +168,14 @@ file "pikslide" "Language" fit
 ```
 
 ```sh
-uv run pikslide docs/examples/pipeline.pik docs/examples/pipeline.pptx --png
+pikslide docs/examples/pipeline.pik docs/examples/pipeline.pptx --png
 ```
 
-![pipeline.png: the diagram as PowerPoint draws it](docs/examples/pipeline.png)
+![pipeline.png: the diagram as PowerPoint draws it](https://raw.githubusercontent.com/mkyutani/pikslide/main/docs/examples/pipeline.png)
 
-[docs/examples/](docs/examples/) has more, each with the PPTX and PNG it
+[docs/examples/](https://github.com/mkyutani/pikslide/tree/main/docs/examples) has more, each with the PPTX and PNG it
 renders to.
-[docs/examples/japan-capitals.md](docs/examples/japan-capitals.md) is one
+[docs/examples/japan-capitals.md](https://github.com/mkyutani/pikslide/blob/main/docs/examples/japan-capitals.md) is one
 that Claude Code drew, with the prompt it was given.
 
 ## Limits of the current layout stage
@@ -208,9 +220,9 @@ from there where a diagram that lives inside a PowerPoint slide, rather
 than becoming an SVG picture, calls for a different answer.
 
 pikchr's [source](https://pikchr.org/home/doc/tip/pikchr.y) states it is
-released under the Zero-Clause BSD license. See [NOTICE](NOTICE) for
+released under the Zero-Clause BSD license. See [NOTICE](https://github.com/mkyutani/pikslide/blob/main/NOTICE) for
 details.
 
 ## License
 
-[0BSD](LICENSE)
+[0BSD](https://github.com/mkyutani/pikslide/blob/main/LICENSE)

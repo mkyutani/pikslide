@@ -39,6 +39,15 @@ def test_no_args_points_to_the_help(monkeypatch, capsys):
     assert "usage: pikslide" in out and "pikslide --help intro" in out
 
 
+def test_version_prints_the_installed_version(monkeypatch, capsys):
+    from importlib.metadata import version
+
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, ["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out == f"pikslide {version('pikslide')}\n"
+
+
 def test_dump_mode_prints_parsed_tree(monkeypatch, capsys, tmp_path):
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
     _run(monkeypatch, [str(src)])

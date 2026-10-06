@@ -593,6 +593,8 @@ how the image was made, not that anything is wrong with the diagram, so
 neither, it is an error. `--renderer powerpoint|libreoffice` uses only
 that one; the default, `auto`, is the order above.
 
+`pikslide --version` prints the installed version (`pikslide 0.1.0`).
+
 ## 5. Diagnostics
 
 Humans and LLMs both need errors they can act on.

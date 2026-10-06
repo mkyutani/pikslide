@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+from importlib.metadata import version
 
 from .pik import PikSyntaxError, dump, format_syntax_error, parse
 from .pik.layout import LayoutError
@@ -57,6 +58,7 @@ def _parser() -> argparse.ArgumentParser:
         help="show this help, or help on TOPIC: a keyword (box, chop, fill, ...), "
         "a list (colors, shapes, ...) or a manual (grammar, spec)",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version('pikslide')}")
     parser.add_argument("input", help="a .pik source file")
     parser.add_argument(
         "output", nargs="?", default=None,

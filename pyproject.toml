@@ -4,15 +4,33 @@ version = "0.1.0"
 description = "A text language for drawing diagrams as native, editable PowerPoint objects"
 readme = "README.md"
 license = "0BSD"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE"]
 authors = [
     { name = "Miki Yutani", email = "mkyutani@gmail.com" }
 ]
-requires-python = ">=3.14"
+requires-python = ">=3.12"
+keywords = ["diagram", "powerpoint", "pptx", "pic", "pikchr", "slides"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Graphics :: Presentation",
+]
 dependencies = [
     "pillow>=12.3.0",
     "python-pptx>=1.0.2",
 ]
+
+[project.urls]
+Repository = "https://github.com/mkyutani/pikslide"
+Issues = "https://github.com/mkyutani/pikslide/issues"
+Documentation = "https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md"
 
 [project.scripts]
 pikslide = "pikslide:main"

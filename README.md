@@ -10,25 +10,27 @@ theme: a person can select, move and restyle each one afterwards.
 Text an LLM can write, and a slide a person can finish: pikslide is made
 for drawing with an LLM, with you in the loop.
 
-![pipeline.png: You prompt an LLM, which writes a .pik; pikslide renders it to a .pptx and, with --png, a .png. The LLM looks at the .png and fixes the .pik; you look at it too, and can prompt the LLM again, edit the .pik, or edit the .pptx in PowerPoint](https://raw.githubusercontent.com/mkyutani/pikslide/main/docs/examples/pipeline.png)
+![pipeline.png: You prompt an LLM, which writes a .pik; pikslide renders it to a .pptx and, with --png, a .png. You can also edit the .pik, or edit the .pptx in PowerPoint and ask the LLM to apply your edits to the .pik](https://raw.githubusercontent.com/mkyutani/pikslide/main/docs/examples/pipeline.png)
 
 1. You prompt the LLM, and it writes a `.pik`.
 2. pikslide renders the `.pik` to a `.pptx` and, with `--png`, to a
    `.png` as well.
-3. The LLM looks at the `.png` and fixes its `.pik`: a label that
-   overflows, an arrow that misses its target.
-4. You look at it too, and step in where it's quickest: ask the LLM for a
-   change, edit the `.pik` yourself, or edit the `.pptx` in PowerPoint.
+3. You edit the `.pptx` in PowerPoint and hand it back to the LLM with
+   your next prompt. The LLM carries your edits into the `.pik`, so the
+   next render keeps them: each shape in the `.pptx` is named after its
+   label in the `.pik`, so the two match up.
+4. Or skip PowerPoint: tell the LLM what to change, or edit the `.pik`
+   yourself.
 
 The picture above is pikslide's own,
 [docs/examples/pipeline.pik](https://github.com/mkyutani/pikslide/blob/main/docs/examples/pipeline.pik):
 
 ```pikslide
 # Drawing a slide with an LLM and pikslide, with a person in the loop.
-# One pass: the LLM writes a .pik, and pikslide renders it to a .pptx
-# and, with --png, a .png. The LLM looks at the .png and fixes its .pik;
-# you look at it too, and step in where you like: ask the LLM, edit the
-# .pik, or edit the .pptx in PowerPoint.
+# The LLM writes a .pik, and pikslide renders it to a .pptx and, with
+# --png, a .png. You step in where you like: prompt the LLM, edit the
+# .pik, or edit the .pptx in PowerPoint and ask the LLM to apply your
+# edits to the .pik.
 
 boxwid = 1.2in
 boxht = 0.55in
@@ -36,7 +38,7 @@ filewid = 0.8in
 fileht = 0.55in
 
 LLM: box "LLM"
-arrow
+arrow 1.5in
 Pik: file ".pik"
 arrow
 Pikslide: box "pikslide" bold fill accent1 lighter 60%
@@ -46,16 +48,11 @@ arrow from Pikslide.e right 0.4in then up until even with Png then to Png.w
 "--png" small above at 1/2<(Pikslide.e.x + 0.4in, Png.y), Png.w>
 arrow from Pikslide.e right 0.4in then down until even with Pptx then to Pptx.w
 
-You: box "You" bold wid (Png.e.x - LLM.w.x) + 0.6in ht 0.45in fill bg1 darker 5% \
+You: box "You" bold wid (Pptx.e.x - LLM.w.x) ht 0.45in fill bg1 darker 5% \
     with .nw at (LLM.w.x, Pptx.s.y - 0.6in)
-arrow "prompt" ljust from (LLM.x, You.n.y) to LLM.s
+arrow "prompt" "e.g. “draw how Japan's capital moved”" small "or “apply my edits in the .pptx to the .pik”" small ljust from (LLM.x, You.n.y) to LLM.s
 arrow "edit" ljust from (Pik.x, You.n.y) to Pik.s
 arrow "edit in PowerPoint" rjust from (Pptx.x, You.n.y) to Pptx.s
-arrow from Png.e right 0.3in then down until even with You.n
-"look" ljust at (Png.e.x + 0.3in, Pptx.y)
-
-arrow from Png.n up 0.4in then left until even with LLM then to LLM.n
-"look at the .png, fix the .pik" above at (Pikslide.x, Png.n.y + 0.4in)
 ```
 
 [docs/examples/japan-capitals.md](https://github.com/mkyutani/pikslide/blob/main/docs/examples/japan-capitals.md)

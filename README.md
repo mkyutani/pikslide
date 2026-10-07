@@ -1,199 +1,118 @@
 # pikslide
 
-A text language for drawing **diagrams that live inside Office slides**.
+pikslide draws a diagram written as text into a PowerPoint slide.
 
-You don't write coordinates: you place objects one after another in a
-direction, and refer to earlier objects by name. A diagram becomes
-**native, editable PowerPoint objects** — shapes a person can select,
-restyle and move afterwards.
+The text, a `.pik` file, places shapes one after another and refers to
+them by name, with no coordinates to work out. The slide it becomes is
+made of **native, editable PowerPoint shapes**, colored by the deck's
+theme: a person can select, move and restyle each one afterwards.
 
-The language is specified in [docs/spec.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md) and defined, in
-BNF, in [docs/grammar.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/grammar.md). (pikslide's own design traces
-back through two earlier languages; see Acknowledgments, below.)
+Text an LLM can write, and a slide a person can finish: pikslide is made
+for drawing with an LLM, with you in the loop.
 
-## Status
+![pipeline.png: You prompt an LLM, which writes a .pik; pikslide renders it to a .pptx and, with --png, a .png. The LLM looks at the .png and fixes the .pik; you look at it too, and can prompt the LLM again, edit the .pik, or edit the .pptx in PowerPoint](https://raw.githubusercontent.com/mkyutani/pikslide/main/docs/examples/pipeline.png)
 
-v1 (docs/spec.md §1) is implemented: a parser, a layout stage, and
-PowerPoint output; colors as a type of their own, with theme colors
-(`theme "accent1"`, `lighter`/`darker`) rendered as real `schemeClr`,
-never resolved to RGB; fonts the same way — text set in the theme's own
-font by default, not a hard-coded family, with `major` selecting the
-heading font and `typeface` overriding both with one literal family;
-three fixed text sizes (`small`/`medium`/`large`); a prelude of built-in
-names (CSS color names, built-in defaults, the theme-color names); preset
-shapes (`shape roundRect`, any of the ~180 OOXML presets, matched
-case-insensitively); images (PNG/JPEG/GIF, and SVG — embedded together
-with a PNG fallback for older viewers, sized explicitly or by aspect
-ratio, path resolved and contained under the source file's own
-directory); `include "house.pik"` for shared definitions (contained the
-same way, with cycle detection); object identity — a label becomes the
-shape's real PowerPoint name (an unlabeled object gets a default `box
-1`-style name), and `behind X` places an object immediately below `X`
-in z-order — so the Selection Pane reads like the source (`[ ... ]`
-blocks are a source-level grouping construct only, flattened rather than
-turned into a PowerPoint group when written out); starting a new
-standalone deck from another file's theme instead of the built-in Office
-one (`--template`); a template's settings file (`<name>.theme.pik`, or
-`--settings FILE`), for its slide layout, font, accent colors and text
-sizes; and diagnostics — `file:line:column`, the source line and a caret
-for a syntax error (naming the right file even inside a nested
-`include`), "did you mean" suggestions for an unknown
-color/preset/image name, `--strict`, `--check`, and `--format json`.
+1. You prompt the LLM, and it writes a `.pik`.
+2. pikslide renders the `.pik` to a `.pptx` and, with `--png`, to a
+   `.png` as well.
+3. The LLM looks at the `.png` and fixes its `.pik`: a label that
+   overflows, an arrow that misses its target.
+4. You look at it too, and step in where it's quickest: ask the LLM for a
+   change, edit the `.pik` yourself, or edit the `.pptx` in PowerPoint.
 
-Deliberately out of v1 (docs/spec.md §7): inserting into an existing
-deck's slide, ` ```pikslide ` blocks in Markdown, connectors, SVG *output*,
-auto-layout, tables/charts/SmartArt, animation, multi-slide authoring,
-true Bézier curves, shape adjustment handles, arithmetic on colors.
+The picture above is pikslide's own,
+[docs/examples/pipeline.pik](https://github.com/mkyutani/pikslide/blob/main/docs/examples/pipeline.pik):
 
-## How it works
+```pikslide
+# Drawing a slide with an LLM and pikslide, with a person in the loop.
+# One pass: the LLM writes a .pik, and pikslide renders it to a .pptx
+# and, with --png, a .png. The LLM looks at the .png and fixes its .pik;
+# you look at it too, and step in where you like: ask the LLM, edit the
+# .pik, or edit the .pptx in PowerPoint.
 
-1. **Parse** — source is tokenized and parsed into an AST
-   (`pikslide.pik.ast.Document`).
-2. **Layout** — the AST is resolved into concrete 2-D geometry (box positions,
-   arrow paths, text placement).
-3. **Render** — the resolved geometry is written out as PowerPoint objects.
+boxwid = 1.2in
+boxht = 0.55in
+filewid = 0.8in
+fileht = 0.55in
 
-## Requirements
+LLM: box "LLM"
+arrow
+Pik: file ".pik"
+arrow
+Pikslide: box "pikslide" bold fill accent1 lighter 60%
+Png: file ".png" with .w at 0.8in right of Pikslide.e + (0, 0.5in)
+Pptx: file ".pptx" with .w at 0.8in right of Pikslide.e - (0, 0.5in)
+arrow from Pikslide.e right 0.4in then up until even with Png then to Png.w
+"--png" small above at 1/2<(Pikslide.e.x + 0.4in, Png.y), Png.w>
+arrow from Pikslide.e right 0.4in then down until even with Pptx then to Pptx.w
 
-- Python 3.12+
+You: box "You" bold wid (Png.e.x - LLM.w.x) + 0.6in ht 0.45in fill bg1 darker 5% \
+    with .nw at (LLM.w.x, Pptx.s.y - 0.6in)
+arrow "prompt" ljust from (LLM.x, You.n.y) to LLM.s
+arrow "edit" ljust from (Pik.x, You.n.y) to Pik.s
+arrow "edit in PowerPoint" rjust from (Pptx.x, You.n.y) to Pptx.s
+arrow from Png.e right 0.3in then down until even with You.n
+"look" ljust at (Png.e.x + 0.3in, Pptx.y)
+
+arrow from Png.n up 0.4in then left until even with LLM then to LLM.n
+"look at the .png, fix the .pik" above at (Pikslide.x, Png.n.y + 0.4in)
+```
+
+[docs/examples/japan-capitals.md](https://github.com/mkyutani/pikslide/blob/main/docs/examples/japan-capitals.md)
+is a slide Claude Code drew this way, in one run, with the prompt it was
+given. [docs/](https://github.com/mkyutani/pikslide/tree/main/docs) has
+more examples and a cookbook of diagram recipes.
 
 ## Install
 
-From PyPI, as a standalone `pikslide` command:
+pikslide needs Python 3.12+. Install it from PyPI as a standalone
+`pikslide` command:
 
 ```sh
 uv tool install pikslide
 # or
 pipx install pikslide
+# or, into the current virtual environment
+pip install pikslide
 ```
 
-`pikslide --version` prints the version installed. To remove it later:
-`uv tool uninstall pikslide` (or `pipx uninstall pikslide`).
-
-### From source
+`pikslide --version` prints the version installed.
 
 To work on pikslide itself, clone the repository and use
-[uv](https://docs.astral.sh/uv/). The examples below call an installed
-`pikslide`; in a clone, `uv run pikslide ...` runs it with no install step.
-To install the clone as a standalone command instead (placed in
-`~/.local/bin`), from the project root:
-
-```sh
-uv tool install .
-```
-
-If `~/.local/bin` isn't on your `PATH` yet, run `uv tool update-shell`.
+[uv](https://docs.astral.sh/uv/): `uv run pikslide ...` runs the clone with
+no install step, and `uv tool install .` installs it as the `pikslide`
+command.
 
 ## Usage
 
-Dump the parsed tree for a `.pik` file (useful for inspecting how a script was
-understood, or for debugging):
-
 ```sh
-pikslide diagram.pik
+pikslide diagram.pik diagram.pptx                        # a one-slide deck, sized to the diagram
+pikslide diagram.pik diagram.pptx --png                  # and diagram.png, drawn by PowerPoint
+pikslide diagram.pik --template corporate.potx           # on the template's slide, in its theme
+pikslide diagram.pik --check                             # lay it out and report errors, write nothing
 ```
 
-Render a `.pik` file straight to PowerPoint:
+`--png` (and `--pdf`) use PowerPoint itself, on Windows or from WSL with
+a Windows install, and fall back to LibreOffice otherwise: good for a
+quick look, but not for checking exact layout against PowerPoint.
 
-```sh
-pikslide diagram.pik diagram.pptx
-```
+`pikslide --help` lists every flag. The language reference is built in,
+so neither you nor an LLM needs this repository to write a diagram:
 
-The result is a new one-slide deck sized to the diagram; an existing
-OUTPUT is overwritten.
+- `pikslide --help intro`: the language in one page, the place to start
+- `pikslide --help box`: a keyword's synopsis, attributes and defaults
+- `pikslide --help colors`, `shapes`, `keywords`, …: the lists
+- `pikslide --help template`: drawing on a template's slide
+- `pikslide --help spec`, `grammar`: the full manuals,
+  [spec.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md)
+  and
+  [grammar.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/grammar.md)
 
-To draw on a real template's slide, in its theme and fonts, instead of
-the built-in Office ones:
+## Status
 
-```sh
-pikslide diagram.pik diagram.pptx --template corporate.potx
-pikslide diagram.pik diagram.pptx --template corporate.potx --layout "Two Content"
-```
-
-(OUTPUT may be omitted when `--template` is given: it then defaults to
-INPUT's own path with its extension changed to `.pptx`.) The slide is the
-template's own size, and the diagram goes at the top left of its content
-area, clear of the title and footer. Its layout is the template's Title
-and Content layout (the first with one placeholder besides its title,
-date, footer and slide number), unless `--layout` or the template's
-settings file names another, by its name or, where two layouts share a
-name, its id. `pikslide --help template` has the details: the content
-area, the settings file, and the defaults a template sets.
-
-`--check` parses and lays out a source without writing anything, and
-`--format json` emits diagnostics as one JSON object instead of plain
-text — see `pikslide --help` for every flag.
-
-`pikslide --help TOPIC` is the language reference: a keyword (`--help box`
-gives its synopsis, attributes and defaults), a list (`colors`, `shapes`,
-`keywords`, …), a color or a preset shape (`--help accent1`, `--help
-callout1`: what it looks like), or a manual (`grammar`, `spec`).
-`pikslide --help` lists the topics.
-
-With no arguments, `pikslide` prints its usage and points to
-`pikslide --help intro`, the language in one page.
-
-`--png` / `--pdf` also render the deck just written to a PNG or a PDF —
-beside OUTPUT with the extension changed, or at an explicit path:
-
-```sh
-pikslide diagram.pik diagram.pptx --png --pdf
-pikslide diagram.pik diagram.pptx --png images/diagram.png
-```
-
-(Give OUTPUT before `--png`/`--pdf`, since their PATH is optional.) This
-uses PowerPoint itself, through COM automation (via `powershell.exe`),
-when it's reachable — Windows, or WSL with a Windows PowerPoint install —
-since that's the actual renderer pikslide's output is meant for; otherwise
-it falls back to LibreOffice (`soffice`) and says so in a note: a
-different rendering engine, good for a quick look but not for verifying
-exact layout or text fit against real PowerPoint. `--renderer powerpoint`
-or `--renderer libreoffice` uses only that one.
-With no `--template`, pikslide sizes its slide exactly to the diagram, so
-the PNG is an image of just the diagram, no separate cropping needed; with
-one, it is the whole slide, as it will look in the deck. The PowerShell scripts
-behind this (`src/pikslide/ps/*.ps1`) also run on their own from Windows
-PowerShell.
-
-### Example
-
-`docs/examples/pipeline.pik`:
-
-```pikslide
-arrow "Markdown" "Source" right 200%
-box "pikslide" "Formatter" rad 10px fit
-arrow "PPTX" "Output" right 200%
-arrow <- down 70% from last box.s
-file "pikslide" "Language" fit
-```
-
-```sh
-pikslide docs/examples/pipeline.pik docs/examples/pipeline.pptx --png
-```
-
-![pipeline.png: the diagram as PowerPoint draws it](https://raw.githubusercontent.com/mkyutani/pikslide/main/docs/examples/pipeline.png)
-
-[docs/examples/](https://github.com/mkyutani/pikslide/tree/main/docs/examples) has more, each with the PPTX and PNG it
-renders to.
-[docs/examples/japan-capitals.md](https://github.com/mkyutani/pikslide/blob/main/docs/examples/japan-capitals.md) is one
-that Claude Code drew, with the prompt it was given.
-
-## Limits of the current layout stage
-
-The layout stage is a deliberately pragmatic subset of a full CAD-style
-layout engine, covering common diagrams well rather than every case:
-default object sizes, sequential chaining,
-`at`/`with`/`from`/`to`/`then`/`go`/`same`/`chop`, and box/ellipse/diamond
-edge geometry are all there, but a few things are simplified:
-
-- spline/arc curves are drawn as straight polylines,
-- `fit` text sizing measures with the deck's own fonts when rendering to
-  PowerPoint (docs/spec.md §3.3), but falls back to a flat per-character
-  estimate otherwise,
-- chopping against diamond/cylinder/file shapes uses a rectangle-like
-  approximation rather than each shape's true outline.
-
-See the module docstrings in `src/pikslide/pik/layout.py` for details.
+The language's v1 is implemented. Not in it yet: drawing into an existing
+deck's slide, connectors, auto-layout, and multi-slide decks, among others
+([spec.md §7](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md#7-not-in-v1)).
 
 ## Development
 
@@ -201,27 +120,20 @@ See the module docstrings in `src/pikslide/pik/layout.py` for details.
 uv run pytest
 ```
 
-Test fixtures under `tests/fixtures/examples/` are a corpus of official
-example diagrams inherited via the port described in Acknowledgments,
-kept as a regression net for behavior that hasn't deliberately changed.
+The layout stage's simplifications are listed in the docstring of
+`src/pikslide/pik/layout.py`.
 
 ## Acknowledgments
 
-pikslide traces its lineage through two earlier languages. Brian
-Kernighan's `pic` (1984) introduced sequential, relative placement of
-named objects — draw one thing, then the next one relative to it — rather
-than absolute coordinates. D. Richard Hipp's [pikchr](https://pikchr.org/)
-carried that idea into a full, modern language, emitting SVG. pikslide's
-tokenizer, grammar, macro expansion, and layout engine began as a direct
-port of pikchr's own, and the port goes well beyond syntax — default
-object sizes, placement and chaining math, and edge geometry are all
-inherited from it, not rebuilt from scratch. pikslide's own design departs
-from there where a diagram that lives inside a PowerPoint slide, rather
-than becoming an SVG picture, calls for a different answer.
-
-pikchr's [source](https://pikchr.org/home/doc/tip/pikchr.y) states it is
-released under the Zero-Clause BSD license. See [NOTICE](https://github.com/mkyutani/pikslide/blob/main/NOTICE) for
-details.
+pikslide descends from Brian Kernighan's `pic` (1984), which placed named
+objects one after another instead of at coordinates, and D. Richard Hipp's
+[pikchr](https://pikchr.org/), which carried that idea into a modern
+language emitting SVG. pikslide's tokenizer, grammar, macro expansion and
+layout engine began as a port of pikchr's own, default sizes, placement
+and edge geometry included, and its test fixtures under
+`tests/fixtures/examples/` are pikchr's example diagrams. pikchr is
+released under the Zero-Clause BSD license; see
+[NOTICE](https://github.com/mkyutani/pikslide/blob/main/NOTICE).
 
 ## License
 

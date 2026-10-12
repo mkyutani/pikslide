@@ -1,0 +1,41 @@
+diamondwid = 1.7
+diamondht = 0.7
+gap = 0.35
+
+down
+Start: oval "Start" fit
+arrow gap
+Init: box "i = 1" fit
+arrow gap
+Loop: diamond "i <= 100"
+arrow gap "yes" ljust
+D15: diamond "i % 15 == 0"
+arrow gap "no" ljust
+D3: diamond "i % 3 == 0"
+arrow gap "no" ljust
+D5: diamond "i % 5 == 0"
+arrow gap "no" ljust
+PI: shape flowChartInputOutput "print i" fit
+arrow gap
+Inc: box "i = i + 1" fit
+
+PFB: shape flowChartInputOutput "print \"FizzBuzz\"" fit with .w at D15.e + (0.7, 0)
+PF: shape flowChartInputOutput "print \"Fizz\"" width PFB.wid height PFB.ht with .w at D3.e + (0.7, 0)
+PB: shape flowChartInputOutput "print \"Buzz\"" width PFB.wid height PFB.ht with .w at D5.e + (0.7, 0)
+End: oval "End" fit at (PFB.x, Loop.y)
+
+slant = PFB.wid / 10
+rx = PFB.e.x + 0.3
+lx = Loop.w.x - 0.3
+
+arrow "no" above from Loop.e to End.w
+arrow "yes" above from D15.e to (PFB.w.x + slant, D15.y)
+arrow "yes" above from D3.e to (PF.w.x + slant, D3.y)
+arrow "yes" above from D5.e to (PB.w.x + slant, D5.y)
+
+line from (PFB.e.x - slant, PFB.y) to (rx, PFB.y)
+line from (PF.e.x - slant, PF.y) to (rx, PF.y)
+line from (PB.e.x - slant, PB.y) to (rx, PB.y)
+arrow from (rx, PFB.y) to (rx, Inc.y) then to Inc.e
+
+arrow from Inc.w to (lx, Inc.y) then to (lx, Loop.y) then to Loop.w

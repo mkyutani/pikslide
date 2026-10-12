@@ -1,0 +1,40 @@
+boxwid = 1.0; boxht = 0.4
+ovalwid = 1.0; ovalht = 0.4
+diamondwid = 2.0; diamondht = 0.7
+printwid = 1.8; printht = 0.4
+gap = 0.35
+slant = printht / 8
+
+down
+Start: oval "Start"
+arrow down gap
+Init: box "i = 1"
+arrow down gap
+Cond: diamond "i <= 100"
+arrow down gap "yes" ljust
+D15: diamond "i % 15 == 0"
+arrow down gap "no" ljust
+D3: diamond "i % 3 == 0"
+arrow down gap "no" ljust
+D5: diamond "i % 5 == 0"
+arrow down gap "no" ljust
+PI: shape parallelogram "print i" width printwid height printht
+arrow down gap
+Inc: box "i = i + 1"
+
+End: oval "End" with .w at Cond.e + (0.8, 0)
+arrow "no" above from Cond.e to End.w
+
+FB: shape parallelogram "print \"FizzBuzz\"" width printwid height printht with .w at D15.e + (0.8, 0)
+F: shape parallelogram "print \"Fizz\"" width printwid height printht with .w at D3.e + (0.8, 0)
+B: shape parallelogram "print \"Buzz\"" width printwid height printht with .w at D5.e + (0.8, 0)
+arrow "yes" above from D15.e to FB.w + (slant, 0)
+arrow "yes" above from D3.e to F.w + (slant, 0)
+arrow "yes" above from D5.e to B.w + (slant, 0)
+
+rail = FB.e.x + 0.4
+arrow from FB.e - (slant, 0) right until even with (rail, 0) then down until even with Inc then left until even with Inc.e
+line from F.e - (slant, 0) right until even with (rail, 0)
+line from B.e - (slant, 0) right until even with (rail, 0)
+
+arrow from Inc.w left until even with D15.w - (0.4, 0) then up until even with Cond then right until even with Cond.w

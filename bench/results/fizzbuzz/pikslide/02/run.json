@@ -1,0 +1,26 @@
+{
+  "task": "fizzbuzz",
+  "method": "pikslide",
+  "round": 2,
+  "model": "claude-opus-5-5",
+  "effort": "xhigh",
+  "exit_code": 0,
+  "timed_out": false,
+  "finished": true,
+  "seconds": 104.4,
+  "started": "2026-10-13T00:00:07",
+  "claude_version": "2.1.296 (Claude Code)",
+  "pikslide_version": "pikslide 0.1.1",
+  "auth_method": "claude.ai",
+  "help_llm_sha256": "b818753b15ef",
+  "input_tokens": 22,
+  "cache_write_tokens": 24979,
+  "cache_read_tokens": 237319,
+  "output_tokens": 8658,
+  "cost_usd": 0.42054379999999997,
+  "turns": 12,
+  "renders": 1,
+  "flags": [
+    "ran a program: `python3 -I -c \"`"
+  ]
+}

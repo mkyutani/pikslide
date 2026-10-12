@@ -1,0 +1,45 @@
+// FizzBuzz flowchart
+dw = 1.8          // diamond width
+dh = 0.6          // diamond height
+pw = 1.6          // parallelogram width
+ph = 0.36         // parallelogram height
+inset = ph / 8    // parallelogram slant at mid-height: min(pw, ph) / 4 / 2
+gap = 0.6         // diamond tip to print
+lineht = 0.35
+
+down
+Start: oval "Start" width 0.9 height 0.36
+arrow
+Init: box "i = 1" width 0.9 height 0.36
+arrow
+Test: diamond "i <= 100" width dw height dh
+arrow "yes" ljust
+D15: diamond "i % 15 == 0" width dw height dh
+arrow "no" ljust
+D3: diamond "i % 3 == 0" width dw height dh
+arrow "no" ljust
+D5: diamond "i % 5 == 0" width dw height dh
+arrow "no" ljust
+PI: shape parallelogram "print i" width pw height ph
+arrow
+Inc: box "i = i + 1" width 0.9 height 0.36
+
+End: oval "End" width 0.9 height 0.36 with .w at Test.e + (gap, 0)
+arrow "no" above from Test.e to End.w
+
+P15: shape parallelogram "print \"FizzBuzz\"" width pw height ph with .w at D15.e + (gap, 0)
+P3: shape parallelogram "print \"Fizz\"" width pw height ph with .w at D3.e + (gap, 0)
+P5: shape parallelogram "print \"Buzz\"" width pw height ph with .w at D5.e + (gap, 0)
+arrow "yes" above from D15.e to (P15.w.x + inset, P15.y)
+arrow "yes" above from D3.e to (P3.w.x + inset, P3.y)
+arrow "yes" above from D5.e to (P5.w.x + inset, P5.y)
+
+// the prints merge into one line down the right side
+xr = P15.e.x + 0.3
+line from (P15.e.x - inset, P15.y) to (xr, P15.y) then to (xr, P3.y)
+line from (P3.e.x - inset, P3.y) to (xr, P3.y) then to (xr, P5.y)
+arrow from (P5.e.x - inset, P5.y) to (xr, P5.y) then to (xr, Inc.y) then to Inc.e
+
+// back round the left side
+xl = D15.w.x - 0.3
+arrow from Inc.w to (xl, Inc.y) then to (xl, Test.y) then to Test.w

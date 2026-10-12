@@ -56,7 +56,7 @@ jobs:
           done
           pikslide="$RUNNER_TEMP/smoke/bin/pikslide"
           "$pikslide" --version
-          "$pikslide" --help spec > /dev/null
+          "$pikslide" --help llm > /dev/null
           printf 'box "Source"\narrow\nbox "Deck"\n' > smoke.pik
           "$pikslide" smoke.pik smoke.pptx
           test -s smoke.pptx

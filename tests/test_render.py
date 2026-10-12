@@ -5,7 +5,6 @@ PIKSLIDE_RENDER_TESTS=1 to also run a real render on this machine."""
 
 from __future__ import annotations
 
-import json
 import os
 import pathlib
 import subprocess
@@ -179,9 +178,10 @@ def test_a_fallback_is_a_note_not_a_warning_so_strict_allows_it(monkeypatch, cap
     monkeypatch.setattr("pikslide.render_deck", lambda *a, **k: ["used LibreOffice"])
     tmpl = tmp_path / "tmpl.pptx"
     Presentation().save(str(tmpl))
-    _run_cli(monkeypatch, [str(_src(tmp_path)), str(tmp_path / "o.pptx"), "--template", str(tmpl), "--png", "--strict", "--format", "json"])
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["ok"] is True and payload["warnings"] == [] and payload["notes"] == ["used LibreOffice"]
+    _run_cli(monkeypatch, [str(_src(tmp_path)), str(tmp_path / "o.pptx"), "--template", str(tmpl), "--png", "--strict"])
+    captured = capsys.readouterr()
+    assert captured.err == "note: used LibreOffice\n"
+    assert "wrote" in captured.out
 
 
 def test_png_path_with_the_wrong_extension_is_an_error(monkeypatch, capsys, tmp_path, rendered):

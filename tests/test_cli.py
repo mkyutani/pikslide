@@ -115,19 +115,19 @@ def test_strict_turns_the_no_template_warning_into_an_error(monkeypatch, capsys,
 def test_strict_turns_a_missing_font_into_an_error(monkeypatch, capsys, tmp_path):
     src = _write(tmp_path, "d.pik", 'typeface = "NoSuchFontXyz"\nbox "Web" fit\n')
     _run(monkeypatch, [str(src), "--check"])
-    assert "warning: font not installed: NoSuchFontXyz" in capsys.readouterr().err
+    assert json.loads(capsys.readouterr().out)["warnings"][0].startswith("font not installed: NoSuchFontXyz")
     with pytest.raises(SystemExit) as exc:
         _run(monkeypatch, [str(src), "--check", "--strict"])
     assert exc.value.code == 1
-    assert "error: font not installed: NoSuchFontXyz" in capsys.readouterr().err
+    assert json.loads(capsys.readouterr().out)["errors"][0]["message"].startswith("font not installed: NoSuchFontXyz")
 
 
 def test_strict_leaves_text_overflow_a_warning(monkeypatch, capsys, tmp_path):
     src = _write(tmp_path, "d.pik", 'circle "abcdefgh"\n')
     _run(monkeypatch, [str(src), "--check", "--strict"])
-    captured = capsys.readouterr()
-    assert "warning: circle \"abcdefgh\": text overflows" in captured.err
-    assert "ok:" in captured.out
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["warnings"][0].startswith('circle "abcdefgh": text overflows')
 
 
 def test_template_flag_starts_a_new_deck_from_that_theme(monkeypatch, capsys, tmp_path):
@@ -215,7 +215,7 @@ def test_missing_explicit_settings_file_is_an_error(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# --include-path, --check, --format json (ext)
+# --include-path, --check (ext)
 # ---------------------------------------------------------------------------
 
 
@@ -234,7 +234,7 @@ def test_check_parses_and_lays_out_without_writing(monkeypatch, capsys, tmp_path
     out = tmp_path / "d.pptx"
     _run(monkeypatch, [str(src), str(out), "--check"])
     assert not out.exists()
-    assert "ok" in capsys.readouterr().out
+    assert json.loads(capsys.readouterr().out)["ok"] is True
 
 
 def test_check_still_catches_a_layout_error(monkeypatch, capsys, tmp_path):
@@ -244,20 +244,28 @@ def test_check_still_catches_a_layout_error(monkeypatch, capsys, tmp_path):
     assert exc.value.code == 1
 
 
-def test_format_json_success(monkeypatch, capsys, tmp_path):
-    src = _write(tmp_path, "d.pik", 'box "Web"\n')
-    out = tmp_path / "d.pptx"
-    _run(monkeypatch, [str(src), str(out), "--format", "json"])
+def test_check_reports_where_each_object_went(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", 'Web: box "Web" at (1, 2)\narrow "go" from Web.e right 1 then up 1\n')
+    _run(monkeypatch, [str(src), "--check"])
     payload = json.loads(capsys.readouterr().out)
-    assert payload["ok"] is True
-    assert payload["output"] == str(out)
-    assert any("stand-ins" in w for w in payload["warnings"])
+    assert set(payload["slide"]) == {"left", "top", "wid", "ht", "placeholders"}
+    assert payload["slide"]["placeholders"] == []
+    box, arrow = payload["objects"]
+    assert box == {"name": "Web", "kind": "box", "text": ["Web"], "x": 1.0, "y": 2.0, "wid": 0.75, "ht": 0.5}
+    assert arrow == {"name": "arrow 1", "kind": "arrow", "text": ["go"],
+                     "points": [[1.38, 2.0], [2.38, 2.0], [2.38, 3.0]]}
 
 
-def test_format_json_syntax_error_has_file_line_column(monkeypatch, capsys, tmp_path):
+def test_check_names_a_preset_and_leaves_out_what_isnt_drawn(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", "P: (0, 0)\nmove\nshape chevron\n")
+    _run(monkeypatch, [str(src), "--check"])
+    assert [o["kind"] for o in json.loads(capsys.readouterr().out)["objects"]] == ["shape chevron"]
+
+
+def test_check_syntax_error_has_file_line_column(monkeypatch, capsys, tmp_path):
     src = _write(tmp_path, "d.pik", '"unterminated\n')
     with pytest.raises(SystemExit):
-        _run(monkeypatch, [str(src), "--format", "json"])
+        _run(monkeypatch, [str(src), "--check"])
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
     err = payload["errors"][0]
@@ -266,11 +274,10 @@ def test_format_json_syntax_error_has_file_line_column(monkeypatch, capsys, tmp_
     assert isinstance(err["column"], int)
 
 
-def test_format_json_layout_error_has_no_position(monkeypatch, capsys, tmp_path):
+def test_check_layout_error_has_no_position(monkeypatch, capsys, tmp_path):
     src = _write(tmp_path, "d.pik", "box fill nosuchcolor\n")
-    out = tmp_path / "d.pptx"
     with pytest.raises(SystemExit):
-        _run(monkeypatch, [str(src), str(out), "--format", "json"])
+        _run(monkeypatch, [str(src), "--check"])
     payload = json.loads(capsys.readouterr().out)
     err = payload["errors"][0]
     assert err["line"] is None

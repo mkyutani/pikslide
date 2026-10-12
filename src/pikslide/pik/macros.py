@@ -91,9 +91,8 @@ def _validate_definitions_only(tokens: list[Token]) -> None:
     blocks need no check here: the macro pass above has already consumed
     them, so none remain in `tokens` by this point.
 
-    Anything else -- an object, a label, a direction, `print`, `assert`
-    -- is an error, so an include can change *definitions* but never
-    place anything. The offending token's own `.file` (docs/spec.md SS5)
+    Anything else -- an object, a label, a direction -- is an error, so
+    an include can change *definitions* but never place anything. The offending token's own `.file` (docs/spec.md SS5)
     names the file with the violation directly -- correct even for a
     deeper nested `include`, since every token here already carries
     whichever file its own lexer pass actually stamped it with."""

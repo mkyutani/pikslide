@@ -468,23 +468,6 @@ class AssignStatement(Statement):
 
 
 @dataclass
-class PrintStatement(Statement):
-    items: list[Expr | str]
-
-
-@dataclass
-class AssertExprStatement(Statement):
-    left: Expr
-    right: Expr
-
-
-@dataclass
-class AssertPositionStatement(Statement):
-    left: Position
-    right: Position
-
-
-@dataclass
 class MacroDefinition:
     name: str
     body: str

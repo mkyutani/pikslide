@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 from pikslide import main
-from pikslide.help import _SHAPE_DOCS, _VARIABLE_DOCS, ENTRIES, _css_colors, _Style, prelude_values, render
+from pikslide.help import (_CLOSED_ATTRIBUTES, _LINE_ATTRIBUTES, _SHAPE_DOCS, _VARIABLE_DOCS, ENTRIES, _css_colors,
+                           _Style, prelude_values, render)
 from pikslide.pik import parse
 from pikslide.pik.layout import PRESET_NAMES, THEME_SLOTS, resolve_layout
 from pikslide.pik.tokens import CLASS_NAMES, KEYWORDS
@@ -94,7 +95,7 @@ def test_color_help_lists_the_color_names():
     assert "aliceblue" in text and "accent1" in text
 
 
-@pytest.mark.parametrize("topic", ["grammar", "spec", "keywords", "classes", "attributes", "flags",
+@pytest.mark.parametrize("topic", ["intro", "llm", "keywords", "classes", "attributes", "flags",
                                    "colors", "shapes", "variables", "prelude", "boxwid", "NE", "Arrow",
                                    "wedgeRectCallout", "template", "settings", "vmargin"])
 def test_topics_render(topic: str):
@@ -112,6 +113,36 @@ def test_cli_help_topic(monkeypatch, capsys):
         main()
     assert exc.value.code == 0
     assert capsys.readouterr().out.startswith("CHOP")
+
+
+def test_llm_holds_every_entry_and_shape_once():
+    text = render("llm", PLAIN)
+    for entry in ENTRIES:
+        assert f"\n{entry.names[0].upper()} — {entry.summary}\n" in text
+    assert all(name in text for name in PRESET_NAMES.values())
+    # the classes' shared ATTRIBUTES once, the rest pointing to them
+    assert text.count(_CLOSED_ATTRIBUTES.splitlines()[0]) == 1 and "    as BOX" in text
+    assert text.count(_LINE_ATTRIBUTES.splitlines()[0]) == 1 and "    as LINE" in text
+    # the CSS names and the template page are one line each, pointing to their help
+    assert text.count("Named colors") == 1 and f"all {len(_css_colors())} CSS color names" in text
+    assert "aliceblue" not in text and "pikslide --help template" in text
+    assert "GOING FURTHER" not in text
+
+
+def test_llm_fits_in_one_command_output():
+    # Claude Code returns up to about 30,000 characters of a command's
+    # output as it is; past that, it saves it to a file for the LLM to read
+    # back, at more tokens. The room left is for a command run alongside.
+    assert len(render("llm", PLAIN)) < 27_000
+
+
+@pytest.mark.parametrize("columns", ["60", "200"])
+def test_llm_is_the_same_bytes_whatever_the_terminal(monkeypatch, capsys, columns: str):
+    monkeypatch.setenv("COLUMNS", columns)
+    monkeypatch.setattr("sys.argv", ["pikslide", "--help", "llm"])
+    with pytest.raises(SystemExit):
+        main()
+    assert capsys.readouterr().out == render("llm", _Style(tty=True, width=int(columns)))
 
 
 def test_cli_help_alone_shows_usage_and_topics(monkeypatch, capsys):
@@ -172,13 +203,13 @@ def test_errors_point_to_help(monkeypatch, capsys, tmp_path):
 
     src = tmp_path / "d.pik"
     src.write_text("box fill blu\n", encoding="utf-8")
-    monkeypatch.setattr("sys.argv", ["pikslide", str(src), "--check"])
+    monkeypatch.setattr("sys.argv", ["pikslide", str(src), str(tmp_path / "d.pptx")])
     with pytest.raises(SystemExit):
         main()
     assert "see: pikslide --help variables, pikslide --help colors" in capsys.readouterr().err
 
     src.write_text("box colr red\n", encoding="utf-8")
-    monkeypatch.setattr("sys.argv", ["pikslide", str(src), "--check", "--format", "json"])
+    monkeypatch.setattr("sys.argv", ["pikslide", str(src), "--check"])
     with pytest.raises(SystemExit):
         main()
     assert json.loads(capsys.readouterr().out)["errors"][0]["help"] == ["pikslide --help box"]

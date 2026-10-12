@@ -51,7 +51,6 @@ class TokType(Enum):
     ALIGNED = auto()
     AND = auto()
     AS = auto()
-    ASSERT = auto()
     AT = auto()
     BEHIND = auto()
     BELOW = auto()
@@ -90,7 +89,6 @@ class TokType(Enum):
     MONO = auto()
     NTH_WORD = auto()  # 'first' -- lexes as NTH, kept separate only for clarity
     OF = auto()
-    PRINT = auto()
     RADIUS = auto()
     RIGHT = auto()
     RJUST = auto()
@@ -151,7 +149,6 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "aligned": (TokType.ALIGNED, None, None),
     "and": (TokType.AND, None, None),
     "as": (TokType.AS, None, None),
-    "assert": (TokType.ASSERT, None, None),
     "at": (TokType.AT, None, None),
     "behind": (TokType.BEHIND, None, None),
     "below": (TokType.BELOW, None, None),
@@ -204,7 +201,6 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "nw": (TokType.EDGEPT, None, "nw"),
     "of": (TokType.OF, None, None),
     "previous": (TokType.LAST, None, None),
-    "print": (TokType.PRINT, None, None),
     "rad": (TokType.RADIUS, None, None),
     "radius": (TokType.RADIUS, None, None),
     "right": (TokType.RIGHT, DIR_RIGHT, "e"),

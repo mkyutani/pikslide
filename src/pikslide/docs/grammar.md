@@ -170,17 +170,12 @@ statement       ::= direction
                    | PLACENAME ":" unnamed-statement
                    | PLACENAME ":" position
                    | unnamed-statement
-                   | "print" print-item { "," print-item }
-                   | "assert" "(" expr "==" expr ")"
-                   | "assert" "(" position "==" position ")"
                    | "include" STRING                (* resolved before parsing, see Macros *)
 
 direction       ::= "up" | "down" | "left" | "right"
 
 lvalue          ::= ID | "fill" | "color" | "stroke" | "thickness"
                    | "small" | "medium" | "large"    (* the text sizes *)
-
-print-item      ::= "fill" | "color" | "stroke" | "thickness" | STRING | rvalue
 ```
 
 A `PLACENAME ":"` label is followed by either an *object*
@@ -192,7 +187,9 @@ starts with those tokens.
 ## Objects
 
 ```
-unnamed-statement ::= basetype { STRING { string-attr } } attribute-list
+unnamed-statement ::= basetype { text } attribute-list
+
+text            ::= STRING { string-attr }
 
 basetype        ::= CLASSNAME
                    | STRING { string-attr }
@@ -209,9 +206,15 @@ string-attr     ::= "center" | "above" | "below"
                    | "color" color-value
 ```
 
-An object's strings come right after its class, before any of its
-attributes; a `STRING` after an attribute is an error. A `string-attr`
-belongs to the `STRING` right before it, and to no other.
+An object's strings can come right after its class, before a leading
+`relexpr`, and anywhere among its attributes after it (`attribute ::=
+text`, below): `arrow "yes" 0.4 ljust` and `arrow 0.4 "yes" ljust` are
+the same arrow. Only `alt` and `theme` take a `STRING`, one each, and no
+`expr` or `position` holds one, so any other `STRING` among the
+attributes is a line of text. A `string-attr` belongs to the `STRING`
+right before it, and to no other: none of them is an object attribute,
+so `ljust` is the object's and `above` its string's wherever they're
+written.
 
 `preset-name` allows `CLASSNAME` because some preset names (`ellipse`,
 `diamond`, `line`, `arc`) are also class names and lex as such.
@@ -243,6 +246,7 @@ attribute       ::= numprop relexpr
                    | "fit"
                    | "behind" object
                    | "alt" STRING                    (* image only *)
+                   | text
 
 numprop         ::= "width" | "height" | "radius" | "diameter"
 boolprop        ::= "cw" | "ccw"
@@ -504,7 +508,8 @@ interior color, `color` the default text color, `stroke` the default line
 and outline color, `thickness` the default line thickness, `margin` the
 space between text and an object's sides and `vmargin` that between text
 and its top and bottom; and `small`, `medium` and `large` set the three text
-sizes. `print` and `assert` are parsed but have no effect on the drawing.
+sizes. pikchr's debugging statements, `print` and `assert`, aren't part of
+pikslide.
 
 ## Acknowledgments
 

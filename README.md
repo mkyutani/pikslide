@@ -86,7 +86,7 @@ command.
 pikslide diagram.pik diagram.pptx                        # a one-slide deck, sized to the diagram
 pikslide diagram.pik diagram.pptx --png                  # and diagram.png, drawn by PowerPoint
 pikslide diagram.pik --template corporate.potx           # on the template's slide, in its theme
-pikslide diagram.pik --check                             # lay it out and report errors, write nothing
+pikslide diagram.pik --check                             # lay it out, write nothing: errors and where each object went, as JSON
 ```
 
 `--png` (and `--pdf`) use PowerPoint itself, on Windows or from WSL with
@@ -100,10 +100,15 @@ so neither you nor an LLM needs this repository to write a diagram:
 - `pikslide --help box`: a keyword's synopsis, attributes and defaults
 - `pikslide --help colors`, `shapes`, `keywords`, …: the lists
 - `pikslide --help template`: drawing on a template's slide
-- `pikslide --help spec`, `grammar`: the full manuals,
-  [spec.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md)
-  and
-  [grammar.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/grammar.md)
+- `pikslide --help llm`: the reference in one text, for an LLM to read
+  once: short enough to come back whole from one command, and the same
+  bytes from the same version, so a prompt that holds it can be cached
+
+The full manuals, the language's design and its grammar, are in this
+repository:
+[spec.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md)
+and
+[grammar.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/grammar.md).
 
 ## Status
 

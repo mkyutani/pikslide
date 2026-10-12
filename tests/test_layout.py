@@ -432,6 +432,28 @@ def test_text_with_many_strings_lays_out():
         assert len(shape.texts) == 20
 
 
+@pytest.mark.parametrize(("first", "among"), [
+    ('box "a" bold "b" fit fill red\n', 'box fit "a" bold fill red "b"\n'),
+    ('arrow "yes" ljust down 0.4\n', 'arrow down 0.4 "yes" ljust\n'),
+    ('box; arrow "no" above from last box.e right 1\n', 'box; arrow from last box.e right 1 "no" above\n'),
+])
+def test_strings_among_the_attributes_lay_out_as_strings_first(first: str, among: str):
+    assert layout(first).shapes == layout(among).shapes
+
+
+def test_fit_diamond_is_sized_as_its_preset_is():
+    diamond, preset = (layout(f'{cls} "i % 15 == 0" fit\n').shapes[0] for cls in ("diamond", "shape diamond"))
+    assert (diamond.w, diamond.h) == pytest.approx((preset.w, preset.h))
+
+
+@pytest.mark.parametrize("copy", ["same as A", "width A.wid height A.ht"])
+def test_a_copy_of_a_fit_diamonds_size_holds_its_text(copy: str):
+    # A fit diamond used to be sized for text that doesn't wrap, so one
+    # made its size without `fit` wrapped the same text.
+    doc = layout(f'down\nA: diamond "i % 15 == 0" fit\nB: diamond "i % 15 == 0" {copy}\n')
+    assert doc.warnings == []
+
+
 def test_fit_width_is_the_widest_line_plus_margin_each_side():
     class FixedMetrics:
         def text_width(self, text, flags=(), text_sizes=None, typeface=""):

@@ -265,9 +265,9 @@ The text area is that rectangle less `margin` on each side.
 - `fit` makes a preset shape just big enough for its text rectangle to
   hold the text (a parallelogram 5/3 as wide as a box; a flowchart
   decision twice as wide and twice as tall). A circle, ellipse or oval is
-  made √2 times bigger each way, and a diamond 1.6 times: a `fit`
-  object's text doesn't wrap, so a diamond's runs a little past the
-  middle half and still sits well inside the points.
+  made √2 times bigger each way, and a diamond twice, as its preset is:
+  so an object of the same size without `fit` (`same as`, `width A.wid`)
+  holds the same text too.
 - An object with a size of its own and no `fit` wraps a string wider than
   its text area. That is a **warning**, naming the object and both
   widths, so wrapped text is never silent; a one-character string cannot
@@ -619,8 +619,13 @@ Humans and LLMs both need errors they can act on.
   a fixed-size object stays a warning: it is a fact about the diagram,
   visible in the output itself.
 - A `define` naming an already-defined variable is an **error** (§3.6).
-- `--check` parses and lays out without writing; `--format json` emits
-  diagnostics as JSON for tooling.
+- `--check` lays the source out without writing anything and prints the
+  result as JSON, for an LLM or a tool to read: the errors, the warnings,
+  the slide the diagram would go on -- its left and top edges in the
+  diagram's coordinates, its size, and the placeholders it keeps beside
+  the diagram (§4) -- and each drawn object's name, kind, text and place:
+  `x`, `y`, `wid` and `ht` as `A.x`, `A.y`, `A.wid` and `A.ht` give them,
+  or a line's `points`. Without `--check`, diagnostics are plain text.
 - An error names the help topics that explain it (`see: pikslide --help
   box`; in JSON, each error's `help` list): the syntax error's statement
   class or keyword, or the list an unknown name belongs to (`colors`,
@@ -635,10 +640,11 @@ Humans and LLMs both need errors they can act on.
   (`box`, `chop`, `fill`, …) gives its synopsis, the attributes it takes and
   its defaults; a list (`keywords`, `classes`, `attributes`, `flags`,
   `colors`, `shapes`, `variables`, `prelude`) is built from the source
-  itself, so it can't go stale; `grammar` and `spec` are these manuals.
-  On a terminal the text is formatted and paged; piped, it is plain text.
-  `pikslide --help` alone lists the topics, and `pikslide --help intro`
-  is the language in one page, the place to start.
+  itself, so it can't go stale. On a terminal the text is formatted and
+  paged; piped, it is plain text. `pikslide --help` alone lists the
+  topics, `pikslide --help intro` is the language in one page, the place
+  to start, and `pikslide --help llm` is all it takes to write a diagram,
+  in one text for an LLM. These manuals aren't help topics.
 
 ## 7. Not in v1
 

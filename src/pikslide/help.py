@@ -1,7 +1,7 @@
-"""`pikslide --help TOPIC`: the manuals, lists and a short help for every
+"""`pikslide --help TOPIC`: the intro, lists and a short help for every
 keyword, for people and for LLMs driving pikslide.
 
-TOPIC is a manual (`grammar`, `spec`: docs/*.md), a list (`keywords`,
+TOPIC is a page (`intro`, `template`, `llm`), a list (`keywords`,
 `classes`, `attributes`, `flags`, `colors`, `shapes`, `variables`,
 `prelude`), or any keyword, built-in variable, color or preset shape
 (`box`, `chop`, `fill`, `boxwid`, `cyan`, `callout1`, ...). Lists are built
@@ -11,8 +11,9 @@ descriptions below are written by hand, and tests check that every reserved
 word and every preset shape has one.
 
 Printed to a terminal, the text is formatted (bold headings, color
-swatches) and long output goes through $PAGER; piped, it is plain text,
-and the manuals are their Markdown source as is.
+swatches) and long output goes through $PAGER; piped, it is plain text.
+The manuals, docs/grammar.md and docs/spec.md, aren't help topics: they're
+for reading in the repository.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from importlib import resources
+from importlib.metadata import version
 
 from .pik.layout import PRESET_NAMES
 from .pik.tokens import CLASS_NAMES, KEYWORDS
@@ -54,7 +56,7 @@ class Entry:
 
 
 _CLOSED_ATTRIBUTES = """\
-text     "string" [flag ...] ...  first, right after the class (--help flags)
+text     "string" [flag ...] ...  lines of text, among the rest (--help flags)
          ljust  rjust
 size     width W (wid)  height H (ht)  radius R (rad)  fit
 style    fill C  stroke [C] [thickness T] [thick] [thin] [dashed [L]]
@@ -63,7 +65,7 @@ place    at P  with .EDGE at P  same [as X]  behind X
 edges    .n .ne .e .se .s .sw .w .nw .c  (.top .bottom .left .right .center)"""
 
 _LINE_ATTRIBUTES = """\
-text     "string" [flag ...] ...  labels, right after the class (--help flags)
+text     "string" [flag ...] ...  labels, among the rest (--help flags)
          ljust  rjust
 path     [N]  up|down|left|right [N]  go N heading A  from P  to P  then
          right until even with P  close  chop
@@ -365,9 +367,6 @@ ENTRIES: tuple[Entry, ...] = (
           body="Reads variables and macros from PATH (relative to the file, or a "
                "--include-path directory). An included file can't draw anything.",
           example='include "house.pik"'),
-    Entry(("print",), "prints values (no effect on the drawing)", synopsis=("print ITEM, ...",)),
-    Entry(("assert",), "checks two values are equal (no effect on the drawing)",
-          synopsis=("assert(EXPR == EXPR)", "assert(POSITION == POSITION)")),
     Entry(("as",), "names the object `same` copies", synopsis=("same as OBJECT",), see=("same",)),
 )
 
@@ -713,20 +712,30 @@ def _wrap(text: str, width: int, n: int = 4) -> str:
                      for p in text.split("\n"))
 
 
-def _color_list(style: _Style) -> str:
+def _theme_color_lines(style: _Style) -> list[str]:
     builtin = _builtin_theme_colors()
     lines = ["Theme colors (follow the deck's theme; RGB as in the built-in Office theme):"]
     for name, value in _theme_colors().items():
         rgb = builtin[value.split('"')[1]]
         lines.append(f"  {style.swatch(rgb)}{name:<10} {value:<18} 0x{rgb:06x}")
-    lines += ["  theme \"SLOT\"  any OOXML scheme color; COLOR lighter N% / darker N% for tints",
-              "  none, off    no color", "", "Named colors (CSS):"]
+    return lines + ["  theme \"SLOT\"  any OOXML scheme color; COLOR lighter N% / darker N% for tints",
+                    "  none, off    no color"]
+
+
+def _color_list(style: _Style) -> str:
+    lines = _theme_color_lines(style) + ["", "Named colors (CSS):"]
     for name, rgb in _css_colors().items():
         lines.append(f"  {style.swatch(rgb)}{name:<22} 0x{rgb:06x}")
     return "\n".join(lines)
 
 
-def _format_entry(entry: Entry, style: _Style) -> str:
+def _format_entry(entry: Entry, style: _Style, shown: dict[str, str] | None = None) -> str:
+    """An entry's page. `shown` is for `--help llm`: the sections printed
+    so far, by their text, each to the entry it was printed under. With
+    it, a section printed before (the classes share their ATTRIBUTES) is
+    just `as BOX`, and the entry has no color list (COLORS has its own
+    section there) and no SEE ALSO."""
+    bundled = shown is not None
     values = prelude_values()
     out = [style.bold(" ".join(n.upper() for n in entry.names[:1])) + " — " + entry.summary]
     if len(entry.names) > 1:
@@ -740,11 +749,18 @@ def _format_entry(entry: Entry, style: _Style) -> str:
         out += ["", style.bold("DEFAULTS"),
                 _indent("\n".join(f"{name} = {values.get(name, '?')}" for name in entry.defaults))]
     for heading, text in entry.sections:
+        if bundled and text == "{colors}":
+            continue
+        if bundled and text in shown:
+            out += ["", style.bold(heading), f"    as {shown[text]}"]
+            continue
+        if bundled:
+            shown[text] = entry.names[0].upper()
         text = text.replace("{colors}", _color_list(style))
         out += ["", style.bold(heading), _indent(text)]
     if entry.example:
         out += ["", style.bold("EXAMPLE"), _indent(entry.example)]
-    if entry.see:
+    if entry.see and not bundled:
         out += ["", style.bold("SEE ALSO"), _indent(", ".join(f"--help {s}" for s in entry.see))]
     return "\n".join(out) + "\n"
 
@@ -821,34 +837,6 @@ def _format_list(title: str, rows: list[tuple[str, str]], style: _Style) -> str:
 
 
 _INLINE_CODE = re.compile(r"`([^`]+)`")
-_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
-_STRONG = re.compile(r"\*\*([^*]+)\*\*")
-
-
-def _format_markdown(text: str, style: _Style) -> str:
-    """A manual for a terminal: bold headings and emphasis, code blocks
-    indented, links as their text. Plain output keeps the Markdown."""
-    if not style.tty:
-        return text
-    out = []
-    in_code = False
-    for line in text.splitlines():
-        if line.startswith("```"):
-            in_code = not in_code
-            continue
-        if in_code:
-            out.append("    " + line)
-            continue
-        m = re.match(r"(#+)\s+(.*)", line)
-        if m:
-            heading = m.group(2)
-            out.append(style.bold(heading.upper() if len(m.group(1)) <= 2 else heading))
-            continue
-        line = _LINK.sub(r"\1", line)
-        line = _STRONG.sub(lambda m: style.bold(m.group(1)), line)
-        line = _INLINE_CODE.sub(lambda m: style.bold(m.group(1)), line)
-        out.append(line)
-    return "\n".join(out) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -864,7 +852,7 @@ DB: cylinder "Orders" fit
 Cache: box "Cache" stroke dashed fit with .n at 0.5 below Web.s
 arrow from Web.s to Cache.n <->"""
 
-_INTRO = f"""\
+_INTRO_BODY = f"""\
 INTRO — pikslide in one page
 
 pikslide draws a diagram written as text into a one-slide PowerPoint deck of
@@ -881,16 +869,24 @@ A program is statements, one per line (or separated by `;`):
     right | down | left | up the direction objects chain in
     name = value             a variable: boxwid = 1, fill = accent2
 
+Names. A label starts with a capital letter (Web: box, then Web.e), a
+variable with a lowercase one (gap = 0.3, then Web.e + (gap, 0)).
+
 Placement. Each object goes after the previous one, edge to edge, in the
 current direction (right, to start with); a line starts where the previous
 object ends. `at P` or `with .EDGE at P` place an object explicitly;
 `from P to Q` and `then` shape a line; `chop` ends a line at the outlines of
-the objects it joins. P is a point: A.e, (1, 2), 0.5 below A.s, ...
+the objects it joins. P is a point: an edge A.n .ne .e .se .s .sw .w .nw .c,
+(1, 2), A.e + (0.5, 0), 0.5 below A.s, 1/2<A, B>, a line's A.start, A.end.
+Sizes and coordinates: A.wid, A.ht, A.rad, P.x, P.y.
 
-Text. Strings right after the class are lines of text: box "Title" bold
-"note" small. A string attribute (bold, small, above, color C, ...) belongs to
-the string before it; the object's own attributes (ljust, at, fill, ...) come
-after all of its strings. `fit` sizes the object to its text.
+Text. Strings are lines of text, in order: box "Title" bold "note" small;
+"say \\"hi\\"" holds a quote, "\\\\" a backslash. A string attribute (bold,
+small, above, color C, ...) belongs to the string right before it; the
+object's own attributes (ljust, at, fill, ...) can come before, between or
+after the strings. `fit` sizes the object to its text. A line's strings sit
+at its middle: above or below a level line, and beside an upright one, on
+its right with ljust or its left with rjust.
 
 Lines. `stroke` sets a line or outline: box stroke accent2 thick dashed.
 
@@ -899,14 +895,17 @@ bg2, with `lighter N%` / `darker N%`; CSS names (steelblue, ...) are fixed.
 
 EXAMPLE
 {_indent(INTRO_EXAMPLE)}
+"""
 
+_INTRO = _INTRO_BODY + """
 GOING FURTHER
     --help keywords       every keyword, one line each; then --help WORD
     --help box            a class: synopsis, attributes, defaults (arrow, ...)
     --help attributes     also: flags, colors, shapes, variables, prelude
     --help template       drawing on a --template's slide: layout, content area
-    --help grammar        the full grammar; --help spec for the design
-    --check               lay a diagram out without writing, to test it
+    --help llm            the reference in one text, for an LLM to read once
+    --check               lay a diagram out without writing: errors and where
+                          each object went, as JSON
 """
 
 
@@ -960,8 +959,69 @@ THE TEMPLATE'S OWN DEFAULTS
     template, the settings file, the program.
 
 SEE ALSO
-    --help margin, --help vmargin, --help spec (§3.3, §3.8, §4)
+    --help margin, --help vmargin
 """
+
+
+# ---------------------------------------------------------------------------
+# llm: the whole reference in one text, to read once
+# ---------------------------------------------------------------------------
+
+
+def llm_text() -> str:
+    """What it takes to write a diagram, in one plain text for an LLM to
+    read once: the intro, every keyword entry, the variables, the theme
+    colors and the preset shapes' names. It's fixed at 80 columns, whatever
+    the terminal, so a version always prints the same bytes and a prompt
+    holding it can be cached.
+
+    It's kept short, since an LLM's every turn after reading it reads it
+    again, and under 30,000 characters, which Claude Code returns from a
+    command as it is: longer, it saves the output to a file for the LLM to
+    read back, with numbered lines, at about a quarter more tokens. Left
+    out, with a line pointing to each: the CSS color names (an LLM knows
+    them), the template page and the shapes' descriptions. And the
+    prelude's source and the lists (summaries of the entries)."""
+    import textwrap
+
+    style = _Style(tty=False)
+    values = prelude_values()
+    variables = [(n, f"{values[n]:<10} {d}") for n, d in _VARIABLE_DOCS.items() if n in values]
+    shapes = sorted(PRESET_NAMES.values(), key=str.lower)
+    shown: dict[str, str] = {}
+    return "\n".join([
+        f"PIKSLIDE {version('pikslide')} — the language reference in one text (pikslide --help llm)",
+        "",
+        "Write the diagram from this text alone, and check it with",
+        "`pikslide FILE --check`, not by unzipping the .pptx. It prints JSON: the",
+        "errors, most with the `pikslide --help TOPIC` to read; the warnings; the",
+        "slide, its left and top edges, wid and ht, and placeholders (none without",
+        "--template), nothing else being on it; and where each object went, x, y,",
+        "wid and ht as A.x, A.y, A.wid and A.ht give them, or a line's points.",
+        "",
+        _INTRO_BODY,
+        "KEYWORDS",
+        "",
+        *(_format_entry(e, style, shown) for e in ENTRIES),
+        _format_list("VARIABLES  (NAME = VALUE to change)", variables, style),
+        "COLORS  (fill C, stroke C, \"string\" color C)",
+        "",
+        *_theme_color_lines(style),
+        "",
+        f"Named colors: all {len(_css_colors())} CSS color names (steelblue, tomato, ...); "
+        "pikslide --help colors lists them",
+        "",
+        f"PRESET SHAPES ({len(shapes)})  (shape NAME; pikslide --help NAME describes one)",
+        "",
+        _wrap(_SHAPES_NOTE, style.width, 2),
+        "",
+        textwrap.fill(" ".join(shapes), width=style.width, initial_indent="  ", subsequent_indent="  "),
+        "",
+        "TEMPLATE",
+        "",
+        "Drawing on a --template's slide (layout, content area, settings file): pikslide --help template",
+        "",
+    ])
 
 
 # ---------------------------------------------------------------------------
@@ -1022,12 +1082,12 @@ _LISTS = {
     "variables": "the built-in variables and their defaults",
     "prelude": "the prelude itself: every built-in definition",
 }
-_MANUALS = {"intro": "start here: the language in one page, with an example",
+_PAGES = {"intro": "start here: the language in one page, with an example",
             "template": "drawing on a --template's slide: layout, content area, settings file",
-            "grammar": "the grammar, in BNF", "spec": "the language specification"}
+            "llm": "all it takes to write a diagram, in one text: for an LLM to read once"}
 _ALIASES = {"colours": "colors", "keyword": "keywords", "class": "classes", "attribute": "attributes",
             "text-flags": "flags", "variable": "variables", "vars": "variables", "presets": "shapes",
-            "specification": "spec", "bnf": "grammar", "topics": "help",
+            "topics": "help",
             "settings": "template", "content": "template"}
 
 
@@ -1037,7 +1097,7 @@ def _entry_index() -> dict[str, Entry]:
 
 def topics_text(style: _Style | None = None) -> str:
     style = style or _Style(tty=False)
-    rows = [(k, v) for k, v in _MANUALS.items()] + [(k, v) for k, v in _LISTS.items()]
+    rows = [(k, v) for k, v in _PAGES.items()] + [(k, v) for k, v in _LISTS.items()]
     return (style.bold("Help topics") + "  (pikslide --help TOPIC)\n\n"
             + "\n".join(f"  {k:<12}{v}" for k, v in rows)
             + "\n\n  and any keyword, built-in variable, color or preset shape, e.g. box, arrow, chop, fill,"
@@ -1056,9 +1116,8 @@ def render(topic: str, style: _Style) -> str | None:
         return _INTRO
     if key == "template":
         return _TEMPLATE
-    if key in _MANUALS:
-        text = resources.files("pikslide").joinpath("docs", f"{key}.md").read_text(encoding="utf-8")
-        return _format_markdown(text, style)
+    if key == "llm":
+        return llm_text()
     if key == "prelude":
         return prelude_text()
     if key == "colors":
@@ -1085,7 +1144,7 @@ def render(topic: str, style: _Style) -> str | None:
 
 
 def _all_topics() -> list[str]:
-    return list(dict.fromkeys([*_MANUALS, *_LISTS, *_entry_index(), *prelude_values(), *PRESET_NAMES]))
+    return list(dict.fromkeys([*_PAGES, *_LISTS, *_entry_index(), *prelude_values(), *PRESET_NAMES]))
 
 
 def show(topic: str | None) -> int:

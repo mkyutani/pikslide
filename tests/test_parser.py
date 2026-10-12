@@ -331,18 +331,10 @@ def test_expr_object_property():
 # ---------------------------------------------------------------------------
 
 
-def test_print_statement_mixes_strings_and_values():
-    doc = parse('print "width is", A.width, " and color ", A.color\n')
-    stmt = doc.statements[0]
-    assert isinstance(stmt, ast.PrintStatement)
-    assert stmt.items[0] == "width is"
-    assert stmt.items[1] == ast.ObjectProp(ast.NameRef(["A"]), "width")
-
-
-def test_assert_expr_and_position_forms():
-    doc = parse("assert( A.width == 1.2 )\nassert( A.n == (0,0) )\n")
-    assert isinstance(doc.statements[0], ast.AssertExprStatement)
-    assert isinstance(doc.statements[1], ast.AssertPositionStatement)
+@pytest.mark.parametrize("text", ['print "width is", A.width\n', "assert( A.width == 1.2 )\n"])
+def test_pikchrs_print_and_assert_are_not_statements(text: str):
+    with pytest.raises(PikSyntaxError):
+        parse(text)
 
 
 # ---------------------------------------------------------------------------
@@ -724,6 +716,26 @@ def test_string_attributes_bind_to_the_string_before_them():
     assert isinstance(at, ast.At)
 
 
+@pytest.mark.parametrize("text", [
+    'arrow 0.4 "yes" ljust\n',
+    'line right 1 "a" above then down 1 "b" below\n',
+    'arrow from A.e to B.w "no" above\n',
+    'box width 1 "a" bold fill red "b"\n',
+])
+def test_strings_may_come_among_the_attributes(text: str):
+    doc = parse(text)
+    texts = [a for a in doc.statements[0].attributes if isinstance(a, ast.TextAttribute)]
+    assert texts and all(t.text in ("yes", "no", "a", "b") for t in texts)
+
+
+def test_strings_among_the_attributes_keep_their_order_and_attributes():
+    doc = parse('box width 1 "a" bold fill red "b" small\n')
+    width, a, fill, b = doc.statements[0].attributes
+    assert a == ast.TextAttribute("a", ["bold"], None)
+    assert b == ast.TextAttribute("b", ["small"], None)
+    assert isinstance(width, ast.NumProperty) and isinstance(fill, ast.ColorProperty)
+
+
 def test_bare_string_takes_string_attributes_then_object_attributes():
     doc = parse('"a" italic "b" rjust at (0, 0)\n')
     stmt = doc.statements[0]
@@ -744,9 +756,8 @@ def test_stroke_groups_color_and_line_attributes():
 
 
 @pytest.mark.parametrize(("src", "message"), [
-    ('box width 1 "a"\n', "a string must come right after the object class"),
-    ('box "a" ljust "b"\n', "a string must come right after the object class"),
-    ('"P" at (0, 0) "Q" at (1, 1)\n', "a string must come right after the object class"),
+    # two text objects on one line: one object, with two positions
+    ('"P" at (0, 0) "Q" at (1, 1)\n', "an object can have only one 'at'"),
     ('box "a" width 1 bold\n', "'bold' is a string attribute"),
     ('box "a" width 1 color red\n', "'color' is a string attribute"),
     ("box thick\n", "'thick' is a stroke attribute"),

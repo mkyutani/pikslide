@@ -5,9 +5,9 @@ import sys
 from importlib.metadata import version
 
 from .pik import PikSyntaxError, dump, format_syntax_error, parse
-from .pik.layout import LayoutError
+from .pik.layout import LayoutError, flatten_shapes
 from .pik.tokens import column_at
-from .pptx_writer import find_settings_file, resolve_for_pptx, write_pptx, write_pptx_from_template
+from .pptx_writer import find_settings_file, resolve_for_pptx, slide_frame, write_pptx, write_pptx_from_template
 from .help import hint as help_hint
 from .help import layout_error_topics, syntax_error_topics
 from .help import show as show_help
@@ -21,7 +21,8 @@ def main() -> None:
         # The first thing to try, for a person or an LLM: say where to go.
         print(_parser().format_usage(), end="")
         print("Draw a .pik diagram as a PowerPoint deck: pikslide diagram.pik diagram.pptx")
-        print("New to pikslide? pikslide --help intro. All options and help topics: pikslide --help")
+        print("New to pikslide? pikslide --help intro; an LLM, pikslide --help llm. "
+              "All options and help topics: pikslide --help")
         raise SystemExit(2)
 
     # --help [TOPIC] (src/pikslide/help.py) is handled before the rest, since
@@ -50,13 +51,14 @@ def _parser() -> argparse.ArgumentParser:
         prog="pikslide",
         description="Render a .pik diagram to a new one-slide PowerPoint deck. "
         "Language reference: pikslide --help TOPIC -- start with `--help intro`, then a "
-        "keyword (`--help box`) or a list (`--help keywords`); topics are listed below.",
+        "keyword (`--help box`) or a list (`--help keywords`); topics are listed below. "
+        "An LLM reads `--help llm`, all it takes to write a diagram in one text.",
         add_help=False,
     )
     parser.add_argument(
         "-h", "--help", nargs="?", metavar="TOPIC",
         help="show this help, or help on TOPIC: a keyword (box, chop, fill, ...), "
-        "a list (colors, shapes, ...) or a manual (grammar, spec)",
+        "a list (colors, shapes, ...) or a page (intro, template, llm)",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {version('pikslide')}")
     parser.add_argument("input", help="a .pik source file")
@@ -99,9 +101,10 @@ def _parser() -> argparse.ArgumentParser:
         "--strict", action="store_true",
         help="make a stand-in an error: no --template (the built-in theme), or a font that isn't installed",
     )
-    parser.add_argument("--check", action="store_true", help="parse and lay out the source without writing any output")
     parser.add_argument(
-        "--format", choices=("text", "json"), default="text", help="diagnostics format (default: text)"
+        "--check", action="store_true",
+        help="lay the source out without writing anything, and print the result as JSON: the errors, the "
+        "warnings, and where each object went",
     )
     return parser
 
@@ -147,7 +150,7 @@ def _with_extension(path: str, ext: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Diagnostics (docs/spec.md SS5): plain text (default) or --format json.
+# Diagnostics (docs/spec.md SS5): plain text, or JSON with --check.
 # ---------------------------------------------------------------------------
 
 
@@ -169,7 +172,7 @@ def _try_read(path: str) -> str | None:
 def _fail(args: argparse.Namespace, message: str) -> None:
     """A plain diagnostic with no file position (an unsupported output
     format, an unreadable settings file, and the like)."""
-    if args.format == "json":
+    if args.check:
         print(json.dumps({"ok": False, "errors": [{"file": None, "line": None, "column": None, "message": message}]}))
     else:
         print(f"error: {message}", file=sys.stderr)
@@ -183,7 +186,7 @@ def _fail_syntax(args: argparse.Namespace, err: PikSyntaxError, main_path: str, 
     lines = text.splitlines()
     source_line = lines[err.line - 1] if 0 < err.line <= len(lines) else ""
     topics = syntax_error_topics(source_line, err.text)
-    if args.format == "json":
+    if args.check:
         detail = _syntax_error_detail(err, main_path, main_text)
         print(json.dumps({"ok": False, "errors": [{**detail, "help": _help_commands(topics)}]}))
     else:
@@ -201,7 +204,7 @@ def _fail_layout(args: argparse.Namespace, err: LayoutError) -> None:
     carries no file position -- unlike a
     PikSyntaxError, it isn't tied to one token."""
     topics = layout_error_topics(str(err))
-    if args.format == "json":
+    if args.check:
         error = {"file": None, "line": None, "column": None, "message": str(err), "help": _help_commands(topics)}
         print(json.dumps({"ok": False, "errors": [error]}))
     else:
@@ -211,18 +214,40 @@ def _fail_layout(args: argparse.Namespace, err: LayoutError) -> None:
     raise SystemExit(1)
 
 
-def _succeed(args: argparse.Namespace, message: str, warnings: list[str] = (), notes: list[str] = (), **extra) -> None:
+def _succeed(args: argparse.Namespace, message: str, warnings: list[str] = (), notes: list[str] = ()) -> None:
     """`notes` are informational only -- unlike `warnings`, --strict never
     makes them fatal (e.g. --png falling back to LibreOffice: a fact about
     how the image was made, not a problem with the diagram)."""
-    if args.format == "json":
-        print(json.dumps({"ok": True, "errors": [], "warnings": list(warnings), "notes": list(notes), **extra}))
+    for w in warnings:
+        print(f"warning: {w}", file=sys.stderr)
+    for n in notes:
+        print(f"note: {n}", file=sys.stderr)
+    print(message)
+
+
+def _succeed_check(warnings: list[str], slide: dict, shapes: list) -> None:
+    """--check's JSON: the warnings, the slide (slide_frame()), and where
+    each object went, one to a line so that it reads (and greps) as a
+    list."""
+    slide = {k: round(v, 2) if isinstance(v, float) else v for k, v in slide.items()}
+    head = json.dumps({"ok": True, "errors": [], "warnings": list(warnings), "slide": slide}, ensure_ascii=False)
+    objects = ",\n".join(f"  {json.dumps(_geometry(s), ensure_ascii=False)}" for s in shapes)
+    print(f'{head[:-1]}, "objects": [\n{objects}\n]}}')
+
+
+def _geometry(shape) -> dict:
+    """Where `shape` went, as the source itself would measure it: x, y,
+    wid and ht as `A.x`, `A.y`, `A.wid` and `A.ht` give them (inches, y
+    up), or for a line the points it passes through."""
+    kind = f"shape {shape.preset}" if shape.kind == "shape" else shape.kind
+    obj: dict = {"name": shape.name, "kind": kind}
+    if shape.texts:
+        obj["text"] = [text for text, _flags in shape.texts]
+    if shape.path is not None:
+        obj["points"] = [[round(x, 2), round(y, 2)] for x, y in shape.path]
     else:
-        for w in warnings:
-            print(f"warning: {w}", file=sys.stderr)
-        for n in notes:
-            print(f"note: {n}", file=sys.stderr)
-        print(message)
+        obj.update(x=round(shape.cx, 2), y=round(shape.cy, 2), wid=round(shape.w, 2), ht=round(shape.h, 2))
+    return obj
 
 
 # ---------------------------------------------------------------------------
@@ -270,8 +295,13 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
     warnings = result.stand_ins + result.warnings
 
     if args.check:
-        _succeed(args, f"ok: {args.input} parses and lays out cleanly (--check, nothing written)",
-                 warnings=warnings)
+        layout_name = args.layout if args.layout is not None else result.layout_name
+        try:
+            slide = slide_frame(result, args.template, layout_name)
+        except LayoutError as e:
+            _fail_layout(args, e)
+            return
+        _succeed_check(warnings, slide, flatten_shapes(result.shapes))
         return
 
     if not out_path.endswith(".pptx"):
@@ -289,7 +319,7 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
         # No --template (docs/spec.md SS3.3 rule 2): the built-in Office
         # theme stands in for a real one, which --strict makes fatal
         # rather than just noted.
-        warning = "no --template given: colors and fonts are stand-ins from the built-in Office theme (docs/spec.md SS3.3)"
+        warning = "no --template given: colors and fonts are stand-ins from the built-in Office theme (pikslide --help template)"
         if args.strict:
             _fail(args, warning)
             return
@@ -308,4 +338,4 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
             _fail(args, f"could not render {path}: {e}")
             return
         written[fmt] = path
-    _succeed(args, "\n".join(f"wrote {p}" for p in written.values()), warnings=warnings, notes=notes, **written)
+    _succeed(args, "\n".join(f"wrote {p}" for p in written.values()), warnings=warnings, notes=notes)

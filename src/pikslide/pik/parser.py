@@ -225,66 +225,28 @@ class Parser:
             base, attrs = self.parse_unnamed_statement()
             return ast.ObjectStatement(label=None, base=base, attributes=attrs)
 
-        if t.type == TokType.PRINT:
-            self.advance()
-            items = self.parse_print_items()
-            return ast.PrintStatement(items)
-
-        if t.type == TokType.ASSERT:
-            return self.parse_assert()
-
         self._error("unexpected token at start of statement")
-
-    def parse_assert(self) -> ast.Statement:
-        self.expect(TokType.ASSERT)
-        self.expect(TokType.LP)
-        mark = self.i
-        try:
-            left = self.parse_expr()
-            self.expect(TokType.EQ)
-            right = self.parse_expr()
-            self.expect(TokType.RP)
-            return ast.AssertExprStatement(left, right)
-        except PikSyntaxError:
-            self.i = mark
-        left_pos = self.parse_position()
-        self.expect(TokType.EQ)
-        right_pos = self.parse_position()
-        self.expect(TokType.RP)
-        return ast.AssertPositionStatement(left_pos, right_pos)
-
-    def parse_print_items(self) -> list[ast.Expr | str]:
-        items = [self.parse_pritem()]
-        while self.at(TokType.COMMA):
-            self.advance()
-            items.append(self.parse_pritem())
-        return items
-
-    def parse_pritem(self) -> ast.Expr | str:
-        t = self.peek()
-        if t is not None and t.type in _PSEUDOVAR_NAME:
-            self.advance()
-            return ast.Var(_PSEUDOVAR_NAME[t.type])
-        if t is not None and t.type == TokType.STRING:
-            self.advance()
-            return unescape_string(t.text)
-        return self.parse_expr()
 
     # -- objects ----------------------------------------------------------
 
     def parse_unnamed_statement(self) -> tuple[ast.Basetype, list[ast.Attribute]]:
-        # unnamed-statement ::= basetype { STRING { string-attr } } attribute-list
-        # (docs/grammar.md, Objects): the strings come first, then the
-        # object's own attributes, and no string after those.
+        # unnamed-statement ::= basetype { text } attribute-list
+        # (docs/grammar.md, Objects): strings may come first, before a
+        # leading distance, and anywhere among the attributes after it.
         base = self.parse_basetype()
         attrs: list[ast.Attribute] = []
         while self.at(TokType.STRING):
-            text = unescape_string(self.advance().text)
-            flags, color = self.parse_string_attrs()
-            attrs.append(ast.TextAttribute(text, flags, color))
+            attrs.append(self._parse_text())
         attrs += self.parse_attribute_list()
         self._check_misplaced_attribute()
         return base, attrs
+
+    def _parse_text(self) -> ast.TextAttribute:
+        """text ::= STRING { string-attr }: a line of text, and the string
+        attributes that belong to it."""
+        text = unescape_string(self.advance().text)
+        flags, color = self.parse_string_attrs()
+        return ast.TextAttribute(text, flags, color)
 
     def _check_misplaced_attribute(self) -> None:
         """A clearer error than "unexpected token" for the words that are
@@ -292,8 +254,6 @@ class Parser:
         t = self.peek()
         if t is None:
             return
-        if t.type == TokType.STRING:
-            self._error("a string must come right after the object class, before its attributes")
         if t.type in _STRING_ATTR_NAME or t.type == TokType.COLOR:
             self._error(f"'{t.text}' is a string attribute: write it right after the string it applies to")
         if t.type in _STROKE_ONLY:
@@ -373,6 +333,11 @@ class Parser:
                 if justify is not None and justify != name:
                     self._error("'ljust' and 'rjust' cannot both be given")
                 justify = name
+            # A string is never an attribute's argument here (`alt`, `theme`
+            # and `image` take theirs themselves): it's a line of text.
+            if t is not None and t.type == TokType.STRING:
+                attrs.append(self._parse_text())
+                continue
             attr = self._try_parse_attribute()
             if attr is None:
                 break

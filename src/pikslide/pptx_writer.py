@@ -814,10 +814,14 @@ def find_settings_file(target_path: str, explicit: str | None = None) -> str | N
     return candidate if os.path.isfile(candidate) else None
 
 
+# The space write_pptx() leaves round the diagram on a slide of its own.
+_SLIDE_MARGIN = 0.15
+
+
 def write_pptx(
     result: LayoutResult,
     path: str,
-    margin: float = 0.15,
+    margin: float = _SLIDE_MARGIN,
 ) -> None:
     """Render `result` (from :func:`pikslide.pik.layout.resolve_layout`, or
     `resolve_for_pptx`) to a single-slide PowerPoint file at `path`, sized
@@ -1051,6 +1055,32 @@ def write_pptx_from_template(
     finally:
         if tmp_path is not None:
             os.remove(tmp_path)
+
+
+def slide_frame(result: LayoutResult, template_path: str | None = None, layout_name: str = "") -> dict:
+    """The slide write_pptx() or, with `template_path`,
+    write_pptx_from_template() would put `result` on, for --check: its
+    left and top edges in the diagram's own coordinates (inches, y up),
+    its width and height, and the placeholders it keeps beside the
+    diagram -- none on a slide of its own, a layout's title when
+    `layout_name` names the layout. Nothing else goes on it."""
+    placeholders: list[str] = []
+    if template_path is None:
+        tf = _Transform(_content_bbox(result), _SLIDE_MARGIN)
+    else:
+        prs, tmp_path = _open_template_base(template_path)
+        try:
+            layout = _resolve_template_layout(prs, layout_name)
+            (left, top, _w, _h), _what = _content_area(prs, layout)
+            tf = _Transform(_content_bbox(result), 0.0, origin=(left, top))
+            tf.slide_width, tf.slide_height = Emu(prs.slide_width).inches, Emu(prs.slide_height).inches
+            if layout_name:
+                placeholders = [p.name for p in layout.iter_cloneable_placeholders() if not _is_content(p)]
+        finally:
+            if tmp_path is not None:
+                os.remove(tmp_path)
+    return {"left": tf.x0 - tf.margin_x, "top": tf.y1 + tf.margin_y,
+            "wid": tf.slide_width, "ht": tf.slide_height, "placeholders": placeholders}
 
 
 def _add_all_shapes(container, shapes: list[Shape], tf: _Transform) -> None:

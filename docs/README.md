@@ -1,12 +1,12 @@
 # pikslide docs
 
-The manuals ship inside the package, so an installed pikslide can show
-them (`pikslide --help grammar`, `pikslide --help spec`):
+The manuals:
 
 - [spec.md](../src/pikslide/docs/spec.md): the language specification
 - [grammar.md](../src/pikslide/docs/grammar.md): the grammar, in BNF
 
-`pikslide --help` lists every help topic.
+Writing a diagram takes neither: `pikslide --help` lists the help topics
+built in, and `pikslide --help llm` is all of it in one text, for an LLM.
 
 This directory holds what only the repository has: diagrams, with the
 pictures they render to.

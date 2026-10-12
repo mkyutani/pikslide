@@ -888,3 +888,31 @@ def test_pptx_misnamed_as_potx_is_a_clear_error(tmp_path: pathlib.Path):
     fake_potx.write_bytes(pptx_path.read_bytes())
     with pytest.raises(LayoutError, match="potx"):
         _from_template('box "Web"\n', fake_potx, tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# slide_frame(): the slide --check reports, as the writers make it
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("layout", [None, "", "Title and Content"])
+def test_slide_frame_is_the_slide_the_diagram_is_written_on(tmp_path, layout):
+    from pikslide.pptx_writer import slide_frame, write_pptx_from_template
+
+    template = None if layout is None else str(_template_deck(tmp_path))
+    result = resolve_for_pptx(parse('Web: box "Web" at (1, 2)\n'), template_path=template, layout_name=layout or "")
+    out = tmp_path / "out.pptx"
+    if template is None:
+        write_pptx(result, str(out))
+    else:
+        write_pptx_from_template(result, template, str(out), layout_name=layout)
+    frame = slide_frame(result, template, layout or "")
+
+    prs = Presentation(str(out))
+    slide = prs.slides[0]
+    web = next(s for s in slide.shapes if s.name == "Web")
+    assert (frame["wid"], frame["ht"]) == pytest.approx((prs.slide_width.inches, prs.slide_height.inches))
+    # the box's top left, from its place in the diagram and the slide's edges
+    assert (1 - 0.375 - frame["left"], frame["top"] - (2 + 0.25)) == pytest.approx(
+        (web.left.inches, web.top.inches), abs=1e-3)
+    assert frame["placeholders"] == [p.name for p in slide.placeholders]

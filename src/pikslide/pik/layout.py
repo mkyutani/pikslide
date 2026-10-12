@@ -668,7 +668,7 @@ def _eval_assignment(stmt: ast.AssignStatement, ctx: "_Ctx") -> None:
     if stmt.name == "layout" and not ctx._layout_assignment_allowed:
         raise LayoutError(
             "'layout' can only be set in a template's settings file, not in a "
-            "program (docs/spec.md SS3.8): a .pik never chooses the deck's structure"
+            "program: a .pik never chooses the deck's structure"
         )
     current = ctx.vars.get(stmt.name, 0.0)
     rhs = eval_expr(stmt.value, ctx)
@@ -713,7 +713,7 @@ def _load_settings(ctx: "_Ctx", settings_text: str, settings_base_dir: str) -> N
     for stmt in doc.statements:
         if not isinstance(stmt, ast.AssignStatement):
             raise LayoutError(
-                "a settings file must contain definitions only (docs/spec.md SS3.8): "
+                "a settings file must contain definitions only: "
                 f"found a {type(stmt).__name__}"
             )
         _eval_assignment(stmt, ctx)
@@ -1167,10 +1167,8 @@ def _text_placement(shape: Shape, ctx: _Ctx) -> tuple[float, float]:
 
 
 # How much bigger than its text (plus `margin` each side) `fit` makes a
-# diamond or an ellipse. A diamond's text is set in its middle half, but
-# a fit one's text doesn't wrap (Shape.fit), so it can run a little past
-# that and still sit well inside the points.
-_TEXT_AREA_SCALE = {"diamond": 1.6, "circle": math.sqrt(2), "ellipse": math.sqrt(2), "oval": math.sqrt(2)}
+# circle or an ellipse: the text box is the largest rectangle inscribed.
+_TEXT_AREA_SCALE = {"circle": math.sqrt(2), "ellipse": math.sqrt(2), "oval": math.sqrt(2)}
 
 # The objects whose text wraps inside a fixed-size frame, and the preset
 # each is drawn as (pptx_writer's _AUTOSHAPE): `shape` is its own preset,
@@ -1243,22 +1241,21 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     dy, split = _text_placement(shape, ctx)
     shape.h += 2 * abs(dy) + split
     scale = _TEXT_AREA_SCALE.get(shape.kind, 1.0)
-    if shape.kind == "shape":
+    if shape.kind in ("shape", "diamond"):
         # A preset's text is set in its text rectangle, which for many is
         # smaller than the shape: a parallelogram's leaves out the slanted
-        # ends. Size the shape for that rectangle to hold the text.
-        assert shape.preset is not None
-        shape.w, shape.h = fit_size(shape.preset, shape.w, shape.h)
-    elif shape.kind == "diamond":
-        # A diamond's text sits well inside its points, so needs extra room.
-        shape.w *= scale
-        shape.h *= scale
+        # ends, a diamond's is its middle half. Size the shape for that
+        # rectangle to hold the text, so that one of the same size made
+        # without `fit` (`same as`, `width A.wid`) holds it too.
+        preset = shape.preset if shape.kind == "shape" else _FRAMED_TEXT_KINDS["diamond"]
+        assert preset is not None
+        shape.w, shape.h = fit_size(preset, shape.w, shape.h)
     elif shape.kind in ("circle", "ellipse", "oval"):
         # The largest axis-aligned rectangle inscribed in an ellipse of
         # full width/height (W, H) is (W/sqrt(2)) x (H/sqrt(2)) -- so to
         # give the text box that exact size, the ellipse's own bounding
         # box (what shape.w/.h become) must be sqrt(2) times bigger in
-        # each dimension, the same idea as diamond's correction above.
+        # each dimension.
         shape.w *= scale
         shape.h *= scale
     elif shape.kind == "cylinder":
@@ -1743,8 +1740,6 @@ def _layout_statements(
             continue
         if isinstance(stmt, ast.AssignStatement):
             _eval_assignment(stmt, ctx)
-            continue
-        if isinstance(stmt, (ast.PrintStatement, ast.AssertExprStatement, ast.AssertPositionStatement)):
             continue
         if isinstance(stmt, ast.LabelPosition):
             pt = eval_position(stmt.position, ctx)

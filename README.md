@@ -110,12 +110,6 @@ repository:
 and
 [grammar.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/grammar.md).
 
-## Status
-
-The language's v1 is implemented. Not in it yet: drawing into an existing
-deck's slide, connectors, auto-layout, and multi-slide decks, among others
-([spec.md §7](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md#7-not-in-v1)).
-
 ## Development
 
 ```sh

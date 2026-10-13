@@ -13,7 +13,7 @@ slides**. You don't write coordinates: you place objects one after another
 in a direction, and refer to earlier objects by name. A diagram becomes
 **native, editable PowerPoint objects**: shapes a person can select,
 restyle and move after the fact. (pikslide's own design traces back
-through two earlier languages; see Acknowledgments, §8.)
+through two earlier languages; see Acknowledgments, §7.)
 
 The target is one *diagram*, not a deck. Deck structure (titles, ordering,
 body text) belongs to whatever assembles the deck; pikslide writes a diagram
@@ -24,11 +24,10 @@ the real deck from there.
 ### Scope of v1
 
 v1 covers theme colors and fonts (§3.3), an editable structure of shape
-names, groups and z-order (§3.1), preset shapes (§3.4), and images and icons (§3.5). What v1 leaves out is
-listed in §7.
+names, groups and z-order (§3.1), preset shapes (§3.4), and images and icons (§3.5).
 
 Placement is sequential and relative: objects are placed one after another
-and relative to one another, and there is no auto-layout. Humans and LLMs
+and relative to one another. Humans and LLMs
 both write pikslide, so the language is kept deterministic, unambiguous and
 short to write, and errors point at exact positions (§5).
 
@@ -45,7 +44,7 @@ written in a `.pik`; see §4.
   error. Arithmetic on a color (`primary + 1`) is an error too.
 - **New words are reserved.** The words `shape`, `image`, `include`, `alt`,
   `theme`, `major`, `medium`, `large`, `lighter`, `darker`, `none`, `off`,
-  and `connector` (for later) are ordinary reserved words: they cannot be
+  and `connector` (unused) are ordinary reserved words: they cannot be
   used as variable or macro names. Names such as `accent1` are not among
   them; the prelude defines those as ordinary variables (§3.7). See
   [grammar.md](grammar.md), *Reserved words*.
@@ -100,38 +99,16 @@ Goal: the Selection Pane in PowerPoint reads like the source.
 
   Without either, a line's labels are centered on the line.
 
-### 3.2 Lines and arrows; `connector` is deferred
+### 3.2 Lines and arrows
 
-**v1 has no connectors.** `line`, `arrow`, `spline` and `arc` are *lines
-drawn with fixed geometry*. They are emitted as plain PowerPoint lines (a
-two-point path as a line, a longer path as a freeform), with `stroke`'s
-`dashed`, `dotted`, `thick`, `thin` and the arrowheads `<-`, `->`, `<->`
-mapped to dash style, weight and arrowheads.
+`line`, `arrow`, `spline` and `arc` are *lines drawn with fixed geometry*.
+They are emitted as plain PowerPoint lines (a two-point path as a line, a
+longer path as a freeform), with `stroke`'s `dashed`, `dotted`, `thick`,
+`thin` and the arrowheads `<-`, `->`, `<->` mapped to dash style, weight and
+arrowheads.
 
 They are **never attached to shapes**, even when an endpoint lies exactly on
 a shape's edge. Moving a box in PowerPoint leaves the line where it was.
-
-**`connector` will be a separate object class, not something `arrow` turns
-into.** In Office a connector is a *link between two objects*: it names its
-two ends, follows them when they move, and chooses its own route. That is a
-different idea from `arrow`, which is only geometry, drawn once and never
-re-routed — inferring a link from where an arrow's endpoint happens to fall
-would be implicit and surprising. So:
-
-- `arrow` and `line` stay geometry, forever; nothing turns them into links.
-- When links are added, they get their own word, `connector`, with explicit
-  ends. Its syntax is not designed yet.
-
-Groundwork already checked, for when `connector` is designed (python-pptx
-1.0.2, drawn in PowerPoint):
-
-- python-pptx creates straight and elbow (horizontal-first) connectors and
-  attaches them to connection sites 0–3 (rectangle top, left, bottom, right).
-- An elbow that must leave *vertically* needs hand-written `rot`/`flipV`
-  (verified for one orientation). Sites 4 and up (an ellipse has eight)
-  need hand-written `stCxn`/`endCxn`; the helper raises `KeyError`.
-- A freeform does **not** follow when a shape moves; an attached connector
-  does, and PowerPoint re-routes an attached elbow itself when that happens.
 
 ### 3.3 Theme colors and fonts
 
@@ -646,17 +623,7 @@ Humans and LLMs both need errors they can act on.
   to start, and `pikslide --help llm` is all it takes to write a diagram,
   in one text for an LLM. These manuals aren't help topics.
 
-## 7. Not in v1
-
-Inserting into an existing deck's slide · ` ```pikslide ` blocks in
-Markdown · connectors (a future `connector` class, §3.2) · SVG *output* (SVG *images*
-are supported, §3.5) · auto-layout and declarative graph syntax (a large
-piece of work of its own) · tables, charts, SmartArt · animation,
-transitions, speaker notes · multi-slide or whole-deck authoring · true
-Bézier curves (`spline`/`arc` stay polylines) · shape adjustment handles ·
-arithmetic on colors.
-
-## 8. Acknowledgments
+## 7. Acknowledgments
 
 pikslide traces its lineage through two earlier languages. Brian
 Kernighan's `pic` (1984) introduced sequential, relative placement of

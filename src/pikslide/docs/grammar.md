@@ -6,9 +6,7 @@ syntax in BNF/EBNF, and a short account of what the constructs mean. For
 [spec.md](spec.md).
 
 This document describes the target language. Every rule here is
-implemented, with one reserved-but-inactive exception: `connector`, a word
-held for a future object class ([spec.md](spec.md) §3.2/§7) that parses as
-a reserved word but nothing more yet.
+implemented. One reserved word, `connector`, is used by no rule.
 
 ## Notation
 
@@ -388,7 +386,7 @@ names.
 | `theme` | builds a theme color from a slot name, `theme "accent1"` |
 | `lighter`, `darker` | color modifiers |
 | `none`, `off` | the *no color* value |
-| `connector` | reserved for a future object class ([spec.md](spec.md) §3.2); not used yet |
+| `connector` | unused |
 
 Semantic constraints the grammar cannot express (each is an error):
 
@@ -449,9 +447,7 @@ or through a block (`Outer.Inner`), and points on them by edge (`Web.ne`,
 
 **Lines are geometry.** `line`, `arrow`, `spline` and `arc` are drawn at
 fixed coordinates. They are never attached to the objects they touch, in the
-language or in any output format. A link between two named objects is a
-different concept, planned as a separate `connector` object class (see
-[spec.md](spec.md) §3.2).
+language or in any output format (see [spec.md](spec.md) §3.2).
 
 **Attributes.** `width`/`height`/`radius`/`diameter` set a size (a
 `relexpr` with `%` is a percentage of the current value); `fill` sets the

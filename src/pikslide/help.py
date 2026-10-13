@@ -173,9 +173,9 @@ ENTRIES: tuple[Entry, ...] = (
     _line(("move",), "moves the current point, drawing nothing",
           "Like a line, but invisible: it moves where the next object goes.",
           ("movewid", "lineht"), "move right 0.5"),
-    Entry(("connector",), "reserved for a future class: a link that follows its objects",
-          body="Reserved, not used yet: a planned object class that stays attached to the "
-               "objects it joins. Lines today are fixed geometry.",
+    Entry(("connector",), "a reserved word, unused",
+          body="Reserved: it can't name a variable or a macro, and no statement uses it. "
+               "Lines are fixed geometry, not attached to the objects they join.",
           see=("line", "arrow")),
 
     # --- size, style ------------------------------------------------------

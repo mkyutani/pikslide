@@ -42,7 +42,10 @@ jobs:
         with:
           name: dist
           path: dist/
+      # No checkout here, so no uv.lock to key a cache on.
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
       - run: uv publish --publish-url https://test.pypi.org/legacy/
       - name: Smoke-test the TestPyPI release from a clean environment
         run: |
@@ -73,4 +76,6 @@ jobs:
           name: dist
           path: dist/
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
       - run: uv publish

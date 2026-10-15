@@ -86,7 +86,7 @@ command.
 pikslide diagram.pik diagram.pptx                        # a one-slide deck, sized to the diagram
 pikslide diagram.pik diagram.pptx --png                  # and diagram.png, drawn by PowerPoint
 pikslide diagram.pik --template corporate.potx           # on the template's slide, in its theme
-pikslide diagram.pik --check                             # lay it out, write nothing: errors and where each object went, as JSON
+pikslide diagram.pik --check                             # lay it out, write nothing: errors, warnings and where each object went, as JSON
 ```
 
 `--png` (and `--pdf`) use PowerPoint itself, on Windows or from WSL with

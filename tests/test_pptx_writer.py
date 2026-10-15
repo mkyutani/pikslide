@@ -752,8 +752,9 @@ def test_diagram_bigger_than_the_content_area_is_a_warning(tmp_path: pathlib.Pat
     fits = resolve_for_pptx(parse("box width 9 height 4.9\n"), template_path=str(tmpl))
     assert fits.warnings == []
     [w] = resolve_for_pptx(parse("box width 9.5 height 1\n"), template_path=str(tmpl)).warnings
-    assert w == ("the diagram (9.50 x 1.00 in) is bigger than the 'Content Placeholder 2' placeholder of "
-                 "layout 'Title and Content' it goes in (9.00 x 4.95 in), and runs past it")
+    assert w.message == ("the diagram (9.50 x 1.00 in) is bigger than the 'Content Placeholder 2' placeholder of "
+                         "layout 'Title and Content' it goes in (9.00 x 4.95 in), and runs past it: box 1")
+    assert w.objects == ("box 1",)
 
 
 def test_template_uses_title_and_content_by_default(tmp_path: pathlib.Path):

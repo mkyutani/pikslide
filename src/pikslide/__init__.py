@@ -5,7 +5,7 @@ import sys
 from importlib.metadata import version
 
 from .pik import PikSyntaxError, dump, format_syntax_error, parse
-from .pik.layout import LayoutError, flatten_shapes
+from .pik.layout import LayoutError, LayoutWarning, flatten_shapes
 from .pik.tokens import column_at
 from .pptx_writer import find_settings_file, resolve_for_pptx, slide_frame, write_pptx, write_pptx_from_template
 from .help import hint as help_hint
@@ -214,7 +214,7 @@ def _fail_layout(args: argparse.Namespace, err: LayoutError) -> None:
     raise SystemExit(1)
 
 
-def _succeed(args: argparse.Namespace, message: str, warnings: list[str] = (), notes: list[str] = ()) -> None:
+def _succeed(args: argparse.Namespace, message: str, warnings: list[LayoutWarning] = (), notes: list[str] = ()) -> None:
     """`notes` are informational only -- unlike `warnings`, --strict never
     makes them fatal (e.g. --png falling back to LibreOffice: a fact about
     how the image was made, not a problem with the diagram)."""
@@ -225,12 +225,13 @@ def _succeed(args: argparse.Namespace, message: str, warnings: list[str] = (), n
     print(message)
 
 
-def _succeed_check(warnings: list[str], slide: dict, shapes: list) -> None:
-    """--check's JSON: the warnings, the slide (slide_frame()), and where
-    each object went, one to a line so that it reads (and greps) as a
-    list."""
+def _succeed_check(warnings: list[LayoutWarning], slide: dict, shapes: list) -> None:
+    """--check's JSON: the warnings, each with the names of the objects it
+    is about, the slide (slide_frame()), and where each object went, one
+    to a line so that it reads (and greps) as a list."""
     slide = {k: round(v, 2) if isinstance(v, float) else v for k, v in slide.items()}
-    head = json.dumps({"ok": True, "errors": [], "warnings": list(warnings), "slide": slide}, ensure_ascii=False)
+    warnings = [{"message": w.message, "objects": list(w.objects)} for w in warnings]
+    head = json.dumps({"ok": True, "errors": [], "warnings": warnings, "slide": slide}, ensure_ascii=False)
     objects = ",\n".join(f"  {json.dumps(_geometry(s), ensure_ascii=False)}" for s in shapes)
     print(f'{head[:-1]}, "objects": [\n{objects}\n]}}')
 
@@ -292,7 +293,7 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
     if args.strict and result.stand_ins:
         _fail(args, "; ".join(result.stand_ins))
         return
-    warnings = result.stand_ins + result.warnings
+    warnings = [LayoutWarning(s) for s in result.stand_ins] + result.warnings
 
     if args.check:
         layout_name = args.layout if args.layout is not None else result.layout_name
@@ -323,7 +324,7 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
         if args.strict:
             _fail(args, warning)
             return
-        warnings.append(warning)
+        warnings.append(LayoutWarning(warning))
         write_pptx(result, out_path)
 
     written = {"output": out_path}

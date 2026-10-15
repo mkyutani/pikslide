@@ -33,12 +33,16 @@ from pptx.util import Emu, Inches, Pt
 from .fonts import FontIndex, ThemeFonts, installed_fonts, theme_fonts_from_xml
 from .pik import ast
 from .pik.layout import (
+    _FRAMED_TEXT_KINDS,
+    LINE_LIKE,
     NOT_RENDERED,
     Color,
     LayoutError,
     LayoutResult,
+    LayoutWarning,
     Shape,
-        _text_size_name,
+    _text_area_width,
+    _text_size_name,
     assign_text_slots,
     default_text_sizes,
     flatten_shapes,
@@ -47,6 +51,7 @@ from .pik.layout import (
     slot_step,
     string_color,
 )
+from .pik.overlap import find_overlaps
 
 EMU_PER_INCH = 914400
 
@@ -278,8 +283,9 @@ def resolve_for_pptx(
     A font the deck asks for that isn't installed is reported in the
     result's `warnings`. That theme's default shape also gives `margin`
     and `vmargin` their values (template_defaults_from_xml()), over the
-    prelude's and under the settings file's. A diagram bigger than the
-    content area it goes in (_content_area()) is a warning too.
+    prelude's and under the settings file's. Objects, text and lines that
+    overlap (pikslide.pik.overlap) are warnings, and so is a diagram
+    bigger than the content area it goes in (_content_area()).
 
     `base_dir` is the source file's own directory, against which an
     `image` object's path resolves (docs/spec.md SS3.5). `settings_text`/
@@ -290,6 +296,7 @@ def resolve_for_pptx(
         result = resolve_layout(
             doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir
         )
+        result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_rects(s, metrics))
     else:
         if layout_name is None:
             # `layout` can only be set by the prelude or the settings file,
@@ -307,6 +314,7 @@ def resolve_for_pptx(
                 settings_base_dir=settings_base_dir,
                 template_defaults=template_defaults_from_xml(_master_theme_xml(master)),
             )
+            result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_rects(s, metrics))
             result.warnings += _content_area_overflow(prs, layout, result)
         finally:
             if tmp_path is not None:
@@ -748,6 +756,52 @@ def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, flo
     return out
 
 
+def _text_rects(shape: Shape, metrics: PilFontMetrics) -> list[tuple[float, float, float, float]]:
+    """Where each of `shape.texts` is drawn, as (x0, y0, x1, y1) in pik
+    space (y up), one rectangle per string, as wide as the string itself:
+    a line's labels in their boxes (_line_label_rects()), an image's text
+    centred on it, and any other object's in its text frame, middle-
+    anchored and inset as _apply_text() sets it. Text that wraps is taken
+    as one line the width of its frame."""
+    if not shape.texts:
+        return []
+    if shape.kind in LINE_LIKE:
+        out = []
+        for (x0, y0, x1, y1), text, flags in _line_label_rects(shape):
+            w = metrics.text_width(text, flags, shape.text_sizes, shape.typeface)
+            left = x0 if "ljust" in flags else x1 - w if "rjust" in flags else (x0 + x1 - w) / 2
+            out.append((left, y0, left + w, y1))
+        return out
+    image = shape.kind == "image"
+    margin = 0.0 if image else shape.text_margin
+    usable = None
+    if not shape.fit:
+        usable = shape.w if image else _text_area_width(shape) if shape.kind in _FRAMED_TEXT_KINDS else None
+    heights = [metrics.line_height(flags, shape.text_sizes) for _text, flags in shape.texts]
+    split = 0.0 if image else shape.text_split
+    first_below = None
+    if split > 0:
+        slots = assign_text_slots(shape.texts)
+        first_below = next(i for i, slot in enumerate(slots) if slot.startswith("below"))
+    top = shape.cy + (0.0 if image else shape.text_dy) + (sum(heights) + split) / 2
+    out = []
+    for i, ((text, flags), h) in enumerate(zip(shape.texts, heights)):
+        if i == first_below:
+            top -= split
+        w = metrics.text_width(text, flags, shape.text_sizes, shape.typeface)
+        if usable is not None:
+            w = min(w, usable)
+        if "ljust" in flags and not image:
+            left = shape.cx - shape.w / 2 + margin
+        elif "rjust" in flags and not image:
+            left = shape.cx + shape.w / 2 - margin - w
+        else:
+            left = shape.cx - w / 2
+        out.append((left, top - h, left + w, top))
+        top -= h
+    return out
+
+
 def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
     """A connector/freeform shape has no text_frame in python-pptx, so a
     line's text (e.g. an arrow's label) is rendered as small floating
@@ -1001,19 +1055,29 @@ def _content_area(prs: Presentation, layout) -> tuple[tuple[float, float, float,
     return (0.0, 0.0, Emu(prs.slide_width).inches, Emu(prs.slide_height).inches), "the slide"
 
 
-def _content_area_overflow(prs: Presentation, layout, result: LayoutResult) -> list[str]:
+def _content_area_overflow(prs: Presentation, layout, result: LayoutResult) -> list[LayoutWarning]:
     """A warning, if the diagram is wider or taller than the content area
     it goes in: it is never scaled to fit (docs/spec.md SS4), so it runs
-    past it, to the right and down."""
+    past it, to the right and down. It names the objects that do, a
+    line's labels counting as part of it."""
     (_left, _top, area_w, area_h), what = _content_area(prs, layout)
     x0, y0, x1, y1 = _content_bbox(result)
     w, h = x1 - x0, y1 - y0
     if w <= area_w + 1e-6 and h <= area_h + 1e-6:
         return []
-    return [
+    past = []
+    for shape in flatten_shapes(result.shapes):
+        sx0, sy0, sx1, sy1 = shape.bbox
+        labels = _line_label_rects(shape) if shape.kind in LINE_LIKE else []
+        for (lx0, ly0, lx1, ly1), _text, _flags in labels:
+            sx0, sy0, sx1, sy1 = min(sx0, lx0), min(sy0, ly0), max(sx1, lx1), max(sy1, ly1)
+        if sx1 - x0 > area_w + 1e-6 or y1 - sy0 > area_h + 1e-6:
+            past.append(shape.name or "")
+    return [LayoutWarning(
         f"the diagram ({w:.2f} x {h:.2f} in) is bigger than {what} it goes in "
-        f"({area_w:.2f} x {area_h:.2f} in), and runs past it"
-    ]
+        f"({area_w:.2f} x {area_h:.2f} in), and runs past it: {', '.join(past)}",
+        tuple(past),
+    )]
 
 
 def write_pptx_from_template(

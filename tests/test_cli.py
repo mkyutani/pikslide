@@ -115,11 +115,24 @@ def test_strict_turns_the_no_template_warning_into_an_error(monkeypatch, capsys,
 def test_strict_turns_a_missing_font_into_an_error(monkeypatch, capsys, tmp_path):
     src = _write(tmp_path, "d.pik", 'typeface = "NoSuchFontXyz"\nbox "Web" fit\n')
     _run(monkeypatch, [str(src), "--check"])
-    assert json.loads(capsys.readouterr().out)["warnings"][0].startswith("font not installed: NoSuchFontXyz")
+    [warning] = json.loads(capsys.readouterr().out)["warnings"]
+    assert warning["message"].startswith("font not installed: NoSuchFontXyz")
+    assert warning["objects"] == []
     with pytest.raises(SystemExit) as exc:
         _run(monkeypatch, [str(src), "--check", "--strict"])
     assert exc.value.code == 1
     assert json.loads(capsys.readouterr().out)["errors"][0]["message"].startswith("font not installed: NoSuchFontXyz")
+
+
+def test_check_names_the_objects_a_warning_is_about(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "d.pik", "A: box\nB: box at A + (0.3, 0.2)\n")
+    _run(monkeypatch, [str(src), "--check"])
+    [warning] = json.loads(capsys.readouterr().out)["warnings"]
+    assert warning["message"].startswith("A and B overlap")
+    assert warning["objects"] == ["A", "B"]
+    # Without --check, it is a plain warning.
+    _run(monkeypatch, [str(src), str(tmp_path / "d.pptx")])
+    assert "warning: A and B overlap" in capsys.readouterr().err
 
 
 def test_strict_leaves_text_overflow_a_warning(monkeypatch, capsys, tmp_path):
@@ -127,7 +140,9 @@ def test_strict_leaves_text_overflow_a_warning(monkeypatch, capsys, tmp_path):
     _run(monkeypatch, [str(src), "--check", "--strict"])
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is True
-    assert payload["warnings"][0].startswith('circle "abcdefgh": text overflows')
+    [warning] = payload["warnings"]
+    assert warning["message"].startswith('circle "abcdefgh": text overflows')
+    assert warning["objects"] == ["circle 1"]
 
 
 def test_template_flag_starts_a_new_deck_from_that_theme(monkeypatch, capsys, tmp_path):

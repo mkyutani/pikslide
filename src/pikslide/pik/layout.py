@@ -302,6 +302,19 @@ class LayoutError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class LayoutWarning:
+    """A problem with the diagram that didn't stop layout, and the objects
+    it is about, by their names (Shape.name): what --check's JSON gives a
+    tool to find them by in its object list."""
+
+    message: str
+    objects: tuple[str, ...] = ()
+
+    def __str__(self) -> str:
+        return self.message
+
+
 # ---------------------------------------------------------------------------
 # Shape: the resolved, renderer-facing geometry for one object
 # ---------------------------------------------------------------------------
@@ -399,6 +412,9 @@ class Shape:
     """Extra space (inches) before the first below-slotted string, when
     `above` and `below` strings are split around the center explicitly --
     see `_text_placement()`. The gap it opens is centered on the center."""
+    behind: "Shape | None" = field(default=None, compare=False, repr=False)
+    """The object this one was drawn `behind` (docs/spec.md SS3.1), whose
+    overlap with it is meant (pikslide.pik.overlap)."""
 
     def offset(self, edge: str | None) -> tuple[float, float]:
         return _edge_offset(self, edge)
@@ -450,7 +466,7 @@ class LayoutResult:
     prelude or a settings file, never a program (`_eval_assignment()`
     enforces this) -- used only when making a new slide from a
     `--template`."""
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[LayoutWarning] = field(default_factory=list)
     """Problems with the diagram that didn't stop layout (e.g. text
     overflowing a fixed-size box). --strict leaves these alone."""
     stand_ins: list[str] = field(default_factory=list)
@@ -747,7 +763,7 @@ class _Ctx:
         self.metrics: FontMetrics = metrics if metrics is not None else _ApproxMetrics(self)
         self.image_metrics: ImageMetrics = image_metrics if image_metrics is not None else _PILImageMetrics()
         self.base_dir = base_dir
-        self.warnings: list[str] = []
+        self.warnings: list[LayoutWarning] = []
         # `layout` (docs/spec.md SS3.8) may be assigned while loading the
         # prelude or a settings file, below, but not once the actual
         # program starts (_eval_assignment() checks this).
@@ -1213,10 +1229,11 @@ def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
     usable = _text_area_width(shape)
     if widest > usable + 1e-6:
         what = label if label is not None else f'{shape.kind} "{shape.texts[0][0]}"'
-        ctx.warnings.append(
+        ctx.warnings.append(LayoutWarning(
             f"{what}: text overflows the usable width ({widest:.2f} in > {usable:.2f} in) and will wrap; "
-            "widen it, reduce margin, or use fit"
-        )
+            "widen it, reduce margin, or use fit",
+            (shape.name,) if shape.name else (),
+        ))
 
 
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
@@ -1666,7 +1683,6 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
             _size_image(shape, ctx)
         elif (shape.w <= 0.0 or shape.h <= 0.0) and shape.texts:
             _autosize_text(shape, ctx)
-        _check_text_overflow(shape, stmt.label, ctx)
         if shape.texts:
             shape.text_dy, shape.text_split = _text_placement(shape, ctx)
         ofst = shape.offset(with_edge)
@@ -1761,6 +1777,8 @@ def _layout_statements(
                 ctx.scope_stack[-1][stmt.label] = shape
             else:
                 shape.name = f"{shape.kind} {class_counts[shape.kind]}"
+            shape.behind = behind_target
+            _check_text_overflow(shape, stmt.label, ctx)
             _place(shape, behind_target)
             prev = shape
             direction = shape.out_dir

@@ -904,8 +904,8 @@ GOING FURTHER
     --help attributes     also: flags, colors, shapes, variables, prelude
     --help template       drawing on a --template's slide: layout, content area
     --help llm            the reference in one text, for an LLM to read once
-    --check               lay a diagram out without writing: errors and where
-                          each object went, as JSON
+    --check               lay a diagram out without writing: errors, warnings
+                          and where each object went, as JSON
 """
 
 
@@ -934,7 +934,8 @@ LAYOUT
 
 CONTENT AREA
     The diagram's top left goes at the content area's top left. It is
-    never scaled: one bigger than the area runs past it, with a warning.
+    never scaled: one bigger than the area runs past it, with a warning
+    that names the objects that do.
     The area is the layout's one content placeholder; else the master's
     body placeholder (on a blank or a two-column layout); else the whole
     slide. To put the diagram somewhere else, choose another layout. A
@@ -994,10 +995,11 @@ def llm_text() -> str:
         "",
         "Write the diagram from this text alone, and check it with",
         "`pikslide FILE --check`, not by unzipping the .pptx. It prints JSON: the",
-        "errors, most with the `pikslide --help TOPIC` to read; the warnings; the",
-        "slide, its left and top edges, wid and ht, and placeholders (none without",
-        "--template), nothing else being on it; and where each object went, x, y,",
-        "wid and ht as A.x, A.y, A.wid and A.ht give them, or a line's points.",
+        "errors, most with the `pikslide --help TOPIC` to read; the warnings, each",
+        "with the objects it names, among them objects, text and lines that overlap;",
+        "the slide, its left and top edges, wid and ht, and placeholders (none",
+        "without --template), nothing else being on it; and where each object went,",
+        "x, y, wid and ht as A.x, A.y, A.wid and A.ht give them, or a line's points.",
         "",
         _INTRO_BODY,
         "KEYWORDS",

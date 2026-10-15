@@ -482,7 +482,7 @@ def test_text_wider_than_a_fixed_size_objects_text_area_warns():
             return 0.2
 
     def warnings(src):
-        return resolve_layout(parse(src), metrics=FixedMetrics()).warnings
+        return [w.message for w in resolve_layout(parse(src), metrics=FixedMetrics()).warnings]
 
     # 1.0 in of text: fits in 1.2 (1.0 + 2 * 0.1), not in 1.1.
     assert warnings('box "0123456789" width 1.2\n') == []
@@ -492,6 +492,9 @@ def test_text_wider_than_a_fixed_size_objects_text_area_warns():
     # Named by its label; a circle's text area is its inscribed square.
     [w] = warnings('C: circle "abcd" diameter 0.6\n')
     assert w.startswith("C: text overflows")
+    # The warning names the object, by its label or its default name.
+    [w] = resolve_layout(parse('box "0123456789" width 1.1\n'), metrics=FixedMetrics()).warnings
+    assert w.objects == ("box 1",)
     # Not for `fit`, text, lines, or a string too short to wrap.
     assert warnings('box "0123456789" width 0.5 fit\n') == []
     assert warnings('text "0123456789" width 0.5\n') == []
@@ -509,7 +512,7 @@ def test_text_area_is_the_preset_text_rectangle():
             return 0.2
 
     def warnings(src):
-        return resolve_layout(parse(src), metrics=FixedMetrics()).warnings
+        return [w.message for w in resolve_layout(parse(src), metrics=FixedMetrics()).warnings]
 
     # A diamond's is its middle half: 0.7 in of text fits in 1.8 (0.9 - 0.2), not 1.6.
     assert warnings('diamond "abcdefg" wid 1.8 ht 0.7\n') == []

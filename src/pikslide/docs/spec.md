@@ -583,7 +583,18 @@ Humans and LLMs both need errors they can act on.
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
 - Text wider than a fixed-size object's text area is a **warning** (§3.3).
 - A diagram bigger than the content area of a `--template`'s slide is a
-  **warning** (§4).
+  **warning** that names the objects running past it (§4).
+- Objects, text and lines that overlap are **warnings**, each naming the
+  two things that do: two objects that partly overlap; text on text (an
+  object's strings, or a line's labels, on another's); a line's label on
+  another line, or partly on an object; a line passing through an object
+  other than the ones at its ends, or through an object's text. An
+  overlap that is meant doesn't warn: an object wholly inside another (a
+  frame round a group, a pin on a map), an object drawn `behind` another
+  (that one only, §3.1), and a line's ends on the objects they join. A
+  circle or an ellipse is taken as its outline, a diamond as its four
+  corners, a `text` object as its strings, and any other object, preset
+  shapes too, as its bounding box.
 - A font that is not installed, so `fit` measured with a substitute, is a
   **warning** (§3.3).
 - Unknown names (color, theme slot, preset, image path) are
@@ -597,8 +608,9 @@ Humans and LLMs both need errors they can act on.
   visible in the output itself.
 - A `define` naming an already-defined variable is an **error** (§3.6).
 - `--check` lays the source out without writing anything and prints the
-  result as JSON, for an LLM or a tool to read: the errors, the warnings,
-  the slide the diagram would go on -- its left and top edges in the
+  result as JSON, for an LLM or a tool to read: the errors; the warnings,
+  each a `message` and the `objects` it names, by the names in the object
+  list; the slide the diagram would go on -- its left and top edges in the
   diagram's coordinates, its size, and the placeholders it keeps beside
   the diagram (§4) -- and each drawn object's name, kind, text and place:
   `x`, `y`, `wid` and `ht` as `A.x`, `A.y`, `A.wid` and `A.ht` give them,

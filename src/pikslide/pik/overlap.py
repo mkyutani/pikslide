@@ -1,6 +1,7 @@
 """Find where a laid-out diagram's objects, text and lines overlap (issue
-#19): the faults an LLM would otherwise look for in the PNG, named so that
-it can fix them and check again.
+#19), and where a line's labels sit badly on it (issue #1): the faults an
+LLM would otherwise look for in the PNG, named so that it can fix them and
+check again.
 
 Warns about:
 
@@ -8,12 +9,16 @@ Warns about:
 - text on text: an object's strings, or a line's labels, on another's;
 - a line's label on another line, or partly on an object;
 - a line passing through an object other than the ones at its ends, or
-  through an object's text.
+  through an object's text;
+- a line's label on the line itself, or off it: a bent line's labels go
+  at the middle of the box round it, which may be on none of its
+  segments.
 
 Overlaps that are meant don't warn: an object wholly inside another (a
 frame round a group, a pin on a map), an object drawn `behind` another,
 and a line's ends on the objects they join. Touching isn't overlapping:
-everything here allows `TOLERANCE`.
+everything here allows `TOLERANCE`. What isn't drawn doesn't count: an
+`invis` line, and an `invis` object with no fill but for its text.
 
 Outlines are convex polygons: a circle or an ellipse as one, a diamond as
 its four corners, a `text` object as its strings, and anything else, a
@@ -44,9 +49,11 @@ _DIAMOND_PRESETS = {"diamond", "flowChartDecision"}
 
 
 def find_overlaps(shapes: list[Shape], text_rects: Callable[[Shape], list[Rect]]) -> list[LayoutWarning]:
-    """The overlaps among `shapes`, the drawn ones (flatten_shapes()), in
-    source order; each pair of things is named once."""
+    """The overlaps among `shapes`, the drawn ones (flatten_shapes()), and
+    the lines whose labels are on them or off them, in source order; each
+    pair of things is named once."""
     lines = [s for s in shapes if s.kind in LINE_LIKE and s.path and len(s.path) > 1]
+    drawn = [line for line in lines if line.sw >= 0]
     objects = [s for s in shapes if s.kind not in LINE_LIKE]
     strings = {id(s): [(t, _Convex(_corners(r))) for (t, _f), r in zip(s.texts, text_rects(s))] for s in shapes}
     outline = {id(o): _outline(o, [r for _t, r in strings[id(o)]]) for o in objects}
@@ -57,6 +64,9 @@ def find_overlaps(shapes: list[Shape], text_rects: Callable[[Shape], list[Rect]]
     def warn(a: Shape, b: Shape, message: str) -> None:
         named.add(frozenset((id(a), id(b))))
         warnings.append(LayoutWarning(message, (a.name or "", b.name or "")))
+
+    def warn_about(line: Shape, message: str) -> None:
+        warnings.append(LayoutWarning(message, (line.name or "",)))
 
     def done(a: Shape, b: Shape) -> bool:
         return frozenset((id(a), id(b))) in named
@@ -81,8 +91,17 @@ def find_overlaps(shapes: list[Shape], text_rects: Callable[[Shape], list[Rect]]
 
     for line in lines:
         segments = list(zip(line.path, line.path[1:]))
-        ends = [o for o in objects if _at_end(line, outline[id(o)])]
-        for text, rect in strings[id(line)]:
+        labels = strings[id(line)]
+        if line.sw >= 0 and labels:
+            on = next((t for t, r in labels if any(_crosses(p, q, [r]) for p, q in segments)), None)
+            if on is not None:
+                warn_about(line, f"{_whose(line, on)} is on the line itself: make it above or below, "
+                                 f"or beside a vertical line, ljust or rjust")
+            elif not any(_crosses(p, q, [_near(labels)]) for p, q in segments):
+                who = _whose(line, labels[0][0]) + " is" if len(labels) == 1 else f"{line.name}'s labels are"
+                warn_about(line, f"{who} off the line, at the middle of the box round it: label a straight "
+                                 f"line instead, or place the text as an object of its own")
+        for text, rect in labels:
             label = [rect]
             for o in objects:
                 if done(line, o) or _meant(line, o):
@@ -91,12 +110,15 @@ def find_overlaps(shapes: list[Shape], text_rects: Callable[[Shape], list[Rect]]
                 if _overlap(label, po) and not _within(label, po):
                     warn(line, o, f'{_whose(line, text)} is on {o.name}: move it (above, below, ljust, '
                                   f'rjust) or move the line')
-            for other in lines:
+            for other in drawn:
                 if other is line or done(line, other):
                     continue
                 if any(_crosses(p, q, label) for p, q in zip(other.path, other.path[1:])):
                     warn(line, other, f'{_whose(line, text)} is on {other.name}: move it (above, below, '
                                       f'ljust, rjust) or move one of the lines')
+        if line.sw < 0:
+            continue
+        ends = [o for o in objects if _at_end(line, outline[id(o)])]
         for o in objects:
             if done(line, o) or _meant(line, o):
                 continue
@@ -120,6 +142,14 @@ def _whose(shape: Shape, text: str) -> str:
 
 def _meant(a: Shape, b: Shape) -> bool:
     return a.behind is b or b.behind is a
+
+
+def _near(labels: list[tuple[str, _Convex]]) -> _Convex:
+    """The box round a line's labels, grown by a label's height: how
+    near the line has to come for them to be its."""
+    x0, y0, x1, y1 = (f(r.box[k] for _t, r in labels) for f, k in ((min, 0), (min, 1), (max, 2), (max, 3)))
+    gap = labels[0][1].box[3] - labels[0][1].box[1]
+    return _Convex(_corners((x0 - gap, y0 - gap, x1 + gap, y1 + gap)))
 
 
 def _at_end(line: Shape, parts: list[_Convex]) -> bool:
@@ -168,7 +198,7 @@ class _Convex:
 
 
 def _outline(shape: Shape, text: list[_Convex]) -> list[_Convex]:
-    if shape.kind == "text":
+    if shape.kind == "text" or (shape.kind != "image" and shape.sw < 0 and shape.fill is None):
         return text
     x0, y0, x1, y1 = shape.bbox
     if shape.kind in _ELLIPSES or shape.preset in _ELLIPSE_PRESETS:

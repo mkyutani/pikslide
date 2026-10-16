@@ -1236,6 +1236,31 @@ def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
         ))
 
 
+# Presets whose box has no outline: with no fill, only their lines show,
+# and the outlined preset to use instead.
+_UNOUTLINED_CALLOUTS = {
+    "callout1": "borderCallout1", "callout2": "borderCallout2", "callout3": "borderCallout3",
+    "accentCallout1": "accentBorderCallout1", "accentCallout2": "accentBorderCallout2",
+    "accentCallout3": "accentBorderCallout3",
+}
+
+
+def _check_unoutlined(shape: Shape, ctx: _Ctx) -> None:
+    """Warn about a callout whose box doesn't show: one with no outline,
+    and no fill. Drawn `invis`, nothing of it is meant to show but its
+    text."""
+    preset = shape.preset or ""
+    outlined = _UNOUTLINED_CALLOUTS.get(preset)
+    if outlined is None or shape.fill is not None or shape.sw < 0:
+        return
+    lines = "accent bar and leader line show" if preset.startswith("accent") else "leader line shows"
+    ctx.warnings.append(LayoutWarning(
+        f"{shape.name}: {preset}'s box has no outline, so with no fill only its {lines}; "
+        f"give it a fill, or use {outlined}",
+        (shape.name,) if shape.name else (),
+    ))
+
+
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     """Size a "fit" object to its text using ctx.metrics: the pptx
     backend's PilFontMetrics measures actual glyph widths; only the fallback _ApproxMetrics estimates from flat constants.
@@ -1779,6 +1804,7 @@ def _layout_statements(
                 shape.name = f"{shape.kind} {class_counts[shape.kind]}"
             shape.behind = behind_target
             _check_text_overflow(shape, stmt.label, ctx)
+            _check_unoutlined(shape, ctx)
             _place(shape, behind_target)
             prev = shape
             direction = shape.out_dir

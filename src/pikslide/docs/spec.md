@@ -594,7 +594,14 @@ Humans and LLMs both need errors they can act on.
   (that one only, §3.1), and a line's ends on the objects they join. A
   circle or an ellipse is taken as its outline, a diamond as its four
   corners, a `text` object as its strings, and any other object, preset
-  shapes too, as its bounding box.
+  shapes too, as its bounding box. What isn't drawn doesn't count: a
+  `stroke invis` line, and a `stroke invis` object with no fill but for
+  its text.
+- A line's label on the line itself, or off it, is a **warning** naming
+  the line. A bent line's labels go at the middle of the box round it,
+  which may be on none of its segments.
+- A callout whose box has no outline (`callout1`, `accentCallout1`, and
+  their 2 and 3), with no fill, is a **warning**: only its lines show.
 - A font that is not installed, so `fit` measured with a substitute, is a
   **warning** (§3.3).
 - Unknown names (color, theme slot, preset, image path) are

@@ -502,6 +502,23 @@ def test_text_wider_than_a_fixed_size_objects_text_area_warns():
     assert warnings('circle "7" diameter 0.1\n') == []
 
 
+def test_a_callout_that_doesnt_show_warns():
+    def warnings(src):
+        return [w.message for w in resolve_layout(parse(src)).warnings]
+
+    [w] = warnings('N: shape callout1 "note"\n')
+    assert w == ("N: callout1's box has no outline, so with no fill only its leader line shows; "
+                 "give it a fill, or use borderCallout1")
+    [w] = warnings('shape accentCallout3 "note"\n')
+    assert "only its accent bar and leader line show; give it a fill, or use accentBorderCallout3" in w
+    [w] = resolve_layout(parse('shape callout2 "note"\n')).warnings
+    assert w.objects == ("shape 1",)
+    # Filled, or drawn invisible, or with an outline of its own, it doesn't.
+    assert warnings('shape callout1 "note" fill white\n') == []
+    assert warnings('shape callout1 "note" stroke invis\n') == []
+    assert warnings('shape borderCallout1 "note"\n') == []
+
+
 def test_text_area_is_the_preset_text_rectangle():
     # issue #12: what PowerPoint wraps the text in, less `margin` each side.
     class FixedMetrics:

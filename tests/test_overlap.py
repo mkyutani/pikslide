@@ -1,6 +1,6 @@
 """Tests for pikslide.pik.overlap: warnings about objects, text and lines
-that overlap (issue #19), through resolve_for_pptx(), which places the
-text as the deck draws it."""
+that overlap (issue #19), and a line's labels on it or off it (issue #1),
+through resolve_for_pptx(), which places the text as the deck draws it."""
 
 from __future__ import annotations
 
@@ -21,6 +21,12 @@ def overlaps(src: str) -> list[tuple[str, ...]]:
 
 def messages(src: str) -> list[str]:
     return [w.message for w in resolve_for_pptx(parse(src)).warnings if len(w.objects) == 2]
+
+
+def alone(src: str) -> list[str]:
+    """The warnings that name one line: its labels on it or off it."""
+    return [w.message for w in resolve_for_pptx(parse(src)).warnings
+            if len(w.objects) == 1 and "overflows" not in w.message]
 
 
 def test_objects_that_partly_overlap_warn():
@@ -101,10 +107,42 @@ def test_a_line_from_an_objects_center_crosses_its_text():
     assert overlaps(src + "arrow from A to B chop\n") == []
 
 
+def test_a_label_on_its_own_line_warns():
+    [m] = alone('arrow "label" right 2\n')
+    assert m.startswith('arrow 1\'s label "label" is on the line itself')
+    assert alone('arrow "label" above right 2\n') == []
+    assert alone('arrow "a" "b" right 2\n') == []
+    # Above a vertical line is still on it; beside it isn't.
+    assert len(alone('arrow "label" above down 1\n')) == 1
+    assert alone('arrow "label" ljust down 1\n') == []
+    assert alone('arrow "label" rjust down 1\n') == []
+
+
+def test_a_bent_lines_labels_off_its_segments_warn():
+    [m] = alone('arrow "label" above right 1 then down 1\n')
+    assert m.startswith('arrow 1\'s label "label" is off the line, at the middle of the box round it')
+    [m] = alone('arrow "a" "b" right 1 then down 1\n')
+    assert m.startswith("arrow 1's labels are off the line")
+    # Within a label's height of a segment, they're the line's.
+    assert alone('arrow "label" above right 2 then down 0.6\n') == []
+
+
+def test_what_isnt_drawn_doesnt_count():
+    # An invisible line, or an invisible object with no fill but for its text.
+    assert alone('line "label" stroke invis right 2\n') == []
+    assert overlaps('line "label" above from (0, 0) right 2\nline stroke invis from (1, -0.5) up 1\n') == []
+    src = "right\nA: box\nmove\nB: box\nmove\nC: box\n"
+    assert overlaps(src + "line stroke invis from A.e to C.w\n") == []
+    assert overlaps(src.replace("B: box", "B: box stroke invis") + "arrow from A.e to C.w\n") == []
+    assert overlaps("A: box\nbox stroke invis at A + (0.3, 0.2)\n") == []
+    assert overlaps("A: box\nbox stroke invis fill red at A + (0.3, 0.2)\n") == [("A", "box 2")]
+    assert overlaps('A: box\nbox "a long string" stroke invis at A + (0.6, 0)\n') == [("A", "box 2")]
+
+
 @pytest.mark.parametrize("path", COOKBOOK, ids=lambda p: p.name)
 def test_cookbook_recipes_dont_overlap(path: pathlib.Path):
-    # A recipe is drawn as the diagram should be. Only the overlaps: with
-    # a wider font standing in for the theme's, its text may overflow.
+    # A recipe is drawn as the diagram should be. Not overflow: with a
+    # wider font standing in for the theme's, its text may overflow.
     result = resolve_for_pptx(parse(path.read_text(encoding="utf-8"), base_dir=str(path.parent)),
                               base_dir=str(path.parent))
-    assert [w.message for w in result.warnings if len(w.objects) == 2] == []
+    assert [w.message for w in result.warnings if "overflows" not in w.message] == []

@@ -118,6 +118,8 @@ class TokType(Enum):
     IMAGE = auto()
     INCLUDE = auto()
     ALT = auto()
+    ADJUST = auto()
+    TIP = auto()
     MAJOR = auto()
     MEDIUM = auto()
     LARGE = auto()
@@ -242,6 +244,8 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "image": (TokType.IMAGE, None, None),
     "include": (TokType.INCLUDE, None, None),
     "alt": (TokType.ALT, None, None),
+    "adjust": (TokType.ADJUST, None, None),
+    "tip": (TokType.TIP, None, None),
     "major": (TokType.MAJOR, None, None),
     "medium": (TokType.MEDIUM, None, None),
     "large": (TokType.LARGE, None, None),

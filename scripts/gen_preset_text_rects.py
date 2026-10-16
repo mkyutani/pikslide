@@ -1,5 +1,6 @@
-"""Write src/pikslide/pik/preset_text_rects.py: the text rectangle of
-every preset shape, from OOXML's preset shape definitions.
+"""Write src/pikslide/pik/preset_text_rects.py: the text rectangle and
+the adjust values of every preset shape, from OOXML's preset shape
+definitions.
 
     uv run python scripts/gen_preset_text_rects.py presetShapeDefinitions.xml
 
@@ -11,6 +12,9 @@ A preset's text rectangle, `<rect l t r b>`, names shape guides: formulas
 in the shape's width and height and its adjust values. For each preset
 pikslide knows (PRESET_NAMES), this keeps the rectangle and only the
 guides it needs, in order; pikslide.pik.text_area evaluates them.
+
+A preset's adjust values, `<avLst>`, are the guides its handles set
+(`adjust NAME VALUE`); this keeps their names and defaults, in order.
 """
 
 from __future__ import annotations
@@ -54,11 +58,18 @@ def text_rect(preset: ET.Element) -> tuple[list[tuple[str, str]], tuple[str, ...
     return kept[::-1], sides
 
 
+def adjust_values(preset: ET.Element) -> list[tuple[str, int]]:
+    """A preset's adjust values and their defaults, in order."""
+    av = preset.find(NS + "avLst")
+    return [] if av is None else [(gd.get("name"), int(gd.get("fmla").split()[1])) for gd in av.findall(NS + "gd")]
+
+
 def module_source(xml_path: pathlib.Path) -> str:
     root = ET.parse(xml_path).getroot()
     out = [
         '"""The text rectangle of each preset shape: the guides it needs, and its',
-        "l, t, r, b (see pikslide.pik.text_area).",
+        "l, t, r, b (see pikslide.pik.text_area); and its adjust values, which",
+        "its handles set, with their defaults (100000 for 1).",
         "",
         "Written by scripts/gen_preset_text_rects.py from ECMA-376's",
         "presetShapeDefinitions.xml: don't edit.",
@@ -77,6 +88,14 @@ def module_source(xml_path: pathlib.Path) -> str:
             out += [f"    {_str(name)}: (", "        ("]
             out += [f"            {pair}," for pair in pairs]
             out += ["        ),", f"        {rect},", "    ),"]
+    out += ["}", "", "ADJUST_VALUES: dict[str, tuple[tuple[str, int], ...]] = {"]
+    for name in sorted(PRESET_NAMES.values(), key=str.lower):
+        values = [f"({_str(g)}, {v})" for g, v in adjust_values(root.find(name))]
+        line = f"    {_str(name)}: {_tuple(values) if values else '()'},"
+        if len(line) <= 100:
+            out.append(line)
+        else:
+            out += [f"    {_str(name)}: (", *(f"        {value}," for value in values), "    ),"]
     out.append("}")
     return "\n".join(out) + "\n"
 

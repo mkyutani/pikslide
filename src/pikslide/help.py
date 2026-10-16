@@ -29,7 +29,8 @@ from dataclasses import dataclass
 from importlib import resources
 from importlib.metadata import version
 
-from .pik.layout import PRESET_NAMES
+from .pik.layout import PRESET_NAMES, TIP_CALLOUTS, shape_handles
+from .pik.preset_text_rects import ADJUST_VALUES
 from .pik.tokens import CLASS_NAMES, KEYWORDS
 
 # ---------------------------------------------------------------------------
@@ -135,12 +136,11 @@ ENTRIES: tuple[Entry, ...] = (
                "wedgeRectCallout, ...), matched case-insensitively. It behaves like a box: "
                "same default size, attributes and edges (of its bounding rectangle). Its text "
                "goes in the preset's own text area, often less than the box (a diamond's "
-               "middle half), and `fit` and the overflow warning follow it. "
-               "`--help shapes` lists them all with what each looks like; `--help NAME` "
-               "describes one.",
+               "middle half), and `fit` and the overflow warning follow it. `--help shapes` lists "
+               "them all; `--help NAME` describes one and its handles.",
           sections=(("ATTRIBUTES", _CLOSED_ATTRIBUTES),),
           example='shape chevron "Step 1" fit',
-          see=("shapes", "box"), group="class", defaults=("boxwid", "boxht")),
+          see=("shapes", "box", "adjust"), group="class", defaults=("boxwid", "boxht")),
     Entry(("image",), "a picture from a PNG, JPEG, GIF or SVG file",
           synopsis=('[Label:] image "PATH" [attribute ...]',),
           body="A picture; PATH is relative to the source file. Give width or height and "
@@ -325,6 +325,14 @@ ENTRIES: tuple[Entry, ...] = (
           synopsis=("behind OBJECT",), example="box fill bg2 behind Web", group="attribute"),
     Entry(("alt",), "an image's accessibility description", synopsis=('alt "TEXT"',),
           group="attribute", see=("image",)),
+    Entry(("adjust", "tip"), "set a preset shape's handles, or point a callout",
+          synopsis=("adjust NAME L[%]", "adjust adjN V", "tip at POSITION"),
+          body="shaft.width, head.length (block arrows, homePlate, chevron): a length or a % of "
+               "their side. Or the preset's own names (adj1, ...): 100000 for 1. `tip` points a "
+               "callout. `--help NAME` lists a preset's handles.",
+          example='shape rightArrow "Next" adjust head.length 0.15\n'
+                  'shape wedgeRectCallout "Slow" tip at B.ne',
+          group="attribute", see=("shape", "rad")),
 
     # --- positions and references ------------------------------------------
     Entry(("edges", "n", "north", "ne", "e", "east", "se", "s", "south", "sw", "w", "west", "nw",
@@ -478,21 +486,20 @@ def _color_chain(name: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Preset shapes: what each one looks like
 #
-# Written by hand from each preset as PowerPoint draws it at its default
-# geometry (pikslide sets no adjustment handles); a test checks the keys are
-# exactly PRESET_NAMES.
+# Written by hand from each preset as PowerPoint draws it with its handles
+# at their defaults; a test checks the keys are exactly PRESET_NAMES.
 # ---------------------------------------------------------------------------
 
 # Above the list (`--help shapes`), and below one shape's description
 # (`--help NAME`).
 _SHAPES_NOTE = (
-    "Each is drawn with PowerPoint's default geometry (no adjustment handles), stretched to "
-    "the object's box. A callout's leader line or pointer reaches outside the box; edges and "
-    "chop still use the box. Action buttons are pictures only: no click action is attached."
+    "Each is stretched to the object's box. A callout's leader line or pointer reaches outside "
+    "the box; edges and chop still use the box. Action buttons are pictures only: no click "
+    "action is attached."
 )
 _SHAPE_NOTE = (
-    "Drawn with PowerPoint's default geometry (no adjustment handles), stretched to the "
-    "object's box. Edges and chop use the box, even where the shape reaches outside it."
+    "Drawn with PowerPoint's default geometry, unless adjust or tip sets its handles, stretched "
+    "to the object's box. Edges and chop use the box, even where the shape reaches outside it."
 )
 
 _SHAPE_DOCS = {
@@ -828,7 +835,23 @@ def _format_shape(name: str, style: _Style) -> str:
     return (f"{style.bold(name)} — a PowerPoint preset shape\n\n"
             f"{style.bold('SYNOPSIS')}\n    [Label:] shape {name} [attribute ...]\n\n"
             f"{style.bold('DESCRIPTION')}\n{_wrap(body, style.width)}\n\n"
+            f"{style.bold('HANDLES')}\n{_indent(_shape_handles(name))}\n\n"
             f"{style.bold('SEE ALSO')}\n    {', '.join(f'--help {s}' for s in see)}\n")
+
+
+def _shape_handles(name: str) -> str:
+    """What `adjust` and `tip` set on a preset (`--help NAME`)."""
+    rows = []
+    for handle, (what, along) in shape_handles(name).items():
+        rows.append((f"adjust {handle} L", f"{what}: a length, or a % of the {along}"))
+    if name in TIP_CALLOUTS:
+        rows.append(("tip at P", "where the tip points" if TIP_CALLOUTS[name] == 0 else "where the leader line ends"))
+    for guide, default in ADJUST_VALUES[name]:
+        rows.append((f"adjust {guide} V", f"{default} by default (100000 for 1)"))
+    if not rows:
+        return "none"
+    width = max(len(left) for left, _right in rows) + 2
+    return "\n".join(f"{left:<{width}}{right}" for left, right in rows)
 
 
 def _format_list(title: str, rows: list[tuple[str, str]], style: _Style) -> str:

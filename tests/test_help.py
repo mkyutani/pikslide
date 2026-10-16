@@ -62,6 +62,14 @@ def test_shape_name_is_a_help_topic():
     assert "--help callout1, --help shape" in render("callout2", PLAIN)
 
 
+def test_a_shapes_help_lists_its_handles():
+    text = render("rightArrow", PLAIN)
+    assert "adjust shaft.width L  the shaft's width: a length, or a % of the height" in text
+    assert "adjust adj2 V         50000 by default (100000 for 1)" in text
+    assert "tip at P       where the leader line ends" in render("callout2", PLAIN)
+    assert "HANDLES\n    none\n" in render("rect", PLAIN)
+
+
 def test_class_entry_wins_over_a_preset_of_the_same_name():
     assert render("ellipse", PLAIN).startswith("ELLIPSE")
 

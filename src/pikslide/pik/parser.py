@@ -10,6 +10,8 @@ see comments at each such spot.
 
 from __future__ import annotations
 
+import re
+
 from . import ast
 from .macros import expand_macros
 from .tokens import PikSyntaxError, Token, TokType, is_hex_number, nth_value, numeric_value, unescape_string
@@ -129,6 +131,9 @@ _EXPR_START = {
 _BASETYPE_START = {TokType.CLASSNAME, TokType.STRING, TokType.LB, TokType.SHAPE, TokType.IMAGE}
 
 _OBJECT_START = {TokType.PLACENAME, TokType.THIS, TokType.NTH, TokType.LAST}
+
+# A word of a handle's name (`adjust NAME`): a variable's name, or a reserved word.
+_HANDLE_WORD = re.compile(r"[a-z][a-z0-9_]*")
 
 
 class Parser:
@@ -465,7 +470,31 @@ class Parser:
             text_tok = self.expect(TokType.STRING)
             return ast.Alt(unescape_string(text_tok.text))
 
+        if tt == TokType.ADJUST:
+            self.advance()
+            return ast.Adjust(self._parse_handle_name(), self.parse_relexpr())
+
+        if tt == TokType.TIP:
+            self.advance()
+            self.expect(TokType.AT)
+            return ast.Tip(self.parse_position())
+
         return None
+
+    def _parse_handle_name(self) -> str:
+        """A handle's name after `adjust`: words joined by dots, any of
+        which may be a reserved word (`shaft.width`, `head.length`, `adj1`)."""
+
+        def is_word(t: Token | None) -> bool:
+            return t is not None and _HANDLE_WORD.fullmatch(t.text) is not None
+
+        if not is_word(self.peek()):
+            self._error("expected a handle's name after 'adjust' (head.length, adj1, ...)")
+        words = [self.advance().text]
+        while self.at(TokType.DOT_L, TokType.DOT_XY, TokType.DOT_E) and is_word(self.peek(1)):
+            self.advance()
+            words.append(self.advance().text)
+        return ".".join(words)
 
     def _parse_go_direction(self) -> ast.GoDirection:
         dir_tok = self.advance()

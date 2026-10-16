@@ -52,6 +52,7 @@ from .pik.layout import (
     string_color,
 )
 from .pik.overlap import find_overlaps
+from .pik.preset_text_rects import ADJUST_VALUES
 
 EMU_PER_INCH = 914400
 
@@ -670,6 +671,8 @@ def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
         # python-pptx's own sensible default (checked: ~1/6) alone, rather
         # than flattening a plain `shape roundRect`'s corners to square.
         pptx_shape.adjustments[0] = min(0.5, shape.rad / min(w, h))
+    if shape.adjust:
+        _set_adjust_values(pptx_shape, shape)
 
     if shape.kind == "text":
         pptx_shape.fill.background()
@@ -683,6 +686,17 @@ def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
         _apply_line_style(pptx_shape.line, shape)
 
     _apply_text(pptx_shape, shape)
+
+
+def _set_adjust_values(pptx_shape, shape: Shape) -> None:
+    """Write a preset's adjust values (Shape.adjust, issue #20) into its
+    `<a:avLst>` by name, beside any already there (`rad`'s); the rest
+    keep their defaults."""
+    geometry = pptx_shape._element.spPr.prstGeom
+    values = {gd.name: int(gd.fmla.split()[1]) for gd in geometry.gd_lst}
+    values.update((name, round(value)) for name, value in shape.adjust.items())
+    order = [name for name, _default in ADJUST_VALUES.get(shape.preset or "", ())]
+    geometry.rewrite_guides(sorted(values.items(), key=lambda gd: order.index(gd[0]) if gd[0] in order else len(order)))
 
 
 def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:

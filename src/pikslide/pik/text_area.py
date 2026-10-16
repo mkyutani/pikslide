@@ -87,10 +87,12 @@ def text_rect(
     return left, top, right, bottom
 
 
-def fit_size(preset: str, text_w: float, text_h: float) -> tuple[float, float]:
+def fit_size(
+    preset: str, text_w: float, text_h: float, adjust: dict[str, float] | None = None
+) -> tuple[float, float]:
     """The smallest size (by area) to draw `preset` at, at its default
-    adjust values, for its text rectangle to hold a text box `text_w` x
-    `text_h` (inches).
+    adjust values but those `adjust` sets (as text_rect() takes them), for
+    its text rectangle to hold a text box `text_w` x `text_h` (inches).
 
     A text rectangle grows in proportion when the whole shape does, so
     each shape of one aspect ratio has exactly one size that holds the
@@ -103,7 +105,7 @@ def fit_size(preset: str, text_w: float, text_h: float) -> tuple[float, float]:
         return text_w, text_h
 
     def size(aspect: float) -> tuple[float, float]:
-        left, top, right, bottom = text_rect(preset, aspect, 1.0)
+        left, top, right, bottom = text_rect(preset, aspect, 1.0, adjust)
         if right - left <= 0 or bottom - top <= 0:
             return math.inf, math.inf
         scale = max(text_w / (right - left), text_h / (bottom - top))

@@ -244,9 +244,12 @@ attribute       ::= numprop relexpr
                    | "fit"
                    | "behind" object
                    | "alt" STRING                    (* image only *)
+                   | "adjust" handle-name relexpr    (* preset shapes only *)
+                   | "tip" "at" position             (* callouts only *)
                    | text
 
 numprop         ::= "width" | "height" | "radius" | "diameter"
+handle-name     ::= word { "." word }                (* head.length, adj1 *)
 boolprop        ::= "cw" | "ccw"
 
 stroke-attrs    ::= [ color-value ] { stroke-attr }  (* at least one of the two *)
@@ -259,6 +262,9 @@ arrowdir        ::= "<-" | "->" | "<->"
 relexpr         ::= expr [ "%" ]
 optrelexpr      ::= [ relexpr ]
 ```
+
+A `word` of a `handle-name` is an `ID` or a reserved word (`shaft.width`,
+where `width` is one), with no space round its dots.
 
 `"then"` with nothing following (no amount, no heading/edge point) is a
 complete attribute on its own: it marks a new path segment without
@@ -381,6 +387,7 @@ names.
 | `shape`, `image` | object classes |
 | `include` | the include statement |
 | `alt` | an attribute of `image` |
+| `adjust`, `tip` | attributes of `shape` |
 | `major`, `medium`, `large` | string attributes |
 | `stroke` | the stroke attribute group, and the default line color |
 | `theme` | builds a theme color from a slot name, `theme "accent1"` |
@@ -392,6 +399,10 @@ Semantic constraints the grammar cannot express (each is an error):
 
 - a statement in an included file that is not an `include-item`;
 - `alt` on anything other than an `image`;
+- `adjust` or `tip` on anything other than a `shape`, a `handle-name`
+  the preset doesn't have, a negative named handle, and `%` on a value
+  given by the preset's own name; `tip` on a preset that isn't a callout
+  with a tip or a leader line ([spec.md](spec.md) §3.4);
 - a second `at` on one object;
 - both `ljust` and `rjust` on one object;
 - a second `color` on one string;

@@ -24,6 +24,7 @@ from __future__ import annotations
 import difflib
 import math
 import os
+from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from importlib import resources
@@ -31,6 +32,7 @@ from typing import Protocol
 
 from . import ast
 from .parser import parse
+from .preset_text_rects import ADJUST_VALUES
 from .text_area import fit_size, text_rect
 
 
@@ -357,6 +359,16 @@ class Shape:
     sublist_names: dict[str, "Shape"] = field(default_factory=dict)
     preset: str | None = None
     """The OOXML preset name (docs/spec.md SS3.4), when `kind == "shape"`."""
+    adjust: dict[str, float] = field(default_factory=dict)
+    """A preset's adjust values that aren't its defaults, by guide name
+    (`adj1`, ...), as OOXML writes them, 100000 for 1 (issue #20): from
+    `adjust`, and from `handles` and `tip` once the shape is laid out
+    (_resolve_handles())."""
+    handles: dict[str, tuple[float, bool]] = field(default_factory=dict, compare=False, repr=False)
+    """`adjust` by a name pikslide gives a handle (`head.length`), as
+    given: its value, and whether that is a percentage."""
+    tip: tuple[float, float] | None = field(default=None, compare=False, repr=False)
+    """Where a callout points (`tip at`), as given."""
     image_path: str | None = None
     """Resolved (absolute) path to the picture file, when `kind == "image"`
     (docs/spec.md SS3.5)."""
@@ -1203,11 +1215,11 @@ def _text_area_width(shape: Shape) -> float:
     preset = _FRAMED_TEXT_KINDS[shape.kind] or shape.preset
     if shape.kind == "box" and shape.rad > 0:
         preset = "roundRect"
-    adjust = None
+    adjust = {}
     if preset == "roundRect" and shape.rad > 0 and min(shape.w, shape.h) > 0:
         # As pptx_writer sets it: the corner radius over the shorter side.
         adjust = {"adj": min(0.5, shape.rad / min(shape.w, shape.h)) * 100000}
-    left, _top, right, _bottom = text_rect(preset, shape.w, shape.h, adjust)
+    left, _top, right, _bottom = text_rect(preset, shape.w, shape.h, {**adjust, **shape.adjust})
     return right - left - 2 * shape.text_margin
 
 
@@ -1261,6 +1273,186 @@ def _check_unoutlined(shape: Shape, ctx: _Ctx) -> None:
     ))
 
 
+# ---------------------------------------------------------------------------
+# Preset handles (issue #20): `adjust NAME VALUE` and `tip at P`
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _Handle:
+    """A handle pikslide gives a name to: a length, which sets one of the
+    preset's adjust values."""
+
+    guide: str
+    along: str
+    """"w" or "h": the side the length runs along, which a % is of."""
+    per: str
+    """"w", "h" or "ss" (the shorter side): what OOXML measures the adjust
+    value in, 100000 for 1."""
+    limit: float = 1.0
+    """The longest it can be, as a fraction of `along`; PowerPoint draws a
+    longer one at that."""
+
+
+def _block_arrow(across: str, along: str, limit: float = 1.0) -> dict[str, _Handle]:
+    return {"shaft.width": _Handle("adj1", across, across), "head.length": _Handle("adj2", along, "ss", limit)}
+
+
+_HANDLES: dict[str, dict[str, _Handle]] = {
+    "rightArrow": _block_arrow("h", "w"),
+    "leftArrow": _block_arrow("h", "w"),
+    "notchedRightArrow": _block_arrow("h", "w"),
+    "stripedRightArrow": _block_arrow("h", "w", 0.84375),
+    "leftRightArrow": _block_arrow("h", "w", 0.5),
+    "upArrow": _block_arrow("w", "h"),
+    "downArrow": _block_arrow("w", "h"),
+    "upDownArrow": _block_arrow("w", "h", 0.5),
+    "homePlate": {"head.length": _Handle("adj", "w", "ss")},
+    "chevron": {"head.length": _Handle("adj", "w", "ss")},
+}
+"""The handles pikslide names, by preset; any preset's adjust values can
+also be set by their own names."""
+
+_WEDGE_CALLOUTS = {"wedgeRectCallout", "wedgeRoundRectCallout", "wedgeEllipseCallout", "cloudCallout"}
+"""Callouts with a tip, at adj1, adj2 from their center."""
+
+_LINE_CALLOUTS = {f"{family}{n}": n + 1 for family in ("callout", "borderCallout", "accentCallout",
+                                                       "accentBorderCallout") for n in (1, 2, 3)}
+"""Callouts with a leader line, and its number of points: each an
+(adj y, adj x) pair from the box's top left corner, the last its tip."""
+
+TIP_CALLOUTS: dict[str, int] = {**dict.fromkeys(sorted(_WEDGE_CALLOUTS), 0), **_LINE_CALLOUTS}
+"""The callouts `tip at` points: 0 for one with a tip, else the number of
+points of its leader line."""
+
+_HANDLE_DOCS = {"shaft.width": "the shaft's width", "head.length": "the head's length"}
+
+_LEADER_GAP = 1 / 12
+"""How far the leader line starts off the box, and each bend further, as
+the presets draw them by default: a fraction of the box's side."""
+
+
+def _handle_names(preset: str) -> list[str]:
+    """The names a preset's handles go by (`adjust NAME`): the ones
+    pikslide gives, then the preset's own adjust values."""
+    return [*_HANDLES.get(preset, {}), *(name for name, _value in ADJUST_VALUES.get(preset, ()))]
+
+
+def shape_handles(preset: str) -> dict[str, tuple[str, str]]:
+    """The handles pikslide names on a preset: what each sets, and the
+    side ("width" or "height") a % of it is of."""
+    return {name: (_HANDLE_DOCS[name], "width" if handle.along == "w" else "height")
+            for name, handle in _HANDLES.get(preset, {}).items()}
+
+
+def _handled_preset(shape: Shape, word: str) -> str:
+    if shape.kind != "shape" or shape.preset is None:
+        raise LayoutError(f"'{word}' is only valid on a preset shape (shape NAME)")
+    return shape.preset
+
+
+def _apply_adjust(shape: Shape, attr: ast.Adjust, ctx: _Ctx) -> None:
+    preset = _handled_preset(shape, "adjust")
+    if attr.name in _HANDLES.get(preset, {}):
+        percent = attr.value.percent is not None
+        value = _as_number(eval_expr(attr.value.percent if percent else attr.value.abs, ctx))
+        if value < 0:
+            raise LayoutError(f"adjust {attr.name} can't be negative")
+        shape.handles[attr.name] = (value / 100 if percent else value, percent)
+    elif any(name == attr.name for name, _value in ADJUST_VALUES[preset]):
+        if attr.value.percent is not None:
+            raise LayoutError(f"adjust {attr.name} takes the value OOXML writes, 100000 for 1, not a %")
+        shape.adjust[attr.name] = _as_number(eval_expr(attr.value.abs, ctx))
+    elif not _handle_names(preset):
+        raise LayoutError(f"{preset} has no handles to adjust")
+    else:
+        names = _handle_names(preset)
+        raise LayoutError(f"{preset} has no handle {attr.name}: it has {', '.join(names)}"
+                          f"{_did_you_mean(attr.name, names)}")
+
+
+def _handle_lengths(shape: Shape, w: float, h: float) -> Iterator[tuple[str, _Handle, float, float]]:
+    """Each of `shape`'s named handles drawn `w` x `h`: its name, what it
+    is, its length, and the length of the side it runs along."""
+    for name, (value, percent) in shape.handles.items():
+        handle = _HANDLES[shape.preset or ""][name]
+        along = w if handle.along == "w" else h
+        yield name, handle, value * along if percent else value, along
+
+
+def _handle_values(shape: Shape, w: float, h: float) -> dict[str, float]:
+    """The adjust values `shape`'s named handles set, drawn `w` x `h`."""
+    out = {}
+    for _name, handle, length, _along in _handle_lengths(shape, w, h):
+        per = {"w": w, "h": h, "ss": min(w, h)}[handle.per]
+        out[handle.guide] = length / per * 100000 if per > 0 else 0.0
+    return out
+
+
+def _fit_preset(shape: Shape, preset: str, text_w: float, text_h: float) -> tuple[float, float]:
+    """fit_size() at `shape`'s adjust values. A handle's length, unlike an
+    adjust value, doesn't grow with the shape: size it again at the
+    values that length gives, until the size settles."""
+    w, h = fit_size(preset, text_w, text_h, shape.adjust)
+    for _ in range(20) if shape.handles else ():
+        nw, nh = fit_size(preset, text_w, text_h, {**shape.adjust, **_handle_values(shape, w, h)})
+        if abs(nw - w) < 1e-6 and abs(nh - h) < 1e-6:
+            break
+        w, h = nw, nh
+    return w, h
+
+
+def _resolve_handles(shape: Shape, ctx: _Ctx) -> None:
+    """Turn a laid-out shape's named handles and tip into adjust values,
+    warning about a handle longer than the preset draws it. Relative to
+    the shape, they stay right when a block moves it."""
+    if shape.handles:
+        for name, handle, length, along in _handle_lengths(shape, shape.w, shape.h):
+            if length > handle.limit * along + 1e-6:
+                ctx.warnings.append(LayoutWarning(
+                    f"{shape.name}: {name} {length:.2f} in is longer than {shape.preset} can draw it "
+                    f"({handle.limit * along:.2f} in, so it is drawn at that); make it shorter, or the shape bigger",
+                    (shape.name,) if shape.name else (),
+                ))
+        shape.adjust.update(_handle_values(shape, shape.w, shape.h))
+    if shape.tip is not None:
+        shape.adjust.update(_tip_values(shape, shape.tip))
+
+
+def _tip_values(shape: Shape, tip: tuple[float, float]) -> dict[str, float]:
+    """The adjust values that point a callout at `tip`."""
+    preset = shape.preset or ""
+    w, h = max(shape.w, 1e-9), max(shape.h, 1e-9)
+    if preset in _WEDGE_CALLOUTS:
+        return {"adj1": (tip[0] - shape.cx) / w * 100000, "adj2": (shape.cy - tip[1]) / h * 100000}
+    # A leader line: from the side facing the tip, at the point nearest
+    # it, out a gap and, with bends, a gap further; with two, along that
+    # side as far as the tip, then to it. An accent bar is upright, at the
+    # line's start, so an accent callout's line leaves a left or right side.
+    # Fractions of the box, from its top left corner, y down.
+    x = (tip[0] - (shape.cx - w / 2)) / w
+    y = ((shape.cy + h / 2) - tip[1]) / h
+    beyond_x = max(-x, x - 1, 0.0) * w
+    beyond_y = max(-y, y - 1, 0.0) * h
+    gap = _LEADER_GAP
+    if beyond_x >= beyond_y or preset.startswith("accent"):
+        out = -1 if x < 0.5 else 1
+        side = 0.0 if out < 0 else 1.0
+        along = min(max(y, 0.0), 1.0)
+        points = [(side + out * gap, along), (side + 2 * out * gap, along), (side + 2 * out * gap, y)]
+    else:
+        out = -1 if y < 0.5 else 1
+        side = 0.0 if out < 0 else 1.0
+        along = min(max(x, 0.0), 1.0)
+        points = [(along, side + out * gap), (along, side + 2 * out * gap), (x, side + 2 * out * gap)]
+    n = _LINE_CALLOUTS[preset]
+    values = {}
+    for k, (px, py) in enumerate([*points[:n - 1], (x, y)]):
+        values[f"adj{2 * k + 1}"] = py * 100000
+        values[f"adj{2 * k + 2}"] = px * 100000
+    return values
+
+
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     """Size a "fit" object to its text using ctx.metrics: the pptx
     backend's PilFontMetrics measures actual glyph widths; only the fallback _ApproxMetrics estimates from flat constants.
@@ -1291,7 +1483,7 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
         # without `fit` (`same as`, `width A.wid`) holds it too.
         preset = shape.preset if shape.kind == "shape" else _FRAMED_TEXT_KINDS["diamond"]
         assert preset is not None
-        shape.w, shape.h = fit_size(preset, shape.w, shape.h)
+        shape.w, shape.h = _fit_preset(shape, preset, shape.w, shape.h)
     elif shape.kind in ("circle", "ellipse", "oval"):
         # The largest axis-aligned rectangle inscribed in an ellipse of
         # full width/height (W, H) is (W/sqrt(2)) x (H/sqrt(2)) -- so to
@@ -1479,6 +1671,14 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         if shape.kind != "image":
             raise LayoutError("'alt' is only valid on an image")
         shape.alt_text = attr.text
+    elif isinstance(attr, ast.Adjust):
+        _apply_adjust(shape, attr, ctx)
+    elif isinstance(attr, ast.Tip):
+        preset = _handled_preset(shape, "tip")
+        if preset not in TIP_CALLOUTS:
+            raise LayoutError(f"'tip' is only valid on a callout with a tip or a leader line "
+                              f"(wedgeRectCallout, callout1, ...), not {preset}")
+        shape.tip = eval_position(attr.position, ctx)
     elif isinstance(attr, ast.At):
         build.at = eval_position(attr.position, ctx)
         build.with_edge = C
@@ -1501,6 +1701,8 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
             shape.color = same_from.color
             shape.text_color = same_from.text_color
             shape.cw = same_from.cw
+            if same_from.preset == shape.preset:
+                shape.adjust = dict(same_from.adjust)
             shape.larrow = same_from.larrow
             shape.rarrow = same_from.rarrow
             shape.closed = same_from.closed
@@ -1803,6 +2005,7 @@ def _layout_statements(
             else:
                 shape.name = f"{shape.kind} {class_counts[shape.kind]}"
             shape.behind = behind_target
+            _resolve_handles(shape, ctx)
             _check_text_overflow(shape, stmt.label, ctx)
             _check_unoutlined(shape, ctx)
             _place(shape, behind_target)

@@ -268,8 +268,39 @@ shape wedgeRectCallout "Note" fit
   Edge names (`.n`, `.ne`, …) and `chop` refer to the **bounding rectangle**.
   Its text goes in the preset's own text rectangle, which `fit` and the
   overflow warning follow (§3.3).
-- No adjustment handles in v1 (default geometry), except `rad` on `roundRect`,
-  already supported for `box`.
+- **Handles.** A preset is drawn at its default geometry unless `adjust` or
+  `tip` sets its handles (the yellow ones in PowerPoint):
+
+  ```pikslide
+  shape rightArrow "Next" adjust head.length 0.15 adjust shaft.width 40%
+  shape wedgeRectCallout "Slow here" tip at DB.n
+  shape bentArrow adjust adj1 30000
+  ```
+
+  - `adjust NAME VALUE` with a name pikslide gives the handle takes a
+    length, or a `%` of the side it runs along. Block arrows (`rightArrow`,
+    `leftArrow`, `upArrow`, `downArrow`, `leftRightArrow`, `upDownArrow`,
+    `notchedRightArrow`, `stripedRightArrow`) have `shaft.width` and
+    `head.length`; `homePlate` and `chevron` have `head.length`. A handle
+    longer than the preset draws it is a warning.
+  - `adjust NAME VALUE` with one of the preset's own adjust values (`adj`,
+    `adj1`, …, as `--help NAME` lists them) takes the value as OOXML
+    writes it: 100000 for 1, an angle in 60000ths of a degree. What it
+    measures differs from preset to preset, and from handle to handle.
+  - `tip at POSITION` points a callout at a point, and pikslide works out
+    the adjust values. On a callout with a tip (`wedgeRectCallout`,
+    `wedgeRoundRectCallout`, `wedgeEllipseCallout`, `cloudCallout`), the
+    tip goes there. On one with a leader line (`callout1`–`3`, and their
+    `border`, `accent` and `accentBorder` kinds), the line ends there, and
+    leaves the side of the box facing it, at the point nearest it; with
+    bends, it runs out from that side, then along it. An accent bar is
+    upright at the line's start, so an accent callout's line leaves its
+    left or right side.
+  - The values are relative to the shape, so they keep pointing at the
+    same place when a block moves the shape with the point; `same as`
+    copies them to the same preset. `fit` and the overflow warning use
+    them.
+  - `rad` sets a `box`'s or `roundRect`'s corner, as before.
 - Existing classes map onto presets as follows:
 
   | Class | PowerPoint |
@@ -582,6 +613,7 @@ Humans and LLMs both need errors they can act on.
   `define`.
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
 - Text wider than a fixed-size object's text area is a **warning** (§3.3).
+- A preset's handle longer than the preset draws it is a **warning** (§3.4).
 - A diagram bigger than the content area of a `--template`'s slide is a
   **warning** that names the objects running past it (§4).
 - Objects, text and lines that overlap are **warnings**, each naming the

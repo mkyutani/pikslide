@@ -364,6 +364,25 @@ class Behind(Attribute):
 
 
 @dataclass
+class Adjust(Attribute):
+    """``adjust NAME VALUE`` (ext, issue #20): one of a preset shape's
+    handles, by the name pikslide gives it (`head.length`, a length) or by
+    the preset's own (`adj1`, a value as OOXML writes it). Checked against
+    the preset in the layout stage."""
+
+    name: str
+    value: RelExpr
+
+
+@dataclass
+class Tip(Attribute):
+    """``tip at POSITION`` (ext, issue #20): the point a callout points at,
+    which the layout stage turns into the preset's adjust values."""
+
+    position: Position
+
+
+@dataclass
 class Alt(Attribute):
     """``alt STRING`` (ext, docs/spec.md SS3.5): an image's accessibility
     description. Valid only on `image`; enforced in the layout stage,

@@ -1975,8 +1975,10 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
         shape.enter = (shape.cx + dxin, shape.cy + dyin)
     else:
         if len(build.path) < 2:
+            # No move of its own: ahead its length, from `from P` if given.
             length = shape.w if direction in (DIR_RIGHT, DIR_LEFT) else shape.h
-            build.path = [_start_point(shape, build)]
+            if not build.path:
+                build.path = [_start_point(shape, build)]
             _move_current_direction(build, shape, direction, length)
             if shape.kind == "arc":
                 # A bare arc turns, as pikchr's does: right going clockwise,

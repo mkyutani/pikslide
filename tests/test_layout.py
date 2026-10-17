@@ -180,6 +180,17 @@ def test_from_after_movement_rebases_the_whole_path():
     assert line.path == [pytest.approx((10, 10)), pytest.approx((11, 10))]
 
 
+@pytest.mark.parametrize("src, path", [
+    ("line from (1, 1)", [(1, 1), (1.5, 1)]),
+    ("down\nline from (1, 1)", [(1, 1), (1, 0.5)]),
+    ("arc from (3, 0)", [(3, 0), (3.25, 0.25)]),
+])
+def test_a_line_with_only_from_goes_its_length_from_there(src: str, path):
+    # Not from the previous object's exit, which `from` replaces.
+    line = layout("box\n" + src + "\n").shapes[-1]
+    assert line.path == [pytest.approx(p) for p in path]
+
+
 # ---------------------------------------------------------------------------
 # Arcs (issue #25): a curve that turns, as pikchr's does
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 [project]
 name = "pikslide"
-version = "0.1.2"
+version = "0.2.0"
 description = "A text language for drawing diagrams as native, editable PowerPoint objects"
 readme = "README.md"
 license = "0BSD"

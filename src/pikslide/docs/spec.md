@@ -146,13 +146,29 @@ arrow from A.e to B.w attach
 - `path` picks the connector's form. `path straight`, the default, is
   the line as drawn, a straight connector; a path of more than one
   segment can't be one, and is written as drawn, unattached, with a
-  warning. `path elbow` and `path curved` are not supported yet.
+  warning.
+- `path elbow` is an elbow connector: between two points, pikslide
+  routes it at right angles from the sites they're on, as PowerPoint's
+  own elbow connector routes itself when a shape moves (`pik/elbow.py`;
+  checked against 736 routes PowerPoint wrote), so that nothing jumps
+  the first time a person moves a shape. A path that already turns at
+  right angles, with `then`, is written as it stands. A path with a
+  slanted segment, or more than four bends, is written as drawn,
+  unattached, with a warning. The route is chosen as the line is laid
+  out, so what refers to the line later finds it routed: an end's site
+  is on the object its `from` or `to` names, or on one laid out before
+  the line; an end on one placed after it is taken to meet it head on.
+  `path curved` is not supported yet.
 - A labeled line attaches, but its labels, separate text boxes (§3.1),
   don't follow it.
 - Attachment doesn't show in a PNG, so the warnings are the only sign of
   an end that didn't attach, and `--check`'s object list gives the object
   each attached end is on. They aren't stand-ins (§5): the slide shows
   what the deck will show, and `--strict` leaves them warnings.
+- LibreOffice (`--renderer libreoffice`) attaches a connector's ends again
+  as it opens the deck, by its own numbering of a shape's sites: a
+  cylinder's (`can`) differs from PowerPoint's, so a line attached to a
+  cylinder comes out wrong there, though right in PowerPoint.
 
 `connector`, a reserved word, stays unused.
 

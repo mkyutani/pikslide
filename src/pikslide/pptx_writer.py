@@ -690,7 +690,15 @@ def _add_line_shape(container, shape: Shape, tf: _Transform):
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
-    if len(points) == 2 and shape.kind != "arc":
+    if shape.elbow:
+        connector = _add_elbow_connector(container, points)
+        _no_theme_effects(connector)
+        if shape.name:
+            connector.name = shape.name
+        _apply_line_style(connector.line, shape)
+        _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
+        drawn = connector
+    elif len(points) == 2 and shape.kind != "arc":
         (x1, y1), (x2, y2) = points
         connector = container.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
         _no_theme_effects(connector)
@@ -717,6 +725,80 @@ def _add_line_shape(container, shape: Shape, tf: _Transform):
 
     _add_line_text(container, shape, tf)
     return drawn
+
+
+# PowerPoint's own least extent for a connector, in EMU (1pt): an elbow's
+# adjust values are fractions of its extent, so it can't be 0 where one
+# is measured along it. An end moves by half of what it adds, at most.
+_MIN_CONNECTOR_EXTENT = 12700
+
+
+def _add_elbow_connector(container, points: list[tuple[float, float]]):
+    """An elbow connector through `points` (slide inches, y down; each
+    segment horizontal or vertical, at most five): python-pptx's elbow
+    connector, its geometry rewritten as PowerPoint writes one. Each preset
+    bentConnector2..5 starts out horizontally from its box's top left and
+    ends at its bottom right, bending once to four times; a straight one is
+    a bentConnector3 of no height. A route that starts out vertically is
+    the same turned a quarter. Flips point it the right way, and the
+    adjust values put its bends where the route's are."""
+    pts = [(Emu(Inches(x)), Emu(Inches(y))) for x, y in points]
+    n = len(pts) - 1
+    (sx, sy), (ex, ey) = pts[0], pts[-1]
+    dx, dy = ex - sx, ey - sy
+    if n == 1 or abs(pts[1][1] - sy) <= abs(pts[1][0] - sx):
+        # Starts out horizontally: local x and y are the slide's, flipped.
+        rot, fx, fy, w, h = 0, -1 if dx < 0 else 1, -1 if dy < 0 else 1, abs(dx), abs(dy)
+        if n == 1 and dx == 0:
+            # Vertical and straight: turned a quarter, local x runs down.
+            rot, fx, fy, w, h = 5400000, -1 if dy < 0 else 1, 1, abs(dy), 0
+    else:
+        # Turned a quarter clockwise: local x runs down the slide, local y left.
+        rot, fx, fy, w, h = 5400000, -1 if dy < 0 else 1, 1 if dx <= 0 else -1, abs(dy), abs(dx)
+
+    def local(p: tuple[int, int]) -> tuple[float, float]:
+        px, py = p[0] - sx, p[1] - sy
+        return (fx * px, fy * py) if rot == 0 else (fx * py, -fy * px)
+
+    # Grow a dimension an adjust value is measured along to the least
+    # extent, about the middle, so the bends stay where they are.
+    w2 = max(w, _MIN_CONNECTOR_EXTENT) if n >= 3 else w
+    h2 = max(h, _MIN_CONNECTOR_EXTENT) if n >= 4 else h
+    shift = ((w2 - w) / 2, (h2 - h) / 2)
+    xs = [local(p)[0] + shift[0] for p in pts]
+    ys = [local(p)[1] + shift[1] for p in pts]
+    values = [xs[1] / w2, ys[2] / h2, xs[3] / w2][: n - 2] if n >= 3 else []
+
+    connector = container.shapes.add_connector(MSO_CONNECTOR.ELBOW, sx, sy, ex, ey)
+    sp_pr = connector._element.spPr
+    xfrm = sp_pr.find(qn("a:xfrm"))
+    for name in ("rot", "flipH", "flipV"):
+        xfrm.attrib.pop(name, None)
+    if rot:
+        xfrm.set("rot", str(rot))
+    if fx < 0:
+        xfrm.set("flipH", "1")
+    if fy < 0:
+        xfrm.set("flipV", "1")
+    cx, cy = (sx + ex) / 2, (sy + ey) / 2
+    xfrm.find(qn("a:off")).set("x", str(round(cx - w2 / 2)))
+    xfrm.find(qn("a:off")).set("y", str(round(cy - h2 / 2)))
+    xfrm.find(qn("a:ext")).set("cx", str(round(w2)))
+    xfrm.find(qn("a:ext")).set("cy", str(round(h2)))
+    geometry = sp_pr.find(qn("a:prstGeom"))
+    geometry.set("prst", f"bentConnector{3 if n == 1 else n}")
+    av_lst = geometry.find(qn("a:avLst"))
+    if av_lst is None:
+        av_lst = OxmlElement("a:avLst")
+        geometry.insert(0, av_lst)
+    for gd in list(av_lst):
+        av_lst.remove(gd)
+    for i, value in enumerate(values, start=1):
+        gd = OxmlElement("a:gd")
+        gd.set("name", f"adj{i}")
+        gd.set("fmla", f"val {round(value * 100000)}")
+        av_lst.append(gd)
+    return connector
 
 
 def _add_arc_freeform(container, shape: Shape, tf: _Transform):

@@ -34,6 +34,7 @@ from typing import Protocol
 from . import ast
 from .parser import parse
 from .preset_text_rects import ADJUST_VALUES
+from .elbow import route as _elbow_route
 from .text_area import connection_sites as _connection_sites
 from .text_area import fit_size, text_rect
 
@@ -441,6 +442,9 @@ class Shape:
     attached line's start and end attach to."""
     attached: tuple[tuple["Shape", int] | None, tuple["Shape", int] | None] = field(
         default=(None, None), compare=False, repr=False)
+    elbow: bool = False
+    """Whether an attached line with `path elbow` is written as an elbow
+    connector: its path is one (_elbow_path())."""
     """An attached line's start and end: each the object it attached to,
     and which of its connection sites (connection_sites(), numbered as a
     connector numbers them), or None (_attach_lines())."""
@@ -1834,8 +1838,8 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         if attr.name not in CONNECTOR_PATHS:
             raise LayoutError(f"unknown connector form 'path {attr.name}': "
                               f"use {', '.join(CONNECTOR_PATHS[:-1])} or {CONNECTOR_PATHS[-1]}")
-        if attr.name != "straight":
-            raise LayoutError(f"'path {attr.name}' isn't supported yet: only 'path straight'")
+        if attr.name == "curved":
+            raise LayoutError("'path curved' isn't supported yet: only 'path straight' and 'path elbow'")
         build.connector_path = attr.name
     elif isinstance(attr, ast.GoDirection):
         build.direction = _DIR_CODE[attr.direction]
@@ -2064,6 +2068,10 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
                 build.path[0] = chop_point(build.from_obj, build.path[1])
         if shape.closed and build.path[0] != build.path[-1]:
             build.path.append(build.path[0])
+        if shape.connector_path == "elbow":
+            build.path = _elbow_path(build.path, (build.from_named, build.seg_named[-1] if build.seg_named else None),
+                                     ctx)
+            shape.elbow = _is_elbow(build.path)
         shape.label_width = max(
             (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface) for text, flags in shape.texts),
             default=0.0,
@@ -2195,11 +2203,22 @@ def connection_sites(shape: Shape) -> list[tuple[float, float]]:
     connector numbers them: its preset's sites (text_area), or a
     picture's four, at the middles of its sides; none for what isn't drawn
     as a shape (a line, a point, a move, a block)."""
+    return [site for site, _direction in _sites(shape)]
+
+
+def _sites(shape: Shape) -> list[tuple[tuple[float, float], tuple[int, int]]]:
+    """connection_sites(), each with the direction a connector leaves it
+    in (y up), its angle to the nearest of right, up, left and down: an
+    elbow connector leaves along an axis."""
     preset = "rect" if shape.kind == "image" else preset_of(shape)
     if preset is None:
         return []
     left, top = shape.cx - shape.w / 2, shape.cy + shape.h / 2
-    return [(left + x, top - y) for x, y in _connection_sites(preset, shape.w, shape.h, shape.adjust)]
+    out = []
+    for x, y, angle in _connection_sites(preset, shape.w, shape.h, shape.adjust):
+        quarter = round(angle / 90) % 4  # clockwise from the right, y down
+        out.append(((left + x, top - y), ((1, 0), (0, -1), (-1, 0), (0, 1))[quarter]))
+    return out
 
 
 def _site_at(sites: list[tuple[float, float]], pt: tuple[float, float]) -> int | None:
@@ -2269,12 +2288,73 @@ def _attach_lines(shapes: list[Shape], ctx: _Ctx) -> None:
             attached[i] = (obj, idx)
         if not on_an_object:
             raise LayoutError(f"'attach' on {line.name}: neither of its ends is on an object")
-        if len(line.path) != 2:
+        if line.connector_path == "elbow" and not line.elbow:
             ctx.warnings.append(LayoutWarning(
-                f"{line.name} has {len(line.path) - 1} segments, and a straight connector has one: "
-                f"it is written as drawn, not attached", (line.name or "",)))
+                f"{line.name} isn't a route an elbow connector can take, with a slanted segment or more "
+                f"than four bends: it is written as drawn, not attached", (line.name or "",)))
+            continue
+        if line.connector_path == "straight" and len(line.path) != 2:
+            ctx.warnings.append(LayoutWarning(
+                f"{line.name} has {len(line.path) - 1} segments, and a straight connector has one: it is "
+                f"written as drawn, not attached; with `path elbow`, a path that turns at right angles "
+                f"attaches", (line.name or "",)))
             continue
         line.attached = (attached[0], attached[1])
+
+
+def _elbow_path(path: list[tuple[float, float]], named: tuple[Shape | None, Shape | None],
+                ctx: _Ctx) -> list[tuple[float, float]]:
+    """An attached line's path with `path elbow`: between two points, the
+    route PowerPoint's elbow connector takes between the sites they're on
+    (elbow.route()); a path of several points as it stands, its straight
+    runs merged. Routed as the line is laid out, so that what refers to it
+    later finds it routed: each end's site is on the object its `from` or
+    `to` names, or else on one laid out before it. An end on neither, as
+    one on an object placed after the line, is taken to meet it head on."""
+    if len(path) != 2:
+        return _merge_runs(path)
+    placed = [s for s in flatten_shapes([s for pool in ctx.pool_stack for s in pool]) if s.kind not in LINE_LIKE]
+    start, end = path
+    ends = []
+    for pt, obj, toward in ((start, named[0], end), (end, named[1], start)):
+        site = None
+        for o in [obj] if obj is not None else placed:
+            site = next(((o, d) for p, d in _sites(o) if math.dist(p, pt) <= SITE_TOLERANCE), None)
+            if site is not None:
+                break
+        if site is not None:
+            o, direction = site
+            ends.append((direction, o.bbox))
+        else:
+            dx, dy = toward[0] - pt[0], toward[1] - pt[1]
+            direction = (1 if dx >= 0 else -1, 0) if abs(dx) >= abs(dy) else (0, 1 if dy >= 0 else -1)
+            ends.append((direction, (pt[0], pt[1], pt[0], pt[1])))
+    (start_dir, start_box), (end_dir, end_box) = ends
+    routed = _elbow_route(start, start_dir, end, end_dir, start_box, end_box)
+    return routed if routed is not None else path
+
+
+def _merge_runs(path: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """`path` without repeated points or points in the middle of a straight run."""
+    out = [path[0]]
+    for p in path[1:]:
+        if math.dist(p, out[-1]) > 1e-9:
+            out.append(p)
+    i = 1
+    while i < len(out) - 1:
+        (ax, ay), (bx, by), (cx, cy) = out[i - 1], out[i], out[i + 1]
+        if abs((bx - ax) * (cy - by) - (by - ay) * (cx - bx)) < 1e-12:
+            out.pop(i)
+        else:
+            i += 1
+    return out
+
+
+def _is_elbow(path: list[tuple[float, float]]) -> bool:
+    """Whether an elbow connector can take `path`: horizontal and vertical
+    segments, turning at most four times."""
+    segments = list(zip(path, path[1:]))
+    return 1 <= len(segments) <= 5 and all(abs(p[0] - q[0]) < 1e-9 or abs(p[1] - q[1]) < 1e-9 for p, q in segments)
 
 
 def _on_outline(obj: Shape, pt: tuple[float, float]) -> bool:

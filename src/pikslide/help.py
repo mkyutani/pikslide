@@ -309,12 +309,13 @@ ENTRIES: tuple[Entry, ...] = (
           body="Ends a line at the outline of the object named by its `from`/`to`, not "
                "at its center.", example="arrow from A to B chop", group="attribute"),
     Entry(("attach", "path"), "attaches a line's ends to the objects they're on",
-          synopsis=("attach [path straight]",),
+          synopsis=("attach [path straight|elbow]",),
           body="Writes the line as a connector whose ends follow the objects they're on "
                "when moved in PowerPoint. An end attaches at a site (a box's .n .e .s .w, a "
                "circle's 8 compass points) of the object its from/to names, else of the one "
-               "there; one that can't is a warning.",
-          example="arrow from A.e to B.w attach", group="attribute"),
+               "there; one that can't is a warning. `path elbow` routes it at right angles, "
+               "as PowerPoint does.",
+          example="arrow from A.e to B.n attach path elbow", group="attribute"),
     Entry(("cw", "ccw"), "an arc's direction: clockwise or counterclockwise",
           group="attribute", example="arc cw"),
     Entry(("same",), "copies size and style from another object",

@@ -1,9 +1,11 @@
 """Tests for attached lines (issue #18): `attach` and `path`, from parsing
-to the connector's attached ends in the deck and --check's object list."""
+to the connector's attached ends in the deck and --check's object list,
+and the elbow connector's route, against PowerPoint's own."""
 
 from __future__ import annotations
 
 import json
+import math
 import pathlib
 
 import pytest
@@ -12,6 +14,7 @@ from pptx.oxml.ns import qn
 
 from pikslide import main
 from pikslide.pik import ast, parse
+from pikslide.pik.elbow import route
 from pikslide.pik.layout import LayoutError, connection_sites, flatten_shapes, resolve_layout
 from pikslide.pik.tokens import PikSyntaxError
 from pikslide.pptx_writer import resolve_for_pptx, write_pptx
@@ -100,8 +103,8 @@ def test_an_unnamed_end_inside_an_object_isnt_on_it():
 def test_a_path_a_straight_connector_cant_take_warns_and_stays_unattached():
     src = "A: box\nB: box at (2, -1)\narrow from A.e right 1 then down until even with B.n attach\n"
     assert attached(src) == [None, None]
-    assert warnings(src) == ["arrow 1 has 2 segments, and a straight connector has one: "
-                             "it is written as drawn, not attached"]
+    assert warnings(src) == ["arrow 1 has 2 segments, and a straight connector has one: it is written as drawn, "
+                             "not attached; with `path elbow`, a path that turns at right angles attaches"]
 
 
 @pytest.mark.parametrize("src, message", [
@@ -111,6 +114,7 @@ def test_a_path_a_straight_connector_cant_take_warns_and_stays_unattached():
     ("A: box\narrow from A.e path straight", "'path straight' is the form of an attached line's connector: "
                                              "it needs 'attach'"),
     ("A: box\narrow from A.e attach path wavy", "unknown connector form 'path wavy': use straight, elbow or curved"),
+    ("A: box\narrow from A.e attach path curved", "'path curved' isn't supported yet: only 'path straight' and 'path elbow'"),
 ])
 def test_attach_errors(src: str, message: str):
     with pytest.raises(LayoutError, match="^" + message.replace("(", r"\(").replace(")", r"\)") + "$"):
@@ -161,3 +165,102 @@ def test_check_says_which_ends_are_attached(monkeypatch, capsys, tmp_path: pathl
     assert objects["arrow 1"]["attached"] == {"start": "A", "end": "B"}
     assert objects["arrow 2"]["attached"] == {"end": "B"}
     assert "attached" not in objects["A"]
+
+
+# ---------------------------------------------------------------------------
+# path elbow
+# ---------------------------------------------------------------------------
+
+
+def elbow(src: str, name: str | None = None) -> list[tuple[float, float]]:
+    lines = [s for s in flatten_shapes(layout(src).shapes) if s.attach]
+    line = next(s for s in lines if s.name == name) if name else lines[-1]
+    assert line.elbow
+    return [(round(x, 3), round(y, 3)) for x, y in line.path]
+
+
+def test_an_elbow_is_routed_between_the_sites_as_powerpoint_routes_it():
+    src = "A: box\nB: box at (2, -1)\n"
+    # An L, down the middle of the gap, and round below both.
+    assert elbow(src + "arrow from A.e to B.n attach path elbow\n") == [(0.375, 0), (2, 0), (2, -0.75)]
+    assert elbow(src + "arrow from A.e to B.w attach path elbow\n") == [(0.375, 0), (1, 0), (1, -1), (1.625, -1)]
+    assert elbow(src + "arrow from A.s to B.s attach path elbow\n") == [(0, -0.25), (0, -1.5), (2, -1.5), (2, -1.25)]
+    assert attached(src + "arrow from A.s to B.s attach path elbow\n") == [("A", 2), ("B", 2)]
+
+
+def test_an_elbow_to_an_object_placed_after_it_meets_it_head_on():
+    assert elbow("A: box\narrow attach path elbow\nB: box\n") == [(0.375, 0), (0.875, 0)]
+    assert attached("A: box\narrow attach path elbow\nB: box\n") == [("A", 3), ("B", 1)]
+
+
+def test_a_path_that_turns_at_right_angles_is_an_elbow_as_it_stands():
+    src = "A: box\nB: box at (2, -1)\narrow from A.e right 0.5 then right 0.5 then down until even with B.w " \
+          "then right until even with B.w attach path elbow\n"
+    assert elbow(src) == [(0.375, 0), (1.375, 0), (1.375, -1), (1.625, -1)]
+    assert attached(src) == [("A", 3), ("B", 1)]
+
+
+@pytest.mark.parametrize("path", ["to B.w", "to B.w then right 1 then up 1 then right 1 then down 1 then left 1"])
+def test_a_path_an_elbow_cant_take_warns_and_stays_unattached(path: str):
+    src = f"A: box\nB: box at (2, -1)\narrow from A.e right 0.5 then {path} attach path elbow\n"
+    assert attached(src) == [None, None]
+    assert warnings(src) == ["arrow 1 isn't a route an elbow connector can take, with a slanted segment or more "
+                             "than four bends: it is written as drawn, not attached"]
+
+
+def _powerpoint_elbows():
+    path = pathlib.Path(__file__).parent / "fixtures" / "powerpoint_elbows.txt"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#"):
+            continue
+        head, points = line.split(" : ")
+        s, e, *box = head.split()
+        yield s, e, [float(v) for v in box[:4]], [float(v) for v in box[4:]], \
+            [tuple(float(v) for v in p.split(",")) for p in points.split()]
+
+
+_SIDES = {"t": ((0.5, 1), (0, 1)), "l": ((0, 0.5), (-1, 0)), "b": ((0.5, 0), (0, -1)), "r": ((1, 0.5), (1, 0))}
+
+
+def test_elbow_routes_match_powerpoints_own():
+    """PowerPoint's routes between rectangles of two sizes, at 46 places,
+    every pair of sides (tests/fixtures/powerpoint_elbows.txt), in points
+    with y down; route() takes inches with y up."""
+    misses = []
+    for s, e, a, b, want in _powerpoint_elbows():
+        boxes = [(x / 72, -(y + h) / 72, (x + w) / 72, -y / 72) for x, y, w, h in (a, b)]
+        ends = []
+        for side, (x0, y0, x1, y1) in zip((s, e), boxes):
+            (fx, fy), direction = _SIDES[side]
+            ends.append(((x0 + fx * (x1 - x0), y0 + fy * (y1 - y0)), direction))
+        (start, ds), (end, de) = ends
+        got = [(x * 72, -y * 72) for x, y in route(start, ds, end, de, *boxes)]
+        if len(got) != len(want) or any(math.dist(p, q) > 1.6 for p, q in zip(got, want)):
+            misses.append((s, e, a, b, want, got))
+    assert misses == []
+
+
+def _rotated_local(connector) -> tuple[str, int, bool, bool, list[int]]:
+    xfrm = connector._element.spPr.find(qn("a:xfrm"))
+    geometry = connector._element.spPr.find(qn("a:prstGeom"))
+    av = geometry.find(qn("a:avLst"))
+    return (geometry.get("prst"), int(xfrm.get("rot", 0)), xfrm.get("flipH") == "1", xfrm.get("flipV") == "1",
+            [] if av is None else [int(gd.get("fmla").split()[1]) for gd in av])
+
+
+def test_an_elbow_is_written_as_powerpoint_writes_one(tmp_path: pathlib.Path):
+    src = "A: box\nB: box at (2, -1)\nC: box at (2, 1)\n" \
+          "arrow from A.e to B.n attach path elbow\narrow from A.e to B.w attach path elbow\n" \
+          "arrow from A.n to C.w attach path elbow\narrow from A.s to B.s attach path elbow\n" \
+          "arrow from B.n to C.s attach path elbow\n"
+    shapes = render(src, tmp_path)
+    # Down the slide: an L; a Z, its bend in the middle (50000). Leaving
+    # upward, turned a quarter and flipped; round below both, its bend 1.25in
+    # down a 1in drop (125000); straight up, a bentConnector3 of no height.
+    # As PowerPoint wrote them (tests/fixtures: r t, r l, t l, b b, and t b).
+    assert _rotated_local(shapes["arrow 1"]) == ("bentConnector2", 0, False, False, [])
+    assert _rotated_local(shapes["arrow 2"]) == ("bentConnector3", 0, False, False, [50000])
+    assert _rotated_local(shapes["arrow 3"]) == ("bentConnector2", 5400000, True, True, [])
+    assert _rotated_local(shapes["arrow 4"]) == ("bentConnector3", 5400000, False, True, [125000])
+    assert _rotated_local(shapes["arrow 5"]) == ("bentConnector3", 5400000, True, False, [])
+    assert ends(shapes["arrow 4"], shapes) == [("A", 2), ("B", 2)]

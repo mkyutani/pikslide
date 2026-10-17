@@ -73,14 +73,15 @@ def text_rect(
 
 def connection_sites(
     preset: str, w: float, h: float, adjust: dict[str, float] | None = None
-) -> list[tuple[float, float]]:
+) -> list[tuple[float, float, float]]:
     """Where a connector's end can attach to `preset` drawn `w` x `h`
     inches (issue #18): each connection site's (x, y), in inches from its
-    top left corner, y down, in the order a connector numbers them.
-    `adjust` as text_rect() takes it."""
+    top left corner, y down, and the angle a connector leaves it at, in
+    degrees clockwise from the right, in the order a connector numbers
+    them. `adjust` as text_rect() takes it."""
     guides, sites = CONNECTION_SITES[preset]
     value = _guides(guides, w, h, adjust)
-    return [(value(x) / EMU_PER_INCH, value(y) / EMU_PER_INCH) for x, y in sites]
+    return [(value(x) / EMU_PER_INCH, value(y) / EMU_PER_INCH, value(a) / 60000) for x, y, a in sites]
 
 
 def _guides(guides, w: float, h: float, adjust: dict[str, float] | None):

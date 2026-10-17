@@ -17,9 +17,10 @@ A preset's adjust values, `<avLst>`, are the guides its handles set
 (`adjust NAME VALUE`); this keeps their names and defaults, in order.
 
 A preset's connection sites, `<cxnLst>`, are where a connector's end
-attaches to it (`attach`, issue #18), each a `<pos x y>` naming guides,
-in the order a connector numbers them (`idx`); this keeps them and the
-guides they need, as for the text rectangle.
+attaches to it (`attach`, issue #18), each a `<pos x y>` and the angle a
+connector leaves it at (`ang`), naming guides, in the order a connector
+numbers them (`idx`); this keeps them and the guides they need, as for
+the text rectangle.
 """
 
 from __future__ import annotations
@@ -68,12 +69,12 @@ def text_rect(preset: ET.Element) -> tuple[list[tuple[str, str]], tuple[str, ...
     return needed_guides(preset, sides), sides
 
 
-def connection_sites(preset: ET.Element) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+def connection_sites(preset: ET.Element) -> tuple[list[tuple[str, str]], list[tuple[str, str, str]]]:
     """The guides a preset's connection sites need, in order, and each
-    site's x and y, in the order a connector numbers them."""
+    site's x, y and angle, in the order a connector numbers them."""
     cxn_lst = preset.find(NS + "cxnLst")
     sites = [] if cxn_lst is None else [
-        (pos.get("x"), pos.get("y")) for cxn in cxn_lst.findall(NS + "cxn") for pos in cxn.findall(NS + "pos")
+        (pos.get("x"), pos.get("y"), cxn.get("ang")) for cxn in cxn_lst.findall(NS + "cxn") for pos in cxn.findall(NS + "pos")
     ]
     return needed_guides(preset, {name for site in sites for name in site}), sites
 
@@ -90,7 +91,8 @@ def module_source(xml_path: pathlib.Path) -> str:
         '"""The text rectangle of each preset shape: the guides it needs, and its',
         "l, t, r, b (see pikslide.pik.text_area); its adjust values, which its",
         "handles set, with their defaults (100000 for 1); and its connection",
-        "sites, where a connector's end attaches, and the guides they need.",
+        "sites, where a connector's end attaches and the angle it leaves at,",
+        "and the guides they need.",
         "",
         "Written by scripts/gen_preset_text_rects.py from ECMA-376's",
         "presetShapeDefinitions.xml: don't edit.",
@@ -117,11 +119,11 @@ def module_source(xml_path: pathlib.Path) -> str:
             out.append(line)
         else:
             out += [f"    {_str(name)}: (", *(f"        {value}," for value in values), "    ),"]
-    out += ["}", "", "CONNECTION_SITES: dict[str, tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]]] = {"]
+    out += ["}", "", "CONNECTION_SITES: dict[str, tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str, str], ...]]] = {"]
     for name in sorted(PRESET_NAMES.values(), key=str.lower):
         guides, sites = connection_sites(root.find(name))
         pairs = [f"({_str(g)}, {_str(f)})" for g, f in guides]
-        points = [f"({_str(x)}, {_str(y)})" for x, y in sites]
+        points = [f"({_str(x)}, {_str(y)}, {_str(a)})" for x, y, a in sites]
         line = f"    {_str(name)}: ({_tuple(pairs) if pairs else '()'}, {_tuple(points) if points else '()'}),"
         if len(line) <= 100:
             out.append(line)

@@ -246,11 +246,14 @@ attribute       ::= numprop relexpr
                    | "alt" STRING                    (* image only *)
                    | "adjust" handle-name relexpr    (* preset shapes only *)
                    | "tip" "at" position             (* callouts only *)
+                   | "attach"                        (* lines and arrows only *)
+                   | "path" connector-path           (* with attach only *)
                    | text
 
 numprop         ::= "width" | "height" | "radius" | "diameter"
 handle-name     ::= word { "." word }                (* head.length, adj1 *)
 boolprop        ::= "cw" | "ccw"
+connector-path  ::= "straight" | "elbow" | "curved"
 
 stroke-attrs    ::= [ color-value ] { stroke-attr }  (* at least one of the two *)
 stroke-attr     ::= "thickness" relexpr
@@ -388,6 +391,7 @@ names.
 | `include` | the include statement |
 | `alt` | an attribute of `image` |
 | `adjust`, `tip` | attributes of `shape` |
+| `attach`, `path` | attributes of `line` and `arrow` |
 | `major`, `medium`, `large` | string attributes |
 | `stroke` | the stroke attribute group, and the default line color |
 | `theme` | builds a theme color from a slot name, `theme "accent1"` |
@@ -412,6 +416,8 @@ Semantic constraints the grammar cannot express (each is an error):
 - a `preset-name` that is not a known OOXML preset geometry;
 - a `theme` string that names no known slot;
 - an unknown color name;
+- `attach` on anything other than a `line` or an `arrow`, an attached
+  line with neither end on an object, and `path` without `attach`;
 - assigning to `layout` outside a settings file ([spec.md](spec.md) §3.8).
 
 A name that merely looks like a theme slot but is not one (`accent7`) is an
@@ -458,8 +464,9 @@ or through a block (`Outer.Inner`), and points on them by edge (`Web.ne`,
 | `"text"` | 0 × 0 | shorthand for a `text` object |
 
 **Lines are geometry.** `line`, `arrow`, `spline` and `arc` are drawn at
-fixed coordinates. They are never attached to the objects they touch, in the
-language or in any output format (see [spec.md](spec.md) §3.2).
+fixed coordinates, and are not attached to the objects they touch unless
+asked: `attach` writes a line or an arrow as a connector whose ends are
+attached to the objects they lie on (see [spec.md](spec.md) §3.2).
 
 **Attributes.** `width`/`height`/`radius`/`diameter` set a size (a
 `relexpr` with `%` is a percentage of the current value); `fill` sets the
@@ -469,7 +476,8 @@ dashing), `invis` (hide it) and `dashed`/`dotted` with an optional length
 (default `dashwid`); `ljust`/`rjust` align all of the object's strings
 (see *Text*); `cw`/`ccw` set which way an arc turns (`ccw` by default); `<-`/`->`/`<->` add arrowheads;
 `fit` sizes the object to its text; `chop` shortens a line's ends to the
-outlines of the objects it joins; `close` closes a path; `behind X` places
+outlines of the objects it joins; `attach` attaches a line's ends to the
+objects they lie on, and `path` picks the form of its connector; `close` closes a path; `behind X` places
 the object immediately below `X` in z-order.
 
 **Text.** Each `STRING` is a line of text on the object. Its string

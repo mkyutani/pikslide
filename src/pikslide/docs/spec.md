@@ -104,12 +104,57 @@ Goal: the Selection Pane in PowerPoint reads like the source.
 `line`, `arrow`, `spline` and `arc` are *lines drawn with fixed geometry*.
 They are emitted as plain PowerPoint lines (a two-point path as a line, a
 longer path as a freeform, an arc as a freeform with one curve: pikchr's
-quadratic Bézier, written as the cubic one PowerPoint's own curves use), with `stroke`'s `dashed`, `dotted`, `thick`,
-`thin` and the arrowheads `<-`, `->`, `<->` mapped to dash style, weight and
-arrowheads.
+quadratic Bézier, written as the cubic one PowerPoint's own curves use),
+with `stroke`'s `dashed`, `dotted`, `thick`, `thin` and the arrowheads
+`<-`, `->`, `<->` mapped to dash style, weight and arrowheads.
 
-They are **never attached to shapes**, even when an endpoint lies exactly on
-a shape's edge. Moving a box in PowerPoint leaves the line where it was.
+They are **not attached to shapes**, even when an endpoint lies exactly on
+a shape's edge: moving a box in PowerPoint leaves the line where it was.
+Nothing makes a line a link because of where one of its ends happens to
+fall.
+
+**`attach`** asks for it: a `line` or an `arrow` with `attach` is written
+as a PowerPoint connector whose ends are attached to the objects they lie
+on, so that they follow those objects when a person moves them. pikslide
+still lays the line out and routes it: the connector is how the line is
+written, not a hand-off of layout to PowerPoint, and the slide looks the
+same with or without `attach`.
+
+```pikslide
+A: box "A"
+B: box "B" at A + (1.5, 0)
+arrow from A.e to B.w attach
+```
+
+- An end attaches at a **connection site**: a preset's own (ECMA-376's
+  `cxnLst`: a rectangle's four, at the middles of its sides; an
+  ellipse's eight, at its compass points), a picture's four, a text
+  object's frame's four. It attaches only if it lies on one, within
+  0.01in. It is never moved onto the nearest one: that would change the
+  drawing, and an end attached off its site jumps onto it the first time
+  the shape is moved.
+- It attaches to the object its `from` or `to` names; otherwise to the
+  one object with a site there, found once the whole diagram is laid
+  out (in `A: box; arrow attach; B: box`, `B` is placed after the arrow).
+- An end that can't attach is a warning, naming the line, the end and
+  why, and stays unattached: one on an object but on none of its sites
+  (the warning names the nearest site, `A.n`), one on a point, a move or
+  a line, which have none, and one on two objects' sites with neither
+  named (adjacent boxes). An unnamed end counts as on an object when it
+  is on its outline, not merely inside it. A line with neither end on an
+  object is an error, as is `attach` on anything but a line or an arrow.
+- `path` picks the connector's form. `path straight`, the default, is
+  the line as drawn, a straight connector; a path of more than one
+  segment can't be one, and is written as drawn, unattached, with a
+  warning. `path elbow` and `path curved` are not supported yet.
+- A labeled line attaches, but its labels, separate text boxes (§3.1),
+  don't follow it.
+- Attachment doesn't show in a PNG, so the warnings are the only sign of
+  an end that didn't attach, and `--check`'s object list gives the object
+  each attached end is on. They aren't stand-ins (§5): the slide shows
+  what the deck will show, and `--strict` leaves them warnings.
+
+`connector`, a reserved word, stays unused.
 
 ### 3.3 Theme colors and fonts
 

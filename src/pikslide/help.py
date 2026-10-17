@@ -175,8 +175,8 @@ ENTRIES: tuple[Entry, ...] = (
           ("movewid", "lineht"), "move right 0.5"),
     Entry(("connector",), "a reserved word, unused",
           body="Reserved: it can't name a variable or a macro, and no statement uses it. "
-               "Lines are fixed geometry, not attached to the objects they join.",
-          see=("line", "arrow")),
+               "To write a line as a connector, see attach.",
+          see=("attach",)),
 
     # --- size, style ------------------------------------------------------
     Entry(("width", "wid"), "an object's width", synopsis=("width EXPR[%]",),
@@ -308,6 +308,13 @@ ENTRIES: tuple[Entry, ...] = (
     Entry(("chop",), "trims a line's ends to the outlines of the objects it joins",
           body="Ends a line at the outline of the object named by its `from`/`to`, not "
                "at its center.", example="arrow from A to B chop", group="attribute"),
+    Entry(("attach", "path"), "attaches a line's ends to the objects they're on",
+          synopsis=("attach [path straight]",),
+          body="Writes the line as a connector whose ends follow the objects they're on "
+               "when moved in PowerPoint. An end attaches at a site (a box's .n .e .s .w, a "
+               "circle's 8 compass points) of the object its from/to names, else of the one "
+               "there; one that can't is a warning.",
+          example="arrow from A.e to B.w attach", group="attribute"),
     Entry(("cw", "ccw"), "an arc's direction: clockwise or counterclockwise",
           group="attribute", example="arc cw"),
     Entry(("same",), "copies size and style from another object",
@@ -740,8 +747,9 @@ def _format_entry(entry: Entry, style: _Style, shown: dict[str, str] | None = No
     """An entry's page. `shown` is for `--help llm`: the sections printed
     so far, by their text, each to the entry it was printed under. With
     it, a section printed before (the classes share their ATTRIBUTES) is
-    just `as BOX`, and the entry has no color list (COLORS has its own
-    section there) and no SEE ALSO."""
+    just `as BOX`, and the entry has no DEFAULTS (VARIABLES lists them
+    all there), no color list (COLORS has its own section there) and no
+    SEE ALSO."""
     bundled = shown is not None
     values = prelude_values()
     out = [style.bold(" ".join(n.upper() for n in entry.names[:1])) + " — " + entry.summary]
@@ -752,7 +760,7 @@ def _format_entry(entry: Entry, style: _Style, shown: dict[str, str] | None = No
     if entry.body:
         body = _INLINE_CODE.sub(lambda m: style.bold(m.group(1)) if style.tty else m.group(0), entry.body)
         out += ["", style.bold("DESCRIPTION"), _wrap(body, style.width)]
-    if entry.defaults:
+    if entry.defaults and not bundled:
         out += ["", style.bold("DEFAULTS"),
                 _indent("\n".join(f"{name} = {values.get(name, '?')}" for name in entry.defaults))]
     for heading, text in entry.sections:

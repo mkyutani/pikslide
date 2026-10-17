@@ -383,6 +383,21 @@ class Tip(Attribute):
 
 
 @dataclass
+class Attach(Attribute):
+    """``attach`` (ext, issue #18): a line's ends attach to the objects
+    they lie on, so that it is written as a connector."""
+
+
+@dataclass
+class ConnectorPath(Attribute):
+    """``path NAME`` (ext, issue #18): the form of an attached line's
+    connector, `straight`, `elbow` or `curved`. Checked in the layout
+    stage."""
+
+    name: str
+
+
+@dataclass
 class Alt(Attribute):
     """``alt STRING`` (ext, docs/spec.md SS3.5): an image's accessibility
     description. Valid only on `image`; enforced in the layout stage,

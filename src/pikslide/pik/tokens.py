@@ -120,6 +120,8 @@ class TokType(Enum):
     ALT = auto()
     ADJUST = auto()
     TIP = auto()
+    ATTACH = auto()
+    PATH = auto()
     MAJOR = auto()
     MEDIUM = auto()
     LARGE = auto()
@@ -246,6 +248,8 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "alt": (TokType.ALT, None, None),
     "adjust": (TokType.ADJUST, None, None),
     "tip": (TokType.TIP, None, None),
+    "attach": (TokType.ATTACH, None, None),
+    "path": (TokType.PATH, None, None),
     "major": (TokType.MAJOR, None, None),
     "medium": (TokType.MEDIUM, None, None),
     "large": (TokType.LARGE, None, None),

@@ -34,6 +34,7 @@ from typing import Protocol
 from . import ast
 from .parser import parse
 from .preset_text_rects import ADJUST_VALUES
+from .text_area import connection_sites as _connection_sites
 from .text_area import fit_size, text_rect
 
 
@@ -430,6 +431,19 @@ class Shape:
     behind: "Shape | None" = field(default=None, compare=False, repr=False)
     """The object this one was drawn `behind` (docs/spec.md SS3.1), whose
     overlap with it is meant (pikslide.pik.overlap)."""
+    attach: bool = False
+    """`attach` (issue #18): a line's ends attach to the objects they lie
+    on, and it is written as a connector."""
+    connector_path: str = "straight"
+    """`path NAME`: the form of an attached line's connector."""
+    ends_named: tuple["Shape | None", "Shape | None"] = field(default=(None, None), compare=False, repr=False)
+    """The objects a line's `from` and last `to` name, if any: what an
+    attached line's start and end attach to."""
+    attached: tuple[tuple["Shape", int] | None, tuple["Shape", int] | None] = field(
+        default=(None, None), compare=False, repr=False)
+    """An attached line's start and end: each the object it attached to,
+    and which of its connection sites (connection_sites(), numbered as a
+    connector numbers them), or None (_attach_lines())."""
 
     def offset(self, edge: str | None) -> tuple[float, float]:
         return _edge_offset(self, edge)
@@ -1094,6 +1108,26 @@ def _position_object_ref(pos: ast.Position, ctx: _Ctx) -> Shape | None:
     return None
 
 
+def _named_object(pos: ast.Position, ctx: _Ctx) -> Shape | None:
+    """The object a position is on or near, if it names one (`A`, `A.e`,
+    `A.e + (0, 0.1)`, `0.1 below A.s`): what an attached line's end at it
+    attaches to (issue #18)."""
+    if isinstance(pos, (ast.DirectionOffset, ast.HeadingOffset)):
+        return _named_object(pos.base, ctx)
+    if isinstance(pos, ast.OffsetPosition):
+        place = pos.base
+    elif isinstance(pos, ast.PlacePosition):
+        place = pos.place
+    else:
+        return None
+    if not isinstance(place, ast.ObjectEdge):
+        return None
+    try:
+        return resolve_object(place.obj, ctx)
+    except LayoutError:
+        return None
+
+
 def resolve_object(ref: ast.ObjectRef, ctx: _Ctx) -> Shape:
     if isinstance(ref, ast.ThisRef):
         if ctx.current is None:
@@ -1243,13 +1277,25 @@ def _text_placement(shape: Shape, ctx: _Ctx) -> tuple[float, float]:
 # circle or an ellipse: the text box is the largest rectangle inscribed.
 _TEXT_AREA_SCALE = {"circle": math.sqrt(2), "ellipse": math.sqrt(2), "oval": math.sqrt(2)}
 
-# The objects whose text wraps inside a fixed-size frame, and the preset
-# each is drawn as (pptx_writer's _AUTOSHAPE): `shape` is its own preset,
-# and a box with `rad` a roundRect.
-_FRAMED_TEXT_KINDS = {
-    "box": "rect", "circle": "ellipse", "ellipse": "ellipse", "oval": "ellipse",
-    "diamond": "diamond", "cylinder": "can", "file": "foldedCorner", "shape": None,
+# The objects whose text wraps inside a fixed-size frame.
+_FRAMED_TEXT_KINDS = {"box", "circle", "ellipse", "oval", "diamond", "cylinder", "file", "shape"}
+
+# The preset each kind of object is drawn as; see preset_of().
+_KIND_PRESETS = {
+    "box": "rect", "circle": "ellipse", "ellipse": "ellipse", "oval": "ellipse", "dot": "ellipse",
+    "diamond": "diamond", "cylinder": "can", "file": "foldedCorner", "text": "rect",
 }
+
+
+def preset_of(shape: Shape) -> str | None:
+    """The preset geometry `shape` is drawn as: a `shape`'s own, a roundRect
+    for a box with `rad`, and for a text object the rectangle of its frame;
+    None for what isn't drawn as a preset (a line, an image, a block)."""
+    if shape.kind == "shape":
+        return shape.preset
+    if shape.kind == "box" and shape.rad > 0:
+        return "roundRect"
+    return _KIND_PRESETS.get(shape.kind)
 
 
 def _text_area_width(shape: Shape) -> float:
@@ -1257,9 +1303,7 @@ def _text_area_width(shape: Shape) -> float:
     rectangle (text_area.text_rect()), less `margin` on each side. A
     diamond's rectangle is its middle half, a circle's its inscribed
     square, a parallelogram's leaves out the slanted ends."""
-    preset = _FRAMED_TEXT_KINDS[shape.kind] or shape.preset
-    if shape.kind == "box" and shape.rad > 0:
-        preset = "roundRect"
+    preset = preset_of(shape)
     adjust = {}
     if preset == "roundRect" and shape.rad > 0 and min(shape.w, shape.h) > 0:
         # As pptx_writer sets it: the corner radius over the shorter side.
@@ -1526,7 +1570,7 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
         # ends, a diamond's is its middle half. Size the shape for that
         # rectangle to hold the text, so that one of the same size made
         # without `fit` (`same as`, `width A.wid`) holds it too.
-        preset = shape.preset if shape.kind == "shape" else _FRAMED_TEXT_KINDS["diamond"]
+        preset = preset_of(shape)
         assert preset is not None
         shape.w, shape.h = _fit_preset(shape, preset, shape.w, shape.h)
     elif shape.kind in ("circle", "ellipse", "oval"):
@@ -1586,6 +1630,9 @@ class _Build:
     with_pos: tuple[float, float] | None = None
     path: list[tuple[float, float]] = field(default_factory=list)
     seg_objs: list[Shape | None] = field(default_factory=list)  # parallel to path[1:]
+    seg_named: list[Shape | None] = field(default_factory=list)  # parallel to path[1:]: see _named_object()
+    from_named: Shape | None = None
+    connector_path: str | None = None
     from_obj: Shape | None = None
     chop: bool = False
     fit: bool = False
@@ -1613,16 +1660,19 @@ def _new_point(build: "_Build") -> None:
     current last one (so a lone axis-move from it becomes a diagonal)."""
     build.path.append(build.path[-1])
     build.seg_objs.append(None)
+    build.seg_named.append(None)
     build.mtpath = 0
 
 
-def _append_segment(build: "_Build", shape: Shape, pt: tuple[float, float], obj: Shape | None) -> None:
+def _append_segment(build: "_Build", shape: Shape, pt: tuple[float, float], obj: Shape | None,
+                    named: Shape | None = None) -> None:
     """Always-new-point movement, for absolute moves ('to', heading)."""
     _ensure_start(build, shape)
     if len(build.path) == 1 or build.mtpath == 3 or build.then_flag:
         _new_point(build)
     build.path[-1] = pt
     build.seg_objs[-1] = obj
+    build.seg_named[-1] = named
     build.mtpath = 3
     build.then_flag = False
 
@@ -1766,15 +1816,27 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         else:
             build.path = [pt]
         build.from_obj = _position_object_ref(attr.position, ctx)
+        build.from_named = _named_object(attr.position, ctx)
     elif isinstance(attr, ast.To):
         pt = eval_position(attr.position, ctx)
-        _append_segment(build, shape, pt, _position_object_ref(attr.position, ctx))
+        _append_segment(build, shape, pt, _position_object_ref(attr.position, ctx), _named_object(attr.position, ctx))
     elif isinstance(attr, ast.Then):
         build.then_flag = True
     elif isinstance(attr, ast.Close):
         shape.closed = True
     elif isinstance(attr, ast.Chop):
         build.chop = True
+    elif isinstance(attr, ast.Attach):
+        if shape.kind not in ("line", "arrow"):
+            raise LayoutError(f"'attach' is only valid on a line or an arrow, not {_a(shape.kind)}")
+        shape.attach = True
+    elif isinstance(attr, ast.ConnectorPath):
+        if attr.name not in CONNECTOR_PATHS:
+            raise LayoutError(f"unknown connector form 'path {attr.name}': "
+                              f"use {', '.join(CONNECTOR_PATHS[:-1])} or {CONNECTOR_PATHS[-1]}")
+        if attr.name != "straight":
+            raise LayoutError(f"'path {attr.name}' isn't supported yet: only 'path straight'")
+        build.connector_path = attr.name
     elif isinstance(attr, ast.GoDirection):
         build.direction = _DIR_CODE[attr.direction]
         if attr.even_with is not None:
@@ -1937,6 +1999,11 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
     for attr in stmt.attributes:
         _apply_attribute(attr, shape, build, ctx)
     ctx.current = None
+    if build.connector_path is not None:
+        if not shape.attach:
+            raise LayoutError(f"'path {build.connector_path}' is the form of an attached line's connector: "
+                              f"it needs 'attach'")
+        shape.connector_path = build.connector_path
 
     if shape.just is not None:
         # The renderer aligns each string by its own flags (see Shape.just).
@@ -2003,6 +2070,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
         )
         shape.path = build.path
         shape.enter, shape.exit = build.path[0], build.path[-1]
+        shape.ends_named = (build.from_named, build.seg_named[-1] if build.seg_named else None)
         x0, y0, x1, y1 = shape.bbox
         shape.cx, shape.cy = (x0 + x1) / 2, (y0 + y1) / 2
         shape.w, shape.h = x1 - x0, y1 - y0
@@ -2106,6 +2174,125 @@ def flatten_shapes(shapes: list[Shape]) -> list[Shape]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Attached lines (issue #18): a line's ends on objects' connection sites
+# ---------------------------------------------------------------------------
+
+CONNECTOR_PATHS = ("straight", "elbow", "curved")
+"""The forms an attached line's connector takes (`path NAME`)."""
+
+SITE_TOLERANCE = 0.01
+"""How near (inches) a line's end must be to a connection site to attach
+to it. It is never moved onto one: that would change the drawing."""
+
+
+def _a(word: str) -> str:
+    return f"{'an' if word[0] in 'aeiou' else 'a'} {word}"
+
+
+def connection_sites(shape: Shape) -> list[tuple[float, float]]:
+    """Where a connector's end can attach to `shape`, in the order a
+    connector numbers them: its preset's sites (text_area), or a
+    picture's four, at the middles of its sides; none for what isn't drawn
+    as a shape (a line, a point, a move, a block)."""
+    preset = "rect" if shape.kind == "image" else preset_of(shape)
+    if preset is None:
+        return []
+    left, top = shape.cx - shape.w / 2, shape.cy + shape.h / 2
+    return [(left + x, top - y) for x, y in _connection_sites(preset, shape.w, shape.h, shape.adjust)]
+
+
+def _site_at(sites: list[tuple[float, float]], pt: tuple[float, float]) -> int | None:
+    near = [(math.dist(site, pt), i) for i, site in enumerate(sites)]
+    return min(near)[1] if near and min(near)[0] <= SITE_TOLERANCE else None
+
+
+def _site_name(obj: Shape, site: tuple[float, float]) -> str:
+    """How the source would name a connection site: an edge point, or
+    else its coordinates."""
+    for edge in (N, NE, E, SE, S, SW, W, NW):
+        if math.dist(obj.edge_point(edge), site) <= SITE_TOLERANCE:
+            return f"{obj.name}.{edge}" if obj.name and " " not in obj.name else f"the .{edge} of {obj.name}"
+    return f"({site[0]:.2f}, {site[1]:.2f})"
+
+
+def _attach_lines(shapes: list[Shape], ctx: _Ctx) -> None:
+    """Attach each `attach` line's ends to the connection sites they lie
+    on, once the whole diagram is laid out (in `A: box; arrow attach;
+    B: box`, B is placed after the arrow). An end attaches to the object
+    its `from` or `to` names, or else to the one object with a site
+    there; an end that can't is a warning and stays unattached, and a line
+    with neither end on an object is an error. `shapes` are the drawn
+    ones (flatten_shapes())."""
+    objects = [s for s in shapes if s.kind not in LINE_LIKE]
+    for line in shapes:
+        if not line.attach:
+            continue
+        assert line.path is not None
+        attached: list[tuple[Shape, int] | None] = [None, None]
+        on_an_object = False
+        for i, (which, pt) in enumerate((("start", line.path[0]), ("end", line.path[-1]))):
+            named = line.ends_named[i]
+            if named is not None:
+                on_an_object = True
+                candidates = [named]
+            else:
+                candidates = [o for o in objects if _site_at(connection_sites(o), pt) is not None]
+                if not candidates:
+                    # On an object's outline, but on none of its sites: the smallest.
+                    on = [o for o in objects if _on_outline(o, pt)]
+                    candidates = sorted(on, key=lambda o: o.w * o.h)[:1]
+                on_an_object = on_an_object or bool(candidates)
+            if not candidates:
+                continue
+            if len(candidates) > 1:
+                names = " and ".join(o.name or "" for o in candidates)
+                ctx.warnings.append(LayoutWarning(
+                    f"{line.name}'s {which} is on a connection site of both {names}, so it isn't attached: "
+                    f"name the one to attach to in its {'from' if i == 0 else 'to'}",
+                    (line.name or "", *(o.name or "" for o in candidates))))
+                continue
+            obj = candidates[0]
+            sites = connection_sites(obj)
+            if not sites:
+                ctx.warnings.append(LayoutWarning(
+                    f"{line.name}'s {which} is on {obj.name}, {_a(obj.kind)}, which nothing attaches to: "
+                    f"it isn't attached", (line.name or "", obj.name or "")))
+                continue
+            idx = _site_at(sites, pt)
+            if idx is None:
+                nearest = min(sites, key=lambda site: math.dist(site, pt))
+                ctx.warnings.append(LayoutWarning(
+                    f"{line.name}'s {which} isn't on a connection site of {obj.name}, so it isn't attached: "
+                    f"end it at {_site_name(obj, nearest)}, the nearest", (line.name or "", obj.name or "")))
+                continue
+            attached[i] = (obj, idx)
+        if not on_an_object:
+            raise LayoutError(f"'attach' on {line.name}: neither of its ends is on an object")
+        if len(line.path) != 2:
+            ctx.warnings.append(LayoutWarning(
+                f"{line.name} has {len(line.path) - 1} segments, and a straight connector has one: "
+                f"it is written as drawn, not attached", (line.name or "",)))
+            continue
+        line.attached = (attached[0], attached[1])
+
+
+def _on_outline(obj: Shape, pt: tuple[float, float]) -> bool:
+    """Whether `pt` is on `obj`'s outline, within SITE_TOLERANCE: its
+    ellipse or diamond, or else its box."""
+    w2, h2 = obj.w / 2, obj.h / 2
+    if w2 <= 0 or h2 <= 0:
+        return False
+    dx, dy = abs(pt[0] - obj.cx), abs(pt[1] - obj.cy)
+    preset = preset_of(obj)
+    if preset == "ellipse":
+        return abs(math.hypot(dx / w2, dy / h2) - 1) * min(w2, h2) <= SITE_TOLERANCE
+    if preset == "diamond":
+        return abs(dx / w2 + dy / h2 - 1) * min(w2, h2) <= SITE_TOLERANCE
+    t = SITE_TOLERANCE
+    return dx <= w2 + t and dy <= h2 + t and (dx >= w2 - t or dy >= h2 - t)
+
+
 def resolve_layout(
     doc: ast.Document,
     metrics: FontMetrics | None = None,
@@ -2142,6 +2329,7 @@ def resolve_layout(
     ctx = _Ctx(metrics, image_metrics, base_dir, settings_text, settings_base_dir, template_defaults)
     shapes, _direction, _bbox = _layout_statements(doc.statements, DIR_RIGHT, ctx)
     flat = flatten_shapes(shapes)
+    _attach_lines(flat, ctx)
     if flat:
         x0 = min(s.bbox[0] for s in flat)
         y0 = min(s.bbox[1] for s in flat)

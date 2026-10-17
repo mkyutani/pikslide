@@ -479,6 +479,17 @@ class Parser:
             self.expect(TokType.AT)
             return ast.Tip(self.parse_position())
 
+        if tt == TokType.ATTACH:
+            self.advance()
+            return ast.Attach()
+
+        if tt == TokType.PATH:
+            self.advance()
+            word = self.peek()
+            if word is None or _HANDLE_WORD.fullmatch(word.text) is None:
+                self._error("expected a connector's form after 'path': straight, elbow or curved")
+            return ast.ConnectorPath(self.advance().text)
+
         return None
 
     def _parse_handle_name(self) -> str:

@@ -48,6 +48,7 @@ from .pik.layout import (
     default_text_sizes,
     flatten_shapes,
     line_points,
+    preset_of,
     rasterize_svg,
     resolve_layout,
     slot_step,
@@ -335,19 +336,6 @@ def _font_size(flags: list[str], text_sizes: dict[str, float]) -> Pt:
     return Pt(inches * 72.0)
 
 
-_AUTOSHAPE = {
-    "box": MSO_SHAPE.RECTANGLE,
-    "circle": MSO_SHAPE.OVAL,
-    "ellipse": MSO_SHAPE.OVAL,
-    "oval": MSO_SHAPE.OVAL,
-    "diamond": MSO_SHAPE.DIAMOND,
-    "cylinder": MSO_SHAPE.CAN,  # closest built-in equivalent
-    "file": MSO_SHAPE.FOLDED_CORNER,  # the folded-top-right-corner page icon
-    "dot": MSO_SHAPE.OVAL,
-    "text": MSO_SHAPE.RECTANGLE,  # rendered with no fill/outline, see below
-}
-
-
 def _rgb(value: int) -> RGBColor:
     v = value & 0xFFFFFF
     return RGBColor((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF)
@@ -594,7 +582,7 @@ def _attach_svg_extension(picture, svg_path: str) -> None:
     picture._element.blipFill.blip.append(parse_xml(ext_xml))
 
 
-def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
+def _add_image_shape(container, shape: Shape, tf: _Transform):
     """`image` (docs/spec.md SS3.5). A Picture has no text_frame of its own
     in python-pptx (checked, like a connector), so any text on it is drawn
     as a separate textbox, centred over it -- one box, not per-string
@@ -629,7 +617,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
         picture._element.nvPicPr.cNvPr.set("descr", shape.alt_text)
 
     if not shape.texts:
-        return
+        return picture
     textbox = container.shapes.add_textbox(Inches(left), Inches(top), Inches(w), Inches(h))
     text_frame = textbox.text_frame
     text_frame.word_wrap = not shape.fit
@@ -647,21 +635,17 @@ def _add_image_shape(container, shape: Shape, tf: _Transform) -> None:
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
         _apply_color(run.font.color, string_color(shape, i) or Color(rgb=0))
+    return picture
 
 
-def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
+def _add_block_shape(container, shape: Shape, tf: _Transform):
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
-    autoshape_type = _AUTOSHAPE.get(shape.kind, MSO_SHAPE.RECTANGLE)
-    if shape.kind == "shape":
-        # Validated already, in layout.py's _resolve_preset_name(); the
-        # roundRect preset is *literally* MSO_SHAPE.ROUNDED_RECTANGLE
-        # (checked), so the rad -> adjustments[0] branch just below applies
-        # to `shape roundRect` exactly as it does to `box rad ...`.
-        assert shape.preset is not None
-        autoshape_type = MSO_SHAPE.from_xml(shape.preset)
-    elif shape.kind == "box" and shape.rad > 0:
-        autoshape_type = MSO_SHAPE.ROUNDED_RECTANGLE
+    # A `shape`'s preset was validated in layout.py's _resolve_preset_name();
+    # roundRect is *literally* MSO_SHAPE.ROUNDED_RECTANGLE (checked), so the
+    # rad -> adjustments[0] branch just below applies to `shape roundRect`
+    # exactly as it does to `box rad ...`.
+    autoshape_type = MSO_SHAPE.from_xml(preset_of(shape) or "rect")
     pptx_shape = container.shapes.add_shape(autoshape_type, Inches(left), Inches(top), Inches(w), Inches(h))
     _no_theme_effects(pptx_shape)
     if shape.name:
@@ -688,6 +672,7 @@ def _add_block_shape(container, shape: Shape, tf: _Transform) -> None:
         _apply_line_style(pptx_shape.line, shape)
 
     _apply_text(pptx_shape, shape)
+    return pptx_shape
 
 
 def _set_adjust_values(pptx_shape, shape: Shape) -> None:
@@ -701,7 +686,7 @@ def _set_adjust_values(pptx_shape, shape: Shape) -> None:
     geometry.rewrite_guides(sorted(values.items(), key=lambda gd: order.index(gd[0]) if gd[0] in order else len(order)))
 
 
-def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
+def _add_line_shape(container, shape: Shape, tf: _Transform):
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
@@ -713,6 +698,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
             connector.name = shape.name
         _apply_line_style(connector.line, shape)
         _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
+        drawn = connector
     else:
         if shape.kind == "arc":
             freeform = _add_arc_freeform(container, shape, tf)
@@ -727,8 +713,10 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
         freeform.fill.background()
         _apply_line_style(freeform.line, shape)
         _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
+        drawn = freeform
 
     _add_line_text(container, shape, tf)
+    return drawn
 
 
 def _add_arc_freeform(container, shape: Shape, tf: _Transform):
@@ -1208,7 +1196,8 @@ def slide_frame(result: LayoutResult, template_path: str | None = None, layout_n
 
 def _add_all_shapes(container, shapes: list[Shape], tf: _Transform) -> None:
     """Draw every shape in `shapes` into `container` (a Slide, for
-    `write_pptx()` and `write_pptx_from_template()` alike).
+    `write_pptx()` and `write_pptx_from_template()` alike), then attach
+    the attached lines' ends (_connect_ends()).
 
     pikslide never creates a PowerPoint group anywhere in its own output
     (ext): PowerPoint's own group-resize math was found to silently
@@ -1225,14 +1214,36 @@ def _add_all_shapes(container, shapes: list[Shape], tf: _Transform) -> None:
     (`_translate()`, at layout time, already placed them there), so `tf`
     -- the one already in effect for this whole call -- maps them
     correctly without adjustment."""
+    drawn: dict[int, object] = {}
+    _draw_shapes(container, shapes, tf, drawn)
+    _connect_ends(flatten_shapes(shapes), drawn)
+
+
+def _draw_shapes(container, shapes: list[Shape], tf: _Transform, drawn: dict[int, object]) -> None:
+    """_add_all_shapes()'s drawing, recursively; `drawn` maps each Shape
+    (by id()) to the PowerPoint shape drawn for it."""
     for shape in shapes:
         if shape.kind == "block":
-            _add_all_shapes(container, shape.sublist, tf)
+            _draw_shapes(container, shape.sublist, tf, drawn)
         elif shape.kind in NOT_RENDERED:
             continue
         elif shape.kind in ("line", "arrow", "spline", "arc"):
-            _add_line_shape(container, shape, tf)
+            drawn[id(shape)] = _add_line_shape(container, shape, tf)
         elif shape.kind == "image":
-            _add_image_shape(container, shape, tf)
+            drawn[id(shape)] = _add_image_shape(container, shape, tf)
         else:
-            _add_block_shape(container, shape, tf)
+            drawn[id(shape)] = _add_block_shape(container, shape, tf)
+
+
+def _connect_ends(shapes: list[Shape], drawn: dict[int, object]) -> None:
+    """Attach each attached line's ends (Shape.attached, issue #18) to the
+    shapes drawn for their objects: `a:stCxn`/`a:endCxn`, by shape id and
+    connection site. Done once everything is drawn, since a line can be
+    drawn before an object it attaches to. The ends are already on their
+    sites, so they aren't moved, as python-pptx's begin_connect() would
+    move them (right only for a rectangle's four sites)."""
+    for shape in shapes:
+        for end, connect in zip(shape.attached, ("_connect_begin_to", "_connect_end_to")):
+            if end is not None:
+                obj, idx = end
+                getattr(drawn[id(shape)], connect)(drawn[id(obj)], idx)

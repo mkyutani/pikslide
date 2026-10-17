@@ -6,7 +6,8 @@ insets (`margin`) -- not inside the whole bounding box. For many presets
 it's smaller: a diamond's is its middle half, a parallelogram's leaves
 out its slanted ends. Its sides are shape guides, formulas in the shape's
 width, height and adjust values; preset_text_rects.py holds them, and
-this evaluates them.
+this evaluates them. It evaluates a preset's connection sites, where a
+connector's end attaches, the same way.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from __future__ import annotations
 import math
 import re
 
-from .preset_text_rects import TEXT_RECTS
+from .preset_text_rects import CONNECTION_SITES, TEXT_RECTS
 
 EMU_PER_INCH = 914400
 
@@ -65,6 +66,26 @@ def text_rect(
     adjust values (`adj`, `adj1`, ...) as OOXML writes them, 100000 for 1;
     the rest keep their defaults, as pikslide draws them."""
     guides, sides = TEXT_RECTS[preset]
+    value = _guides(guides, w, h, adjust)
+    left, top, right, bottom = (value(side) / EMU_PER_INCH for side in sides)
+    return left, top, right, bottom
+
+
+def connection_sites(
+    preset: str, w: float, h: float, adjust: dict[str, float] | None = None
+) -> list[tuple[float, float]]:
+    """Where a connector's end can attach to `preset` drawn `w` x `h`
+    inches (issue #18): each connection site's (x, y), in inches from its
+    top left corner, y down, in the order a connector numbers them.
+    `adjust` as text_rect() takes it."""
+    guides, sites = CONNECTION_SITES[preset]
+    value = _guides(guides, w, h, adjust)
+    return [(value(x) / EMU_PER_INCH, value(y) / EMU_PER_INCH) for x, y in sites]
+
+
+def _guides(guides, w: float, h: float, adjust: dict[str, float] | None):
+    """Evaluate `guides` for a shape `w` x `h` inches; returns a function
+    giving any guide's, built-in's or number's value, in EMU."""
     W, H = w * EMU_PER_INCH, h * EMU_PER_INCH
     ss = min(W, H)
     env = {"w": W, "h": H, "l": 0.0, "t": 0.0, "r": W, "b": H, "hc": W / 2, "vc": H / 2,
@@ -83,8 +104,7 @@ def text_rect(
             continue
         op, *args = fmla.split()
         env[name] = _OPS[op](*map(value, args))
-    left, top, right, bottom = (value(side) / EMU_PER_INCH for side in sides)
-    return left, top, right, bottom
+    return value
 
 
 def fit_size(

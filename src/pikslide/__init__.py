@@ -246,6 +246,9 @@ def _geometry(shape) -> dict:
         obj["text"] = [text for text, _flags in shape.texts]
     if shape.path is not None:
         obj["points"] = [[round(x, 2), round(y, 2)] for x, y in shape.path]
+        attached = {which: end[0].name for which, end in zip(("start", "end"), shape.attached) if end is not None}
+        if attached:
+            obj["attached"] = attached
     else:
         obj.update(x=round(shape.cx, 2), y=round(shape.cy, 2), wid=round(shape.w, 2), ht=round(shape.h, 2))
     return obj

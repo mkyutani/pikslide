@@ -690,8 +690,8 @@ def _add_line_shape(container, shape: Shape, tf: _Transform):
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
-    if shape.elbow:
-        connector = _add_elbow_connector(container, points)
+    if shape.routed:
+        connector = _add_elbow_connector(container, points, curved=shape.connector_path == "curved")
         _no_theme_effects(connector)
         if shape.name:
             connector.name = shape.name
@@ -733,15 +733,18 @@ def _add_line_shape(container, shape: Shape, tf: _Transform):
 _MIN_CONNECTOR_EXTENT = 12700
 
 
-def _add_elbow_connector(container, points: list[tuple[float, float]]):
+def _add_elbow_connector(container, points: list[tuple[float, float]], curved: bool = False):
     """An elbow connector through `points` (slide inches, y down; each
-    segment horizontal or vertical, at most five): python-pptx's elbow
-    connector, its geometry rewritten as PowerPoint writes one. Each preset
+    segment horizontal or vertical, at most five), or with `curved` a
+    curved connector drawn along them: python-pptx's elbow connector, its
+    geometry rewritten as PowerPoint writes one. Each preset
     bentConnector2..5 starts out horizontally from its box's top left and
     ends at its bottom right, bending once to four times; a straight one is
     a bentConnector3 of no height. A route that starts out vertically is
     the same turned a quarter. Flips point it the right way, and the
-    adjust values put its bends where the route's are."""
+    adjust values put its bends where the route's are. curvedConnector2..5
+    take the same, and curve through the bends (layout's
+    curved_connector())."""
     pts = [(Emu(Inches(x)), Emu(Inches(y))) for x, y in points]
     n = len(pts) - 1
     (sx, sy), (ex, ey) = pts[0], pts[-1]
@@ -786,7 +789,7 @@ def _add_elbow_connector(container, points: list[tuple[float, float]]):
     xfrm.find(qn("a:ext")).set("cx", str(round(w2)))
     xfrm.find(qn("a:ext")).set("cy", str(round(h2)))
     geometry = sp_pr.find(qn("a:prstGeom"))
-    geometry.set("prst", f"bentConnector{3 if n == 1 else n}")
+    geometry.set("prst", f"{'curved' if curved else 'bent'}Connector{3 if n == 1 else n}")
     av_lst = geometry.find(qn("a:avLst"))
     if av_lst is None:
         av_lst = OxmlElement("a:avLst")

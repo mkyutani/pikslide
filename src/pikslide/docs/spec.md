@@ -158,7 +158,11 @@ arrow from A.e to B.w attach
   out, so what refers to the line later finds it routed: an end's site
   is on the object its `from` or `to` names, or on one laid out before
   the line; an end on one placed after it is taken to meet it head on.
-  `path curved` is not supported yet.
+- `path curved` is a curved connector: routed as `path elbow` is, and
+  drawn as PowerPoint draws one along that route, through the middle of
+  each segment but the first and last (curvedConnector2..5). The
+  overlap warnings and the line's box follow the curve; `--check` gives
+  the route's points.
 - A labeled line attaches, but its labels, separate text boxes (§3.1),
   don't follow it.
 - Attachment doesn't show in a PNG, so the warnings are the only sign of

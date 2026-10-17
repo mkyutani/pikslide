@@ -442,9 +442,10 @@ class Shape:
     attached line's start and end attach to."""
     attached: tuple[tuple["Shape", int] | None, tuple["Shape", int] | None] = field(
         default=(None, None), compare=False, repr=False)
-    elbow: bool = False
-    """Whether an attached line with `path elbow` is written as an elbow
-    connector: its path is one (_elbow_path())."""
+    routed: bool = False
+    """Whether an attached line with `path elbow` or `path curved` is
+    written as that connector: its path is a route one can take, at right
+    angles (_elbow_path()). A curved one is drawn through it (line_points())."""
     """An attached line's start and end: each the object it attached to,
     and which of its connection sites (connection_sites(), numbered as a
     connector numbers them), or None (_attach_lines())."""
@@ -533,11 +534,44 @@ def arc_control_point(start: tuple[float, float], end: tuple[float, float], cw: 
     return (mx + dy / 2, my - dx / 2)
 
 
+def curved_connector(route: list[tuple[float, float]]) -> list[tuple[tuple[float, float], ...]]:
+    """The cubic Beziers (start, control, control, end) PowerPoint draws a
+    curved connector with along an elbow `route` (curvedConnector2..5's
+    geometry): through the middle of each segment but the first and last,
+    each control a quarter of a segment from a bend, or half of the first
+    or last; a straight route is the line itself."""
+    if len(route) == 2:
+        return [(route[0], route[0], route[1], route[1])]
+
+    def at(i: int, f: float) -> tuple[float, float]:
+        (x0, y0), (x1, y1) = route[i], route[i + 1]
+        return (x0 + f * (x1 - x0), y0 + f * (y1 - y0))
+
+    n = len(route) - 1
+    if n == 2:
+        return [(route[0], at(0, 0.5), at(1, 0.5), route[2])]
+    curves = [(route[0], at(0, 0.5), at(1, 0.25), at(1, 0.5))]
+    for i in range(1, n - 2):
+        curves.append((at(i, 0.5), at(i, 0.75), at(i + 1, 0.25), at(i + 1, 0.5)))
+    curves.append((at(n - 2, 0.5), at(n - 2, 0.75), at(n - 1, 0.5), route[n]))
+    return curves
+
+
 def line_points(shape: Shape) -> list[tuple[float, float]]:
     """The points a line is drawn through: its path, or an arc's curve in
-    ARC_SEGMENTS straight pieces. An arc's path is still its two ends,
+    ARC_SEGMENTS straight pieces, or a curved connector's in as many to
+    each of its Beziers (curved_connector()). An arc's path is still its
+    two ends, and a curved connector's the route it is drawn through,
     which is what `.start`/`.end` and --check give."""
     assert shape.path is not None
+    if shape.routed and shape.connector_path == "curved":
+        points = [shape.path[0]]
+        for p0, c1, c2, p1 in curved_connector(shape.path):
+            for i in range(1, ARC_SEGMENTS + 1):
+                t = i / ARC_SEGMENTS
+                a, b, c, d = (1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3
+                points.append((a * p0[0] + b * c1[0] + c * c2[0] + d * p1[0], a * p0[1] + b * c1[1] + c * c2[1] + d * p1[1]))
+        return points
     if shape.kind != "arc" or len(shape.path) != 2:
         return shape.path
     (x0, y0), (x2, y2) = shape.path
@@ -1838,8 +1872,6 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         if attr.name not in CONNECTOR_PATHS:
             raise LayoutError(f"unknown connector form 'path {attr.name}': "
                               f"use {', '.join(CONNECTOR_PATHS[:-1])} or {CONNECTOR_PATHS[-1]}")
-        if attr.name == "curved":
-            raise LayoutError("'path curved' isn't supported yet: only 'path straight' and 'path elbow'")
         build.connector_path = attr.name
     elif isinstance(attr, ast.GoDirection):
         build.direction = _DIR_CODE[attr.direction]
@@ -2068,10 +2100,10 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
                 build.path[0] = chop_point(build.from_obj, build.path[1])
         if shape.closed and build.path[0] != build.path[-1]:
             build.path.append(build.path[0])
-        if shape.connector_path == "elbow":
+        if shape.connector_path in ("elbow", "curved"):
             build.path = _elbow_path(build.path, (build.from_named, build.seg_named[-1] if build.seg_named else None),
                                      ctx)
-            shape.elbow = _is_elbow(build.path)
+            shape.routed = _is_elbow(build.path)
         shape.label_width = max(
             (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface) for text, flags in shape.texts),
             default=0.0,
@@ -2288,10 +2320,10 @@ def _attach_lines(shapes: list[Shape], ctx: _Ctx) -> None:
             attached[i] = (obj, idx)
         if not on_an_object:
             raise LayoutError(f"'attach' on {line.name}: neither of its ends is on an object")
-        if line.connector_path == "elbow" and not line.elbow:
+        if line.connector_path in ("elbow", "curved") and not line.routed:
             ctx.warnings.append(LayoutWarning(
-                f"{line.name} isn't a route an elbow connector can take, with a slanted segment or more "
-                f"than four bends: it is written as drawn, not attached", (line.name or "",)))
+                f"{line.name} isn't a route {_a(line.connector_path)} connector can take, with a slanted segment "
+                f"or more than four bends: it is written as drawn, not attached", (line.name or "",)))
             continue
         if line.connector_path == "straight" and len(line.path) != 2:
             ctx.warnings.append(LayoutWarning(
@@ -2304,8 +2336,9 @@ def _attach_lines(shapes: list[Shape], ctx: _Ctx) -> None:
 
 def _elbow_path(path: list[tuple[float, float]], named: tuple[Shape | None, Shape | None],
                 ctx: _Ctx) -> list[tuple[float, float]]:
-    """An attached line's path with `path elbow`: between two points, the
-    route PowerPoint's elbow connector takes between the sites they're on
+    """An attached line's path with `path elbow`, or `path curved`, which is
+    drawn along it: between two points, the route PowerPoint's elbow
+    connector takes between the sites they're on
     (elbow.route()); a path of several points as it stands, its straight
     runs merged. Routed as the line is laid out, so that what refers to it
     later finds it routed: each end's site is on the object its `from` or

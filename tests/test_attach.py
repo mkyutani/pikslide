@@ -114,7 +114,6 @@ def test_a_path_a_straight_connector_cant_take_warns_and_stays_unattached():
     ("A: box\narrow from A.e path straight", "'path straight' is the form of an attached line's connector: "
                                              "it needs 'attach'"),
     ("A: box\narrow from A.e attach path wavy", "unknown connector form 'path wavy': use straight, elbow or curved"),
-    ("A: box\narrow from A.e attach path curved", "'path curved' isn't supported yet: only 'path straight' and 'path elbow'"),
 ])
 def test_attach_errors(src: str, message: str):
     with pytest.raises(LayoutError, match="^" + message.replace("(", r"\(").replace(")", r"\)") + "$"):
@@ -175,7 +174,7 @@ def test_check_says_which_ends_are_attached(monkeypatch, capsys, tmp_path: pathl
 def elbow(src: str, name: str | None = None) -> list[tuple[float, float]]:
     lines = [s for s in flatten_shapes(layout(src).shapes) if s.attach]
     line = next(s for s in lines if s.name == name) if name else lines[-1]
-    assert line.elbow
+    assert line.routed
     return [(round(x, 3), round(y, 3)) for x, y in line.path]
 
 
@@ -264,3 +263,45 @@ def test_an_elbow_is_written_as_powerpoint_writes_one(tmp_path: pathlib.Path):
     assert _rotated_local(shapes["arrow 4"]) == ("bentConnector3", 5400000, False, True, [125000])
     assert _rotated_local(shapes["arrow 5"]) == ("bentConnector3", 5400000, True, False, [])
     assert ends(shapes["arrow 4"], shapes) == [("A", 2), ("B", 2)]
+
+
+# ---------------------------------------------------------------------------
+# path curved
+# ---------------------------------------------------------------------------
+
+
+def test_a_curved_connector_curves_through_its_elbow_route():
+    # curvedConnector3's geometry: through the middle segment's middle, its
+    # controls half the first segment and a quarter of the middle one along.
+    from pikslide.pik.layout import curved_connector
+
+    assert curved_connector([(0, 0), (1, 0), (1, 2), (3, 2)]) == [
+        ((0, 0), (0.5, 0), (1, 0.5), (1, 1)), ((1, 1), (1, 1.5), (2, 2), (3, 2))]
+    # curvedConnector2: one curve, its controls the middles of both segments.
+    assert curved_connector([(0, 0), (2, 0), (2, 1)]) == [((0, 0), (1, 0), (2, 0.5), (2, 1))]
+
+
+def test_a_curved_connector_takes_the_elbows_route_and_is_judged_by_its_curve():
+    src = "A: box\nB: box at (2, -1)\narrow from A.e to B.n attach path {}\n"
+    curved = [s for s in flatten_shapes(layout(src.format("curved")).shapes) if s.attach][0]
+    assert curved.routed and curved.path == [s for s in flatten_shapes(layout(src.format("elbow")).shapes)
+                                             if s.attach][0].path
+    assert attached(src.format("curved")) == [("A", 3), ("B", 0)]
+    # A box at the L's corner is on the elbow, but off the curve, which
+    # cuts the corner.
+    corner = "C: box wid 0.3 ht 0.3 at (2, 0)\n"
+
+    def overlaps(src: str) -> list[tuple[str, ...]]:
+        return [w.objects for w in resolve_for_pptx(parse(src)).warnings if "passes through" in w.message]
+
+    assert overlaps(src.format("elbow") + corner) == [("arrow 1", "C")]
+    assert overlaps(src.format("curved") + corner) == []
+
+
+def test_a_curved_connector_is_written_as_powerpoint_writes_one(tmp_path: pathlib.Path):
+    src = "A: box\nB: box at (2, -1)\narrow from A.e to B.n attach path curved\n" \
+          "arrow from A.s to B.s attach path curved\n"
+    shapes = render(src, tmp_path)
+    assert _rotated_local(shapes["arrow 1"]) == ("curvedConnector2", 0, False, False, [])
+    assert _rotated_local(shapes["arrow 2"]) == ("curvedConnector3", 5400000, False, True, [125000])
+    assert ends(shapes["arrow 2"], shapes) == [("A", 2), ("B", 2)]

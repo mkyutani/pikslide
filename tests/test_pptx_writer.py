@@ -162,6 +162,24 @@ def test_multipoint_line_becomes_a_freeform(tmp_path: pathlib.Path):
     assert slide.shapes[0].shape_type == MSO_SHAPE_TYPE.FREEFORM
 
 
+def test_arc_becomes_a_freeform_with_one_curve(tmp_path: pathlib.Path):
+    # A bare arc's quadratic control point is the corner it turns at, the
+    # bottom right of its box (y down); written as a cubic, its control
+    # points are two thirds of the way there from its start (bottom left)
+    # and from its end (top right).
+    prs = render("arc rad 1 ->\n", tmp_path)
+    [shape] = prs.slides[0].shapes
+    assert shape.shape_type == MSO_SHAPE_TYPE.FREEFORM
+    assert (shape.width, shape.height) == (Inches(1), Inches(1))
+    [path] = shape._element.spPr.find(qn("a:custGeom")).find(qn("a:pathLst"))
+    assert [el.tag for el in path] == [qn("a:moveTo"), qn("a:cubicBezTo")]
+    points = [(int(pt.get("x")), int(pt.get("y"))) for el in path for pt in el]
+    one, two_thirds = int(Inches(1)), int(Inches(2 / 3))
+    expected = [(0, one), (two_thirds, one), (one, two_thirds), (one, 0)]
+    assert points == [pytest.approx(p, abs=2) for p in expected]
+    assert shape.line._get_or_add_ln().find(qn("a:tailEnd")).get("type") == "triangle"
+
+
 def test_slide_size_matches_diagram_bbox_plus_margin(tmp_path: pathlib.Path):
     result = resolve_for_pptx(parse("box\n"))
     out = tmp_path / "sized.pptx"

@@ -93,6 +93,13 @@ def test_a_line_through_an_object_not_at_its_ends_warns():
     assert m.startswith("arrow 1 passes through B, which is at neither of its ends")
 
 
+def test_an_arc_is_judged_by_its_curve_not_its_chord():
+    # From (0, 0) to (2, 0), the curve bows down to y = -0.5.
+    arc = "arc from (0, 0) to (2, 0)\n"
+    assert overlaps(arc + "C: box wid 0.4 ht 0.2 at (1, 0)\n") == []
+    assert overlaps(arc + "C: box wid 0.4 ht 0.2 at (1, -0.5)\n") == [("arc 1", "C")]
+
+
 def test_a_line_inside_a_frame_doesnt_warn_unless_it_crosses_its_text():
     src = "F: box wid 4 ht 2\nA: box at F - (1, 0)\nC: box at F + (1, 0)\n"
     assert overlaps(src + "arrow from A.e to C.w\n") == []

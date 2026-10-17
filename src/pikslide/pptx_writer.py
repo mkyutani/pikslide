@@ -43,9 +43,11 @@ from .pik.layout import (
     Shape,
     _text_area_width,
     _text_size_name,
+    arc_control_point,
     assign_text_slots,
     default_text_sizes,
     flatten_shapes,
+    line_points,
     rasterize_svg,
     resolve_layout,
     slot_step,
@@ -703,7 +705,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
-    if len(points) == 2:
+    if len(points) == 2 and shape.kind != "arc":
         (x1, y1), (x2, y2) = points
         connector = container.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
         _no_theme_effects(connector)
@@ -712,10 +714,13 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
         _apply_line_style(connector.line, shape)
         _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
     else:
-        x0, y0 = points[0]
-        builder = container.shapes.build_freeform(Inches(x0), Inches(y0))
-        builder.add_line_segments([(Inches(x), Inches(y)) for x, y in points[1:]], close=shape.closed)
-        freeform = builder.convert_to_shape()
+        if shape.kind == "arc":
+            freeform = _add_arc_freeform(container, shape, tf)
+        else:
+            x0, y0 = points[0]
+            builder = container.shapes.build_freeform(Inches(x0), Inches(y0))
+            builder.add_line_segments([(Inches(x), Inches(y)) for x, y in points[1:]], close=shape.closed)
+            freeform = builder.convert_to_shape()
         _no_theme_effects(freeform)
         if shape.name:
             freeform.name = shape.name
@@ -724,6 +729,46 @@ def _add_line_shape(container, shape: Shape, tf: _Transform) -> None:
         _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
 
     _add_line_text(container, shape, tf)
+
+
+def _add_arc_freeform(container, shape: Shape, tf: _Transform):
+    """An arc as a freeform whose path is one curve, so that it stays a
+    curve for a person editing the slide; PowerPoint points its
+    arrowheads along it. The curve is pikchr's quadratic Bezier
+    (arc_control_point()), written as the cubic one (`a:cubicBezTo`) that
+    PowerPoint's own Curve tool writes: the same curve, its two control
+    points two thirds of the way from each end to the quadratic's.
+    python-pptx's freeform builder draws only straight segments, so it
+    builds the shape on the box round the curve, and the path is
+    rewritten. The control points can lie outside that box: PowerPoint
+    draws a path beyond its frame."""
+    assert shape.path is not None
+    start, end = shape.path
+    qx, qy = arc_control_point(start, end, shape.cw)
+    c1 = (start[0] + 2 / 3 * (qx - start[0]), start[1] + 2 / 3 * (qy - start[1]))
+    c2 = (end[0] + 2 / 3 * (qx - end[0]), end[1] + 2 / 3 * (qy - end[1]))
+    xs, ys = zip(*(tf.point(p) for p in line_points(shape)))
+    left, top = Inches(min(xs)), Inches(min(ys))
+    builder = container.shapes.build_freeform(left, top)
+    builder.add_line_segments([(Inches(max(xs)), Inches(max(ys)))], close=False)
+    freeform = builder.convert_to_shape()
+
+    def command(tag: str, *points: tuple[float, float]):
+        el = OxmlElement(tag)
+        for p in points:
+            x, y = tf.point(p)
+            pt = OxmlElement("a:pt")
+            pt.set("x", str(Inches(x) - left))
+            pt.set("y", str(Inches(y) - top))
+            el.append(pt)
+        return el
+
+    path = freeform._element.spPr.find(qn("a:custGeom")).find(qn("a:pathLst"))[0]
+    for el in list(path):
+        path.remove(el)
+    path.append(command("a:moveTo", start))
+    path.append(command("a:cubicBezTo", c1, c2, end))
+    return freeform
 
 
 def _alignment(flags: list[str]) -> PP_ALIGN:

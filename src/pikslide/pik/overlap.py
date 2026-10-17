@@ -22,16 +22,17 @@ everything here allows `TOLERANCE`. What isn't drawn doesn't count: an
 
 Outlines are convex polygons: a circle or an ellipse as one, a diamond as
 its four corners, a `text` object as its strings, and anything else, a
-preset shape too, as its bounding box. Where a string goes is the
-renderer's to say, so callers pass `text_rects`: each of a shape's
-strings' rectangles, as drawn."""
+preset shape too, as its bounding box. A line is the points it is drawn
+through, an arc its curve in short straight pieces. Where a string goes
+is the renderer's to say, so callers pass `text_rects`: each of a
+shape's strings' rectangles, as drawn."""
 
 from __future__ import annotations
 
 import math
 from typing import Callable
 
-from .layout import LINE_LIKE, LayoutWarning, Shape
+from .layout import LINE_LIKE, LayoutWarning, Shape, line_points
 
 Point = tuple[float, float]
 Polygon = list[Point]
@@ -57,7 +58,8 @@ def find_overlaps(shapes: list[Shape], text_rects: Callable[[Shape], list[Rect]]
     objects = [s for s in shapes if s.kind not in LINE_LIKE]
     strings = {id(s): [(t, _Convex(_corners(r))) for (t, _f), r in zip(s.texts, text_rects(s))] for s in shapes}
     outline = {id(o): _outline(o, [r for _t, r in strings[id(o)]]) for o in objects}
-    paths = {id(line): _Convex(line.path) for line in lines}
+    points = {id(line): line_points(line) for line in lines}
+    paths = {id(line): _Convex(points[id(line)]) for line in lines}
     warnings: list[LayoutWarning] = []
     named: set[frozenset[int]] = set()
 
@@ -90,7 +92,7 @@ def find_overlaps(shapes: list[Shape], text_rects: Callable[[Shape], list[Rect]]
                 warn(a, b, f'text on text: {_whose(a, hit[0])} and {_whose(b, hit[1])}')
 
     for line in lines:
-        segments = list(zip(line.path, line.path[1:]))
+        segments = list(zip(points[id(line)], points[id(line)][1:]))
         labels = strings[id(line)]
         if line.sw >= 0 and labels:
             on = next((t for t, r in labels if any(_crosses(p, q, [r]) for p, q in segments)), None)
@@ -113,7 +115,7 @@ def find_overlaps(shapes: list[Shape], text_rects: Callable[[Shape], list[Rect]]
             for other in drawn:
                 if other is line or done(line, other):
                     continue
-                if any(_crosses(p, q, label) for p, q in zip(other.path, other.path[1:])):
+                if any(_crosses(p, q, label) for p, q in zip(points[id(other)], points[id(other)][1:])):
                     warn(line, other, f'{_whose(line, text)} is on {other.name}: move it (above, below, '
                                       f'ljust, rjust) or move one of the lines')
         if line.sw < 0:

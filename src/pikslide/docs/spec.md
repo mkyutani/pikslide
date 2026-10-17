@@ -103,7 +103,8 @@ Goal: the Selection Pane in PowerPoint reads like the source.
 
 `line`, `arrow`, `spline` and `arc` are *lines drawn with fixed geometry*.
 They are emitted as plain PowerPoint lines (a two-point path as a line, a
-longer path as a freeform), with `stroke`'s `dashed`, `dotted`, `thick`,
+longer path as a freeform, an arc as a freeform with one curve: pikchr's
+quadratic Bézier, written as the cubic one PowerPoint's own curves use), with `stroke`'s `dashed`, `dotted`, `thick`,
 `thin` and the arrowheads `<-`, `->`, `<->` mapped to dash style, weight and
 arrowheads.
 

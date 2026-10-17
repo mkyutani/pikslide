@@ -428,7 +428,8 @@ and is not exhaustive.
 **Placement.** There is a *current direction* (initially `right`). Each
 object is placed so that its entry edge — the edge opposite the current
 direction — meets the previous object's exit point. A bare `direction`
-statement changes the direction. `at position` and
+statement changes the direction, and so does a line's last move
+(`arrow down`) and a bare `arc`'s turn. `at position` and
 `with edge at position` override chaining; `from`/`to`/`then`/`go` shape a
 line's path; `same` copies size and style from the previous object of the
 same class (or from the one named by `same as`).
@@ -452,7 +453,7 @@ or through a block (`Outer.Inner`), and points on them by edge (`Web.ne`,
 | `line`, `spline` | `linewid` × `lineht` (0.5 × 0.5) | |
 | `arrow` | as `line` | with a right arrowhead |
 | `move` | `movewid` × `lineht` | draws nothing |
-| `arc` | `arcrad` (0.25) | |
+| `arc` | `arcrad` (0.25) | one curve, no `then`: alone, `arcrad` ahead and as far to the side; between two points, bowed out a quarter of their distance |
 | `[ … ]` | its contents' bounding box | a block with its own name scope |
 | `"text"` | 0 × 0 | shorthand for a `text` object |
 
@@ -466,7 +467,7 @@ interior color; `stroke` sets the line or outline: its color, `thickness`,
 `thick`/`thin` (scale it by 1.5/0.67), `solid` (reset thickness and
 dashing), `invis` (hide it) and `dashed`/`dotted` with an optional length
 (default `dashwid`); `ljust`/`rjust` align all of the object's strings
-(see *Text*); `cw`/`ccw` set an arc's direction; `<-`/`->`/`<->` add arrowheads;
+(see *Text*); `cw`/`ccw` set which way an arc turns (`ccw` by default); `<-`/`->`/`<->` add arrowheads;
 `fit` sizes the object to its text; `chop` shortens a line's ends to the
 outlines of the objects it joins; `close` closes a path; `behind X` places
 the object immediately below `X` in z-order.

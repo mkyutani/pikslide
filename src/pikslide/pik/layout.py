@@ -5,7 +5,8 @@ Covers default object sizes, current-direction sequential placement,
 box/ellipse/diamond edge geometry. Deliberately left out, in line with a
 "good enough for common diagrams" scope:
 
-- spline/arc curve shapes are treated as straight polylines,
+- a spline is treated as a straight polyline (an arc is a curve: see
+  `arc_control_point()`),
 - "fit" text sizing defaults to an estimate from charwid/charht constants;
   pass a real `FontMetrics` (e.g. pptx_writer's Pillow-backed one) to
   `resolve_layout()` for sizing that tracks actual text content instead of
@@ -341,7 +342,9 @@ class Shape:
     """The color of a string with no `color` of its own."""
     larrow: bool = False
     rarrow: bool = False
-    cw: bool = True
+    cw: bool = False
+    """Which way an arc turns: clockwise, or (the default, as in pikchr)
+    counterclockwise."""
     closed: bool = False
     texts: list[tuple[str, list[str]]] = field(default_factory=list)
     text_colors: list[Color | None] = field(default_factory=list)
@@ -442,8 +445,9 @@ class Shape:
     @property
     def bbox(self) -> tuple[float, float, float, float]:
         if self.path is not None and self.path:
-            xs = [p[0] for p in self.path]
-            ys = [p[1] for p in self.path]
+            points = line_points(self)
+            xs = [p[0] for p in points]
+            ys = [p[1] for p in points]
             return (min(xs), min(ys), max(xs), max(ys))
         w2, h2 = self.w / 2, self.h / 2
         return (self.cx - w2, self.cy - h2, self.cx + w2, self.cy + h2)
@@ -487,7 +491,48 @@ class LayoutResult:
     a substitute). --strict makes these errors (docs/spec.md SS5)."""
 
 
-# Edge/offset/chop geometry for box/ellipse/diamond
+# ---------------------------------------------------------------------------
+# Arcs: a quadratic Bezier curve, as pikchr draws one (issue #25)
+# ---------------------------------------------------------------------------
+
+ARC_SEGMENTS = 16
+"""How many straight pieces stand in for an arc's curve wherever pikslide
+judges a line by the points it passes through (its box, the overlap
+warnings): as many as pikchr's arcCheck() samples it at."""
+
+
+def arc_control_point(start: tuple[float, float], end: tuple[float, float], cw: bool) -> tuple[float, float]:
+    """The control point of an arc's curve from `start` to `end`, as
+    pikchr's arcControlPoint() puts it: half the chord off the chord's
+    middle, on its left going clockwise (so that the curve turns right)
+    and on its right going counterclockwise. A bare arc's control point
+    is the corner it turns at, so the curve leaves heading one way and
+    arrives heading the other."""
+    mx, my = (start[0] + end[0]) / 2, (start[1] + end[1]) / 2
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    if cw:
+        return (mx - dy / 2, my + dx / 2)
+    return (mx + dy / 2, my - dx / 2)
+
+
+def line_points(shape: Shape) -> list[tuple[float, float]]:
+    """The points a line is drawn through: its path, or an arc's curve in
+    ARC_SEGMENTS straight pieces. An arc's path is still its two ends,
+    which is what `.start`/`.end` and --check give."""
+    assert shape.path is not None
+    if shape.kind != "arc" or len(shape.path) != 2:
+        return shape.path
+    (x0, y0), (x2, y2) = shape.path
+    x1, y1 = arc_control_point(shape.path[0], shape.path[1], shape.cw)
+    points = []
+    for i in range(ARC_SEGMENTS + 1):
+        t = i / ARC_SEGMENTS
+        a, b, c = (1 - t) ** 2, 2 * t * (1 - t), t * t
+        points.append((a * x0 + b * x1 + c * x2, a * y0 + b * y1 + c * y2))
+    return points
+
+
+# ---------------------------------------------------------------------------
 # Edge/offset/chop geometry -- ported from box/ellipse/diamond Offset+Chop
 # ---------------------------------------------------------------------------
 
@@ -1602,6 +1647,11 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
     if isinstance(attr, ast.LeadingDirection):
         length = _resolve_rel(attr.amount, ctx.vars["linewid"], ctx)
         _move_current_direction(build, shape, build.direction, length)
+    elif isinstance(attr, ast.NumProperty) and shape.kind == "arc" and attr.name in ("radius", "diameter"):
+        # An arc's radius is how far a bare arc goes each way: its width and
+        # height, as arcrad sets them (pikchr's arc ignores its radius).
+        scale = 2.0 if attr.name == "diameter" else 1.0
+        shape.w = shape.h = _resolve_rel_current(attr.value, shape.w * scale, ctx) / scale
     elif isinstance(attr, ast.NumProperty):
         current = {"width": shape.w, "height": shape.h, "radius": shape.rad,
                    "diameter": shape.rad * 2, "thickness": shape.sw}[attr.name]
@@ -1928,6 +1978,16 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
             length = shape.w if direction in (DIR_RIGHT, DIR_LEFT) else shape.h
             build.path = [_start_point(shape, build)]
             _move_current_direction(build, shape, direction, length)
+            if shape.kind == "arc":
+                # A bare arc turns, as pikchr's does: right going clockwise,
+                # left counterclockwise, to end diagonally from its start;
+                # and the next object goes the way it turned.
+                shape.out_dir = (direction + (1 if shape.cw else 3)) % 4
+                length = shape.w if shape.out_dir in (DIR_RIGHT, DIR_LEFT) else shape.h
+                _move_current_direction(build, shape, shape.out_dir, length)
+        if shape.kind == "arc" and (len(build.path) > 2 or shape.closed):
+            raise LayoutError("an arc is one curve, from its start to its end: it takes no `then` "
+                              "or `close`; draw a path that turns more than once as a line or a spline")
         if build.chop:
             if build.seg_objs and build.seg_objs[-1] is not None:
                 build.path[-1] = chop_point(build.seg_objs[-1], build.path[-2])

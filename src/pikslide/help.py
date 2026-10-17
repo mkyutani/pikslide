@@ -168,7 +168,7 @@ ENTRIES: tuple[Entry, ...] = (
           "A curve through its path's points; drawn as straight segments in v1.",
           ("linewid", "lineht"), "spline right then up then right"),
     _line(("arc",), "a quarter circle arc",
-          "A quarter-circle arc; `cw`/`ccw` choose which way it turns.",
+          "Turns left, or right with `cw`; the next object goes the way it turned.",
           ("arcrad",), "arc cw from A.n to B.w ->", see=("cw",)),
     _line(("move",), "moves the current point, drawing nothing",
           "Like a line, but invisible: it moves where the next object goes.",

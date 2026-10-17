@@ -181,6 +181,48 @@ def test_from_after_movement_rebases_the_whole_path():
 
 
 # ---------------------------------------------------------------------------
+# Arcs (issue #25): a curve that turns, as pikchr's does
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("src, end, next_center", [
+    # ccw by default: ahead arcrad, then left (up) arcrad, and on up.
+    ("arc", (0.25, 0.25), (0.25, 0.5)),
+    ("arc ccw", (0.25, 0.25), (0.25, 0.5)),
+    ("arc cw", (0.25, -0.25), (0.25, -0.5)),
+    ("down\narc cw", (-0.25, -0.25), (-0.625, -0.25)),
+    ("arc rad 0.5", (0.5, 0.5), (0.5, 0.75)),
+])
+def test_a_bare_arc_turns_and_the_next_object_goes_the_way_it_turned(src, end, next_center):
+    arc, box = layout(src + "\nbox\n").shapes
+    assert arc.path == [pytest.approx((0, 0)), pytest.approx(end)]
+    assert (box.cx, box.cy) == pytest.approx(next_center)
+
+
+def test_four_bare_arcs_go_round_to_where_they_started():
+    arcs = layout("arc; arc; arc; arc\n").shapes
+    assert [a.exit for a in arcs] == [pytest.approx(p) for p in [(0.25, 0.25), (0, 0.5), (-0.25, 0.25), (0, 0)]]
+
+
+def test_an_arcs_box_is_the_box_round_its_curve():
+    # The curve bows out from the chord by a quarter of its length:
+    # counterclockwise to the right of the way it goes, clockwise to the left.
+    ccw = layout("arc from (0, 0) to (2, 0)\n").shapes[0]
+    assert ccw.bbox == pytest.approx((0, -0.5, 2, 0))
+    assert (ccw.cx, ccw.cy, ccw.w, ccw.h) == pytest.approx((1, -0.25, 2, 0.5))
+    cw = layout("arc cw from (0, 0) to (2, 0)\n").shapes[0]
+    assert cw.bbox == pytest.approx((0, 0, 2, 0.5))
+    # Its path is still its two ends: what .start, .end and --check give.
+    assert cw.path == [pytest.approx((0, 0)), pytest.approx((2, 0))]
+
+
+@pytest.mark.parametrize("src", ["arc right then up", "arc right 1 then up 1 then left 1", "arc close"])
+def test_an_arc_is_one_curve(src: str):
+    with pytest.raises(LayoutError, match="an arc is one curve"):
+        layout(src + "\n")
+
+
+# ---------------------------------------------------------------------------
 # Object identity: names, groups, z-order (docs/spec.md SS3.1, ext)
 # ---------------------------------------------------------------------------
 

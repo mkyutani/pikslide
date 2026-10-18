@@ -1,0 +1,5 @@
+box "Customer" bold "browser" small fit
+arrow "HTTPS"
+box "Web server" bold "Django" small fit
+arrow "SQL"
+cylinder "Orders" bold "PostgreSQL" small fit

@@ -1,0 +1,24 @@
+# A web shop's orders: the web server saves an order and queues a mail
+# task, and the mailer sends the customer an email about it later.
+
+boxwid = 1.2in
+boxht = 0.6in
+cylwid = 1.2in
+cylht = 0.8in
+
+define program { box $1 bold $2 small fill accent1 lighter 60% }
+define store { cylinder $1 bold $2 small fill accent2 lighter 60% }
+
+Customer: box "Customer" bold "browser" small
+arrow "HTTPS" above
+Web: program("Web server", "Django")
+arrow "SQL" above
+DB: store("Orders", "PostgreSQL")
+
+Queue: store("Queue", "Redis") with .n at 0.6in below Web.s
+arrow "mail task" ljust from Web.s to Queue.n
+Mailer: program("Mailer", "Celery") at (DB.x, Queue.y)
+arrow from Queue.e to Mailer.w
+arrow "SQL" ljust from Mailer.n to DB.s
+Mail: arrow from Mailer.s down 0.3in then left until even with Customer then to Customer.s stroke dashed
+"email" below at Mail.s

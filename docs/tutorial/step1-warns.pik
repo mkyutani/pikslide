@@ -1,0 +1,5 @@
+box "Customer"
+arrow
+box "Web server"
+arrow
+cylinder "Orders"

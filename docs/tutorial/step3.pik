@@ -1,0 +1,8 @@
+Customer: box "Customer" bold "browser" small fit
+arrow "HTTPS" above
+Web: box "Web server" bold "Django" small fit
+arrow "SQL" above
+DB: cylinder "Orders" bold "PostgreSQL" small fit
+
+Queue: cylinder "Queue" bold "Redis" small fit with .n at 0.6in below Web.s
+arrow "mail task" ljust from Web.s to Queue.n

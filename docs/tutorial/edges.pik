@@ -1,0 +1,26 @@
+# The points of an object that a line or a placement can name: its edges,
+# its corners and its center. A circle's corners are on its outline.
+# Each dot is drawn `behind` its object: it sits on the outline on
+# purpose, so it isn't an overlap to warn about.
+
+B: box wid 1.6in ht 1in
+dot at B.n  behind B; text ".n"  small with .s  at B.n  + (0, 0.05in)
+dot at B.ne behind B; text ".ne" small with .sw at B.ne + (0.05in, 0.05in)
+dot at B.e  behind B; text ".e"  small with .w  at B.e  + (0.08in, 0)
+dot at B.se behind B; text ".se" small with .nw at B.se + (0.05in, -0.05in)
+dot at B.s  behind B; text ".s"  small with .n  at B.s  - (0, 0.05in)
+dot at B.sw behind B; text ".sw" small with .ne at B.sw + (-0.05in, -0.05in)
+dot at B.w  behind B; text ".w"  small with .e  at B.w  - (0.08in, 0)
+dot at B.nw behind B; text ".nw" small with .se at B.nw + (-0.05in, 0.05in)
+dot at B.c  behind B; text ".c"  small with .n  at B.c  - (0, 0.05in)
+
+C: circle rad 0.5in with .w at 1.2in right of B.e
+dot at C.n  behind C; text ".n"  small with .s  at C.n  + (0, 0.05in)
+dot at C.ne behind C; text ".ne" small with .sw at C.ne + (0.05in, 0.05in)
+dot at C.e  behind C; text ".e"  small with .w  at C.e  + (0.08in, 0)
+dot at C.se behind C; text ".se" small with .nw at C.se + (0.05in, -0.05in)
+dot at C.s  behind C; text ".s"  small with .n  at C.s  - (0, 0.05in)
+dot at C.sw behind C; text ".sw" small with .ne at C.sw + (-0.05in, -0.05in)
+dot at C.w  behind C; text ".w"  small with .e  at C.w  - (0.08in, 0)
+dot at C.nw behind C; text ".nw" small with .se at C.nw + (-0.05in, 0.05in)
+dot at C.c  behind C; text ".c"  small with .n  at C.c  - (0, 0.05in)

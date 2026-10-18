@@ -1,0 +1,5 @@
+box "Customer" fit
+arrow
+box "Web server" fit
+arrow
+cylinder "Orders" fit

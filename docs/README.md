@@ -11,6 +11,8 @@ built in, and `pikslide --help llm` is all of it in one text, for an LLM.
 This directory holds what only the repository has: diagrams, with the
 pictures they render to.
 
+- [tutorial/](tutorial/): one diagram drawn in six steps, an idea at a
+  time, each with its picture: the place to start
 - [examples/](examples/): example diagrams, each `.pik` with the `.pptx`
   and `.png` it renders to (`pikslide x.pik x.pptx --png`)
   ([japan-capitals.md](examples/japan-capitals.md) is one drawn by

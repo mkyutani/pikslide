@@ -58,6 +58,7 @@ arrow "edit in PowerPoint" rjust from (Pptx.x, You.n.y) to Pptx.s
 [docs/examples/japan-capitals.md](https://github.com/mkyutani/pikslide/blob/main/docs/examples/japan-capitals.md)
 is a slide Claude Code drew this way, in one run, with the prompt it was
 given. [docs/](https://github.com/mkyutani/pikslide/tree/main/docs) has
+a [tutorial](https://github.com/mkyutani/pikslide/tree/main/docs/tutorial),
 more examples and a cookbook of diagram recipes.
 
 ## Install

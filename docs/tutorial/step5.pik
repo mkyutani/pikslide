@@ -1,0 +1,13 @@
+Customer: box "Customer" bold "browser" small fit
+arrow "HTTPS" above
+Web: box "Web server" bold "Django" small fill accent1 lighter 60% fit
+arrow "SQL" above
+DB: cylinder "Orders" bold "PostgreSQL" small fill accent2 lighter 60% fit
+
+Queue: cylinder "Queue" bold "Redis" small fill accent2 lighter 60% fit with .n at 0.6in below Web.s
+arrow "mail task" ljust from Web.s to Queue.n
+Mailer: box "Mailer" bold "Celery" small fill accent1 lighter 60% fit at (DB.x, Queue.y)
+arrow from Queue.e to Mailer.w
+arrow "SQL" ljust from Mailer.n to DB.s
+Mail: arrow from Mailer.s down 0.3in then left until even with Customer then to Customer.s stroke dashed
+"email" below at Mail.s

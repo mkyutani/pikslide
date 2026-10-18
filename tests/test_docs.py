@@ -1,7 +1,8 @@
 """The diagrams in the docs: every `.pik` under docs/, and every
 ```pikslide block in docs/'s Markdown and the top-level README, must parse
 and lay out (docs/README.md); a cookbook recipe must show its .pik file
-as it is; and the shape gallery must be what scripts/gen_shape_gallery.py
+as it is, and so must the tutorial each step, whose runs must print what
+it shows; and the shape gallery must be what scripts/gen_shape_gallery.py
 writes.
 
 The packaged manuals (src/pikslide/docs/) are left out: spec.md's blocks
@@ -13,17 +14,23 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 import re
+import shlex
+import shutil
 
 import pytest
 
+from pikslide import main
 from pikslide.pik import parse
 from pikslide.pik.layout import resolve_layout
 
 ROOT = pathlib.Path(__file__).parent.parent
 DOCS = ROOT / "docs"
+TUTORIAL = DOCS / "tutorial"
 PIK_FILES = sorted(DOCS.rglob("*.pik"))
 MARKDOWN_FILES = [ROOT / "README.md", *sorted(DOCS.rglob("*.md"))]
 _BLOCK = re.compile(r"^```pikslide\n(.*?)^```", re.M | re.S)
+_RUN = re.compile(r"^```text\n\$ (pikslide [^\n]*)\n(.*?)^```", re.M | re.S)
+_MEASURED = re.compile(r"\(\d+\.\d+ in > \d+\.\d+ in\)")
 
 
 def _blocks() -> list[tuple[str, str, pathlib.Path]]:
@@ -64,6 +71,41 @@ def test_recipe_shows_its_source_as_it_is(recipe: pathlib.Path):
     sources = [m.group(1) for m in _BLOCK.finditer(md.read_text(encoding="utf-8"))]
     assert recipe.read_text(encoding="utf-8") in sources, f"{md.name} doesn't show {recipe.name} as it is"
     assert recipe.with_suffix(".png").exists()
+
+
+@pytest.mark.parametrize("step", sorted(TUTORIAL.glob("step*.pik")), ids=lambda p: p.stem)
+def test_tutorial_shows_each_step_as_it_is(step: pathlib.Path):
+    md = step.parent / "README.md"
+    sources = [m.group(1) for m in _BLOCK.finditer(md.read_text(encoding="utf-8"))]
+    assert step.read_text(encoding="utf-8") in sources, f"the tutorial doesn't show {step.name} as it is"
+    assert step.with_suffix(".png").exists()
+
+
+def _runs() -> list[tuple[str, str]]:
+    """(command, what it prints) for each run the tutorial shows: a
+    ```text block that starts `$ pikslide ...`."""
+    return _RUN.findall((TUTORIAL / "README.md").read_text(encoding="utf-8"))
+
+
+def test_tutorial_has_runs():
+    assert _runs()
+
+
+@pytest.mark.parametrize("run", _runs(), ids=lambda r: r[0])
+def test_tutorial_run_prints_what_it_shows(run, tmp_path, monkeypatch, capsys):
+    """The warnings the tutorial shows are the ones pikslide prints, but
+    for how far text overflows: that's measured in the fonts installed,
+    or a stand-in for them, wider or narrower."""
+    command, shown = run
+    argv = shlex.split(command)
+    for arg in argv:
+        if arg.endswith(".pik"):
+            shutil.copy(TUTORIAL / arg, tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", argv)
+    main()
+    printed = capsys.readouterr()
+    assert _MEASURED.sub("(...)", printed.err + printed.out) == _MEASURED.sub("(...)", shown)
 
 
 def _gallery_script():

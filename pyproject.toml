@@ -30,7 +30,7 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/mkyutani/pikslide"
 Issues = "https://github.com/mkyutani/pikslide/issues"
-Documentation = "https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md"
+Documentation = "https://github.com/mkyutani/pikslide/tree/main/docs"
 
 [project.scripts]
 pikslide = "pikslide:main"

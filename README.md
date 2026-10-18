@@ -10,7 +10,7 @@ theme: a person can select, move and restyle each one afterwards.
 Text an LLM can write, and a slide a person can finish: pikslide is made
 for drawing with an LLM, with you in the loop.
 
-![pipeline.png: You prompt an LLM, which writes a .pik; pikslide renders it to a .pptx and, with --png, a .png. You can also edit the .pik, or edit the .pptx in PowerPoint and ask the LLM to apply your edits to the .pik](https://raw.githubusercontent.com/mkyutani/pikslide/main/docs/examples/pipeline.png)
+![pipeline.png: You prompt an LLM, which writes a .pik; pikslide renders it to a .pptx and, with --png, a .png. You can also edit the .pik in a text editor, or edit the .pptx in PowerPoint and ask the LLM to apply your edits to the .pik. The LLM, dashed, is optional](https://raw.githubusercontent.com/mkyutani/pikslide/main/docs/examples/pipeline.png)
 
 1. You prompt the LLM, and it writes a `.pik`.
 2. pikslide renders the `.pik` to a `.pptx` and, with `--png`, to a
@@ -29,30 +29,36 @@ The picture above is pikslide's own,
 # Drawing a slide with an LLM and pikslide, with a person in the loop.
 # The LLM writes a .pik, and pikslide renders it to a .pptx and, with
 # --png, a .png. You step in where you like: prompt the LLM, edit the
-# .pik, or edit the .pptx in PowerPoint and ask the LLM to apply your
-# edits to the .pik.
+# .pik in a text editor, or edit the .pptx in PowerPoint and ask the LLM
+# to apply your edits to the .pik. The LLM is optional, so it and its
+# arrows are dashed: you can write the .pik yourself. What pikslide does,
+# from the .pik to the files it writes, is drawn twice as thick.
 
 boxwid = 1.2in
 boxht = 0.55in
-filewid = 0.8in
-fileht = 0.55in
 
-LLM: box "LLM"
-arrow 1.5in
-Pik: file ".pik"
-arrow
-Pikslide: box "pikslide" bold fill accent1 lighter 60%
-Png: file ".png" with .w at 0.8in right of Pikslide.e + (0, 0.5in)
-Pptx: file ".pptx" with .w at 0.8in right of Pikslide.e - (0, 0.5in)
-arrow from Pikslide.e right 0.4in then up until even with Png then to Png.w
+# A file: PowerPoint's flowchart document, a page with a wavy bottom.
+# The middle of the wave is a fifteenth of its height above the bottom
+# of its box, where .s is: a line up to a file ends there.
+define doc { shape flowChartDocument $1 bold wid 0.8in ht 0.55in fill accent2 lighter 60% }
+
+LLM: box "LLM" bold rad 0.1in fill accent1 lighter 60% stroke dashed
+arrow 1.5in stroke dashed
+Pik: doc(".pik")
+arrow stroke thickness 200%
+Pikslide: box "pikslide" bold color bg1 rad 0.1in fill accent1
+Png: doc(".png") with .w at 0.8in right of Pikslide.e + (0, 0.5in)
+Pptx: doc(".pptx") with .w at 0.8in right of Pikslide.e - (0, 0.5in)
+arrow from Pikslide.e right 0.4in then up until even with Png then to Png.w stroke thickness 200%
 "--png" small above at 1/2<(Pikslide.e.x + 0.4in, Png.y), Png.w>
-arrow from Pikslide.e right 0.4in then down until even with Pptx then to Pptx.w
+arrow from Pikslide.e right 0.4in then down until even with Pptx then to Pptx.w stroke thickness 200%
 
 You: box "You" bold wid (Pptx.e.x - LLM.w.x) ht 0.45in fill bg1 darker 5% \
     with .nw at (LLM.w.x, Pptx.s.y - 0.6in)
-arrow "prompt" "e.g. “draw how Japan's capital moved”" small "or “apply my edits in the .pptx to the .pik”" small ljust from (LLM.x, You.n.y) to LLM.s
-arrow "edit" ljust from (Pik.x, You.n.y) to Pik.s
-arrow "edit in PowerPoint" rjust from (Pptx.x, You.n.y) to Pptx.s
+arrow "prompt" "e.g. “draw how Japan's capital moved”" small "or “apply my edits in the .pptx to the .pik”" small ljust stroke dashed from (LLM.x, You.n.y) to LLM.s
+wave = Pik.ht / 15
+arrow "edit in a text editor" ljust from (Pik.x, You.n.y) to Pik.s + (0, wave)
+arrow "edit in PowerPoint" rjust from (Pptx.x, You.n.y) to Pptx.s + (0, wave)
 ```
 
 [docs/examples/japan-capitals.md](https://github.com/mkyutani/pikslide/blob/main/docs/examples/japan-capitals.md)

@@ -1,7 +1,7 @@
 [project]
 name = "pikslide"
 version = "0.2.1"
-description = "A text language for drawing diagrams as native, editable PowerPoint objects"
+description = "A text language for diagrams an LLM can write, drawn as native, editable PowerPoint shapes a person can finish"
 readme = "README.md"
 license = "0BSD"
 license-files = ["LICENSE", "NOTICE"]

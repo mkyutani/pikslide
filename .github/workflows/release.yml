@@ -1,9 +1,9 @@
 name: release
 
 # On a v* tag: test, build, publish to TestPyPI, then to PyPI, with
-# Trusted Publishing (OIDC; no API token is stored). Each index needs a
-# publisher registered for this repository, this workflow file
-# (release.yml), and the environment named below.
+# Trusted Publishing (OIDC; no API token is stored), and make the GitHub
+# release. Each index needs a publisher registered for this repository,
+# this workflow file (release.yml), and the environment named below.
 
 on:
   push:
@@ -79,3 +79,28 @@ jobs:
         with:
           enable-cache: false
       - run: uv publish
+
+  # The GitHub release, with the files published: its notes are the
+  # version bump's commit message (scripts/release_notes.py), then the
+  # changes since the last release, as GitHub links them.
+  github-release:
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # All of history, for the tag's commit message.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - name: Create the release, with the notes and the files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release_notes.py "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "$GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/notes.md" --generate-notes

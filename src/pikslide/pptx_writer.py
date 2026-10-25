@@ -677,13 +677,14 @@ def _add_block_shape(container, shape: Shape, tf: _Transform):
 
 def _set_adjust_values(pptx_shape, shape: Shape) -> None:
     """Write a preset's adjust values (Shape.adjust, issue #20) into its
-    `<a:avLst>` by name, beside any already there (`rad`'s); the rest
-    keep their defaults."""
+    `<a:avLst>` by name, over any already there (`rad`'s), and every
+    other one at its default: PowerPoint can't open a deck whose `avLst`
+    has only some of a preset's values (checked, issue #27)."""
     geometry = pptx_shape._element.spPr.prstGeom
-    values = {gd.name: int(gd.fmla.split()[1]) for gd in geometry.gd_lst}
+    values = dict(ADJUST_VALUES.get(shape.preset or "", ()))
+    values.update((gd.name, int(gd.fmla.split()[1])) for gd in geometry.gd_lst)
     values.update((name, round(value)) for name, value in shape.adjust.items())
-    order = [name for name, _default in ADJUST_VALUES.get(shape.preset or "", ())]
-    geometry.rewrite_guides(sorted(values.items(), key=lambda gd: order.index(gd[0]) if gd[0] in order else len(order)))
+    geometry.rewrite_guides(list(values.items()))
 
 
 def _add_line_shape(container, shape: Shape, tf: _Transform):

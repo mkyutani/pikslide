@@ -156,6 +156,8 @@ def test_the_deck_has_the_adjust_values(tmp_path: pathlib.Path):
         return [(gd.get("name"), gd.get("fmla")) for gd in s._element.spPr.prstGeom.iter()
                 if gd.tag.endswith("}gd")]
 
-    assert guides(arrow) == [("adj2", "val 30000")]
+    # Every one of a preset's values, the rest at their defaults: PowerPoint
+    # can't open an avLst with only some of them (issue #27).
+    assert guides(arrow) == [("adj1", "val 50000"), ("adj2", "val 30000")]
     assert guides(card) == [("adj", "val 30000")]
     assert guides(callout) == [("adj1", "val 200000"), ("adj2", "val 200000")]

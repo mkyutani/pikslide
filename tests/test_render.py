@@ -219,3 +219,15 @@ def test_real_render(monkeypatch, tmp_path):
     _run_cli(monkeypatch, [str(_src(tmp_path)), str(out), "--png", "--pdf"])
     assert (tmp_path / "d.png").read_bytes().startswith(b"\x89PNG")
     assert (tmp_path / "d.pdf").read_bytes().startswith(b"%PDF")
+
+
+@pytest.mark.skipif(not os.environ.get("PIKSLIDE_RENDER_TESTS"), reason="set PIKSLIDE_RENDER_TESTS=1 to run a real render")
+@pytest.mark.parametrize("fmt", render.FORMATS)
+def test_a_deck_powerpoint_cant_open_says_so(tmp_path, fmt):
+    # In the console's code page (cp932 on a Japanese Windows), the message
+    # used to come out garbled; now it's UTF-8 (issue #27).
+    deck = tmp_path / "d.pptx"
+    deck.write_bytes(b"not a deck")
+    with pytest.raises(RenderError, match="PowerPoint could not open d.pptx: ") as exc:
+        render.render_deck(str(deck), str(tmp_path / f"d.{fmt}"), fmt, renderer="powerpoint")
+    assert "�" not in str(exc.value)

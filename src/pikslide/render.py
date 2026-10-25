@@ -118,7 +118,8 @@ def _run(argv: list[str], name: str) -> None:
     except subprocess.TimeoutExpired:
         raise RenderError(f"{name} did not finish within {_TIMEOUT_S}s") from None
     if result.returncode != 0:
-        # powershell.exe writes in the Windows console code page, not
-        # necessarily UTF-8 -- this is a diagnostic, so never fail on it.
+        # ps/pptx_to_*.ps1 switch powershell.exe to UTF-8, but what it
+        # writes before that is in the console's code page -- this is a
+        # diagnostic, so never fail on it.
         detail = (result.stderr or result.stdout).decode("utf-8", errors="replace").strip()
         raise RenderError(f"{name} exited with {result.returncode}" + (f": {detail}" if detail else ""))

@@ -27,6 +27,14 @@ param(
 # `exit 1` below is what makes the exit code trustworthy.
 $ErrorActionPreference = "Stop"
 
+# pikslide reads what this writes as UTF-8, but powershell.exe writes in
+# the console's code page (cp932 on a Japanese Windows), and PowerPoint's
+# own errors come in Windows' language (checked: Write-Error and
+# [Console]::Error both follow this). Put back in `finally`, since the
+# console may be the caller's.
+$consoleEncoding = [Console]::OutputEncoding
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+
 $app = $null
 $pres = $null
 # Slide.Export() was found to fail intermittently -- "could not be found" --
@@ -38,7 +46,11 @@ $pres = $null
 $tempPng = Join-Path $env:TEMP ("pikslide_" + [System.Guid]::NewGuid().ToString("N") + ".png")
 try {
     $app = New-Object -ComObject PowerPoint.Application
-    $pres = $app.Presentations.Open($PptxPath, $true, $true, $false)
+    try {
+        $pres = $app.Presentations.Open($PptxPath, $true, $true, $false)
+    } catch {
+        throw "PowerPoint could not open $(Split-Path -Leaf $PptxPath): $($_.Exception.Message)"
+    }
     $slide = $pres.Slides.Item(1)
 
     $widthIn = $pres.PageSetup.SlideWidth / 72.0
@@ -51,7 +63,7 @@ try {
 
     Write-Output "wrote $PngPath ($widthPx x $heightPx)"
 } catch {
-    Write-Error $_
+    [Console]::Error.WriteLine($_.Exception.Message)
     exit 1
 } finally {
     if (Test-Path $tempPng) {
@@ -75,4 +87,5 @@ try {
     }
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
+    [Console]::OutputEncoding = $consoleEncoding
 }

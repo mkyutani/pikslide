@@ -22,18 +22,30 @@ param(
 # `exit 1` below is what makes the exit code trustworthy.
 $ErrorActionPreference = "Stop"
 
+# pikslide reads what this writes as UTF-8, but powershell.exe writes in
+# the console's code page (cp932 on a Japanese Windows), and PowerPoint's
+# own errors come in Windows' language (checked: Write-Error and
+# [Console]::Error both follow this). Put back in `finally`, since the
+# console may be the caller's.
+$consoleEncoding = [Console]::OutputEncoding
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+
 $app = $null
 $pres = $null
 try {
     $ppSaveAsPDF = 32  # PpSaveAsFileType.ppSaveAsPDF
 
     $app = New-Object -ComObject PowerPoint.Application
-    $pres = $app.Presentations.Open($PptxPath, $true, $true, $false)
+    try {
+        $pres = $app.Presentations.Open($PptxPath, $true, $true, $false)
+    } catch {
+        throw "PowerPoint could not open $(Split-Path -Leaf $PptxPath): $($_.Exception.Message)"
+    }
     $pres.SaveAs($PdfPath, $ppSaveAsPDF)
 
     Write-Output "wrote $PdfPath"
 } catch {
-    Write-Error $_
+    [Console]::Error.WriteLine($_.Exception.Message)
     exit 1
 } finally {
     # Always torn down, success or failure (checked: -Stop above means a
@@ -54,4 +66,5 @@ try {
     }
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
+    [Console]::OutputEncoding = $consoleEncoding
 }

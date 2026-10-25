@@ -970,10 +970,12 @@ CONTENT AREA
     never scaled: one bigger than the area runs past it, with a warning
     that names the objects that do.
     The area is the layout's one content placeholder; else the master's
-    body placeholder (on a blank or a two-column layout); else the whole
-    slide. To put the diagram somewhere else, choose another layout. A
-    layout named with --layout or `layout` keeps its title; the diagram
-    takes the place of its content placeholders.
+    body placeholder (on a blank or a two-column layout); else the area
+    below the layout's title, down to its footer; else the whole slide.
+    To put the diagram somewhere else, choose another layout. A layout
+    named with --layout or `layout` keeps its title; the diagram takes the
+    place of its content placeholders, and a warning says if it is on the
+    title.
 
 SETTINGS FILE
     <template name>.theme.pik beside the template, or --settings FILE:

@@ -54,7 +54,7 @@ from .pik.layout import (
     slot_step,
     string_color,
 )
-from .pik.overlap import find_overlaps
+from .pik.overlap import TOLERANCE, find_overlaps
 from .pik.preset_text_rects import ADJUST_VALUES
 
 EMU_PER_INCH = 914400
@@ -288,8 +288,9 @@ def resolve_for_pptx(
     result's `warnings`. That theme's default shape also gives `margin`
     and `vmargin` their values (template_defaults_from_xml()), over the
     prelude's and under the settings file's. Objects, text and lines that
-    overlap (pikslide.pik.overlap) are warnings, and so is a diagram
-    bigger than the content area it goes in (_content_area()).
+    overlap (pikslide.pik.overlap) are warnings, and so are a diagram
+    bigger than the content area it goes in (_content_area()) and one on
+    a placeholder the slide keeps (_on_kept_placeholders()).
 
     `base_dir` is the source file's own directory, against which an
     `image` object's path resolves (docs/spec.md SS3.5). `settings_text`/
@@ -320,6 +321,7 @@ def resolve_for_pptx(
             )
             result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_rects(s, metrics))
             result.warnings += _content_area_overflow(prs, layout, result)
+            result.warnings += _on_kept_placeholders(prs, layout, layout_name, result, metrics)
         finally:
             if tmp_path is not None:
                 os.remove(tmp_path)
@@ -1143,9 +1145,10 @@ def _resolve_template_layout(prs: Presentation, layout_name: str):
 
 # A layout's title, date, footer and slide number placeholders; any other
 # holds content. A subtitle counts as title, so a title slide has none.
+_FOOTER_PLACEHOLDER_TYPES = {PP_PLACEHOLDER.DATE, PP_PLACEHOLDER.FOOTER, PP_PLACEHOLDER.SLIDE_NUMBER}
 _NON_CONTENT_PLACEHOLDER_TYPES = {
     PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE, PP_PLACEHOLDER.VERTICAL_TITLE, PP_PLACEHOLDER.SUBTITLE,
-    PP_PLACEHOLDER.DATE, PP_PLACEHOLDER.FOOTER, PP_PLACEHOLDER.SLIDE_NUMBER,
+    *_FOOTER_PLACEHOLDER_TYPES,
 }
 
 
@@ -1174,7 +1177,10 @@ def _content_area(prs: Presentation, layout) -> tuple[tuple[float, float, float,
     exactly one (_content_placeholder()); else its master's body
     placeholder, where the template sets text when a layout says nothing
     else, and which spans a two-column layout's both columns; else the
-    whole slide."""
+    area below the layout's title, as wide as it, down to its date, footer
+    and slide number, or to the bottom of the slide: a Title Only layout's,
+    in a template whose master has no body placeholder (issue #29); else
+    the whole slide."""
     placeholder = _content_placeholder(layout)
     if placeholder is not None:
         rect = _placeholder_rect(placeholder)
@@ -1185,6 +1191,17 @@ def _content_area(prs: Presentation, layout) -> tuple[tuple[float, float, float,
             rect = _placeholder_rect(placeholder)
             if rect is not None:
                 return rect, f"the {placeholder.name!r} placeholder of the slide master"
+    for placeholder in layout.placeholders:
+        rect = _placeholder_rect(placeholder) if placeholder.placeholder_format.type == PP_PLACEHOLDER.TITLE else None
+        if rect is not None:
+            left, top, width, height = rect
+            top += height
+            footers = [_placeholder_rect(p) for p in layout.placeholders
+                       if p.placeholder_format.type in _FOOTER_PLACEHOLDER_TYPES]
+            bottom = min((r[1] for r in footers if r is not None and r[1] >= top), default=Emu(prs.slide_height).inches)
+            if bottom > top:
+                what = f"the area below the {placeholder.name!r} placeholder of layout {layout.name!r}"
+                return (left, top, width, bottom - top), what
     return (0.0, 0.0, Emu(prs.slide_width).inches, Emu(prs.slide_height).inches), "the slide"
 
 
@@ -1211,6 +1228,50 @@ def _content_area_overflow(prs: Presentation, layout, result: LayoutResult) -> l
         f"({area_w:.2f} x {area_h:.2f} in), and runs past it: {', '.join(past)}",
         tuple(past),
     )]
+
+
+def _on_kept_placeholders(
+    prs: Presentation, layout, layout_name: str, result: LayoutResult, metrics: PilFontMetrics
+) -> list[LayoutWarning]:
+    """A warning for each placeholder the slide keeps beside the diagram
+    (a named layout's title, write_pptx_from_template()) that the diagram
+    is on, naming what of it is (issue #29): a Title Slide layout's title,
+    say, is where its master's body placeholder is. What counts is what
+    find_overlaps() counts as drawn: not an `invis` line, and of an
+    `invis` object with no fill only its text, so that a frame to place
+    things by doesn't. A line is its bounding box, made TOLERANCE wider
+    all round, so that a straight one has an area."""
+    if not layout_name:
+        return []
+    (left, top, _w, _h), _what = _content_area(prs, layout)
+    tf = _Transform(_content_bbox(result), 0.0, origin=(left, top))
+    drawn = []
+    for shape in flatten_shapes(result.shapes):
+        if shape.kind in LINE_LIKE:
+            x0, y0, x1, y1 = shape.bbox
+            outline = [(x0 - TOLERANCE, y0 - TOLERANCE, x1 + TOLERANCE, y1 + TOLERANCE)] if shape.sw >= 0 else []
+        elif shape.kind == "text" or (shape.kind != "image" and shape.sw < 0 and shape.fill is None):
+            outline = []
+        else:
+            outline = [shape.bbox]
+        rects = [(*tf.point((x0, y1)), *tf.point((x1, y0))) for x0, y0, x1, y1 in outline + _text_rects(shape, metrics)]
+        drawn.append((shape.name or "", rects))
+    warnings = []
+    for placeholder in layout.iter_cloneable_placeholders():
+        rect = None if _is_content(placeholder) else _placeholder_rect(placeholder)
+        if rect is None:
+            continue
+        px0, py0, pw, ph = rect
+        on = [name for name, rects in drawn if any(
+            min(x1, px0 + pw) - max(x0, px0) > TOLERANCE and min(y1, py0 + ph) - max(y0, py0) > TOLERANCE
+            for x0, y0, x1, y1 in rects
+        )]
+        if on:
+            warnings.append(LayoutWarning(
+                f"the diagram is on the {placeholder.name!r} placeholder of layout {layout.name!r}, which stays "
+                f"on the slide: {', '.join(on)}; choose another layout", tuple(on),
+            ))
+    return warnings
 
 
 def write_pptx_from_template(

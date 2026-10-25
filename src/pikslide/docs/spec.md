@@ -612,10 +612,12 @@ warning       = accent5    # any further names the template wants
   at its top left (§4). It comes from the layout: its content placeholder,
   when it has exactly one (as above); otherwise, as on a blank or a
   two-column layout, the master's body placeholder, which is where the
-  template sets text when a layout says nothing else; with none of those,
-  the whole slide. It leaves the master's and the layout's own graphics (a
-  title rule, a logo, a footer) where the template has them. To put the
-  diagram somewhere else, choose another layout, or change the template's.
+  template sets text when a layout says nothing else; without one, as in
+  some templates, the area below the layout's title, as wide as it, down
+  to its date, footer and slide number; with none of those, the whole
+  slide. It leaves the master's and the layout's own graphics (a title
+  rule, a logo, a footer) where the template has them. To put the diagram
+  somewhere else, choose another layout, or change the template's.
 - **Strings.** A variable can hold a string, written as in text
   (`typeface = "…"`). A string is not a number and cannot be used in an
   expression; in v1 strings serve settings only, and a string variable is not
@@ -681,7 +683,10 @@ Humans and LLMs both need errors they can act on.
 - Text wider than a fixed-size object's text area is a **warning** (§3.3).
 - A preset's handle longer than the preset draws it is a **warning** (§3.4).
 - A diagram bigger than the content area of a `--template`'s slide is a
-  **warning** that names the objects running past it (§4).
+  **warning** that names the objects running past it (§4). So is one on
+  a placeholder the slide keeps, such as a Title Slide layout's title,
+  which is where its master's body placeholder is (§3.8). A line or an
+  object drawn `invis`, with no fill, doesn't count, but for its text.
 - Objects, text and lines that overlap are **warnings**, each naming the
   two things that do: two objects that partly overlap; text on text (an
   object's strings, or a line's labels, on another's); a line's label on

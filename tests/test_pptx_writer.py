@@ -11,7 +11,7 @@ import pytest
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_FILL_TYPE, MSO_THEME_COLOR
-from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE
+from pptx.enum.shapes import MSO_SHAPE, MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.enum.text import PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Inches
@@ -816,6 +816,53 @@ def test_content_area_of_each_layout(layout_name: str, expected):
     area, what = _content_area(prs, layout)
     assert area == pytest.approx(expected[0], abs=0.01)
     assert expected[1] in what
+
+
+def _without_master_body(prs):
+    master = prs.slide_masters[0]
+    for placeholder in list(master.placeholders):
+        if placeholder.placeholder_format.type == PP_PLACEHOLDER.BODY:
+            placeholder.element.getparent().remove(placeholder.element)
+    return prs
+
+
+@pytest.mark.parametrize(
+    ("layout_name", "expected"),
+    [
+        # Issue #29: below the title, as wide as it, down to the footers.
+        ("Title Only", ((0.5, 1.55, 9.0, 5.40), "the area below the 'Title 1' placeholder of layout 'Title Only'")),
+        # No title either: the whole slide.
+        ("Blank", ((0.0, 0.0, 10.0, 7.5), "the slide")),
+    ],
+)
+def test_content_area_with_no_master_body(layout_name: str, expected):
+    from pikslide.pptx_writer import _content_area
+
+    prs = _without_master_body(Presentation())
+    layout = next(layout for layout in prs.slide_layouts if layout.name == layout_name)
+    area, what = _content_area(prs, layout)
+    assert area == pytest.approx(expected[0], abs=0.01)
+    assert what == expected[1]
+
+
+def test_a_diagram_on_a_placeholder_the_slide_keeps_is_a_warning(tmp_path: pathlib.Path):
+    # Issue #29: Title Slide's title is where the master's body is.
+    tmpl = _template_deck(tmp_path)
+
+    def warnings(text: str, layout_name: str = "Title Slide"):
+        return resolve_for_pptx(parse(text), template_path=str(tmpl), layout_name=layout_name).warnings
+
+    [w] = warnings('A: box "A" width 3 height 1.5\n')
+    assert w.message == ("the diagram is on the 'Title 1' placeholder of layout 'Title Slide', which stays on the "
+                         "slide: A; choose another layout")
+    assert w.objects == ("A",)
+    assert warnings('box "A" width 3 height 0.5\n') == []  # above it
+    assert warnings('box "A" width 3 height 1.5\n', layout_name="") == []  # no placeholders kept
+    # A frame to place things by isn't drawn; a straight line is.
+    frame = "F: box stroke invis width 9 height 2\n"
+    assert warnings(frame) == []
+    [w] = warnings(frame + "line from F.w right 9\n")
+    assert w.objects == ("line 1",)
 
 
 def _template_without_layout_types(tmp_path: pathlib.Path) -> pathlib.Path:

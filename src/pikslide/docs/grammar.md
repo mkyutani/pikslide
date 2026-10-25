@@ -253,6 +253,8 @@ attribute       ::= numprop relexpr
                    | "alt" STRING                    (* image only *)
                    | "adjust" handle-name relexpr    (* preset shapes only *)
                    | "tip" "at" position             (* callouts only *)
+                   | "rotate" expr                   (* preset shapes only *)
+                   | "flipH" | "flipV"               (* preset shapes only *)
                    | "attach"                        (* lines and arrows only *)
                    | "path" connector-path           (* with attach only *)
                    | text
@@ -397,7 +399,7 @@ names.
 | `shape`, `image` | object classes |
 | `include` | the include statement |
 | `alt` | an attribute of `image` |
-| `adjust`, `tip` | attributes of `shape` |
+| `adjust`, `tip`, `rotate`, `flipH`, `flipV` | attributes of `shape` |
 | `attach`, `path` | attributes of `line` and `arrow` |
 | `major`, `medium`, `large` | string attributes |
 | `stroke` | the stroke attribute group, and the default line color |
@@ -410,10 +412,11 @@ Semantic constraints the grammar cannot express (each is an error):
 
 - a statement in an included file that is not an `include-item`;
 - `alt` on anything other than an `image`;
-- `adjust` or `tip` on anything other than a `shape`, a `handle-name`
-  the preset doesn't have, a negative named handle, and `%` on a value
-  given by the preset's own name; `tip` on a preset that isn't a callout
-  with a tip or a leader line ([spec.md](spec.md) §3.4);
+- `adjust`, `tip`, `rotate`, `flipH` or `flipV` on anything other than a
+  `shape`, a `handle-name` the preset doesn't have, a negative named
+  handle, and `%` on a value given by the preset's own name; `tip` on a
+  preset that isn't a callout with a tip or a leader line
+  ([spec.md](spec.md) §3.4);
 - a second `at` on one object;
 - both `ljust` and `rjust` on one object;
 - a second `color` on one string;

@@ -22,7 +22,8 @@ everything here allows `TOLERANCE`. What isn't drawn doesn't count: an
 
 Outlines are convex polygons: a circle or an ellipse as one, a diamond as
 its four corners, a `text` object as its strings, and anything else, a
-preset shape too, as its bounding box. A line is the points it is drawn
+preset shape too, as its bounding box, a turned one's turned with it, and
+its strings too (`rotate`, turn()). A line is the points it is drawn
 through, an arc its curve in short straight pieces. Where a string goes
 is the renderer's to say, so callers pass `text_rects`: each of a
 shape's strings' rectangles, as drawn."""
@@ -32,7 +33,7 @@ from __future__ import annotations
 import math
 from typing import Callable
 
-from .layout import LINE_LIKE, LayoutWarning, Shape, line_points
+from .layout import LINE_LIKE, LayoutWarning, Shape, line_points, turn
 
 Point = tuple[float, float]
 Polygon = list[Point]
@@ -56,7 +57,8 @@ def find_overlaps(shapes: list[Shape], text_rects: Callable[[Shape], list[Rect]]
     lines = [s for s in shapes if s.kind in LINE_LIKE and s.path and len(s.path) > 1]
     drawn = [line for line in lines if line.sw >= 0]
     objects = [s for s in shapes if s.kind not in LINE_LIKE]
-    strings = {id(s): [(t, _Convex(_corners(r))) for (t, _f), r in zip(s.texts, text_rects(s))] for s in shapes}
+    strings = {id(s): [(t, _Convex(turn(s, _corners(r)))) for (t, _f), r in zip(s.texts, text_rects(s))]
+               for s in shapes}
     outline = {id(o): _outline(o, [r for _t, r in strings[id(o)]]) for o in objects}
     points = {id(line): line_points(line) for line in lines}
     paths = {id(line): _Convex(points[id(line)]) for line in lines}
@@ -205,11 +207,13 @@ def _outline(shape: Shape, text: list[_Convex]) -> list[_Convex]:
     x0, y0, x1, y1 = shape.bbox
     if shape.kind in _ELLIPSES or shape.preset in _ELLIPSE_PRESETS:
         rx, ry = shape.w / 2, shape.h / 2
-        return [_Convex([(shape.cx + rx * math.cos(a), shape.cy + ry * math.sin(a))
-                         for a in (2 * math.pi * k / _ELLIPSE_SIDES for k in range(_ELLIPSE_SIDES))])]
-    if shape.kind == "diamond" or shape.preset in _DIAMOND_PRESETS:
-        return [_Convex([(shape.cx, y1), (x1, shape.cy), (shape.cx, y0), (x0, shape.cy)])]
-    return [_Convex(_corners(shape.bbox))]
+        polygon = [(shape.cx + rx * math.cos(a), shape.cy + ry * math.sin(a))
+                   for a in (2 * math.pi * k / _ELLIPSE_SIDES for k in range(_ELLIPSE_SIDES))]
+    elif shape.kind == "diamond" or shape.preset in _DIAMOND_PRESETS:
+        polygon = [(shape.cx, y1), (x1, shape.cy), (shape.cx, y0), (x0, shape.cy)]
+    else:
+        polygon = _corners(shape.bbox)
+    return [_Convex(turn(shape, polygon))]
 
 
 def _corners(rect: Rect) -> Polygon:

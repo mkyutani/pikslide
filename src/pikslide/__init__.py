@@ -239,8 +239,9 @@ def _succeed_check(warnings: list[LayoutWarning], slide: dict, shapes: list) -> 
 def _geometry(shape) -> dict:
     """Where `shape` went, as the source itself would measure it: x, y,
     wid and ht as `A.x`, `A.y`, `A.wid` and `A.ht` give them (inches, y
-    up), and a callout's tip, which is often outside them (issue #30); or
-    for a line the points it passes through."""
+    up), and a callout's tip, which is often outside them (issue #30), and
+    a preset shape's rotate, flipH and flipV (issue #26); or for a line the
+    points it passes through."""
     kind = f"shape {shape.preset}" if shape.kind == "shape" else shape.kind
     obj: dict = {"name": shape.name, "kind": kind}
     if shape.texts:
@@ -255,6 +256,9 @@ def _geometry(shape) -> dict:
         points = callout_points(shape)
         if points:
             obj["tip"] = [round(points[-1][0], 2), round(points[-1][1], 2)]
+        if shape.rotate:
+            obj["rotate"] = round(shape.rotate, 2)
+        obj.update({flip: True for flip, flipped in (("flipH", shape.flip_h), ("flipV", shape.flip_v)) if flipped})
     return obj
 
 

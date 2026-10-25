@@ -367,6 +367,21 @@ shape wedgeRectCallout "Note" fit
     copies them to the same preset. `fit` and the overflow warning use
     them.
   - `rad` sets a `box`'s or `roundRect`'s corner, as before.
+- **Turning and mirroring.** `rotate DEGREES` turns a preset shape
+  clockwise about its center, and `flipH` and `flipV` mirror it left to
+  right and top to bottom in its box, as PowerPoint's rotation and flips
+  do (a flip first, then the turn); its text turns with it:
+
+  ```pikslide
+  shape triangle wid 0.3 ht 0.22 rotate -90   # ◀
+  shape bentArrow flipH                        # bends to the left
+  ```
+
+  Its box stays the unturned one, as PowerPoint's does: `wid`, `ht`, the
+  edge names and where it goes. What is drawn turns: the slide holds it,
+  `tip at` points the turned callout there, an attached line ends on its
+  turned connection sites, and the overlap warnings follow it. `same as`
+  copies them.
 - Existing classes map onto presets as follows:
 
   | Class | PowerPoint |

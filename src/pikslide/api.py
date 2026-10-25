@@ -40,7 +40,9 @@ class Layout:
         return [{"message": w.message, "objects": list(w.objects)} for w in self._warnings]
 
 
-def layout(doc: ast.Document, template: str | None = None, settings: str | None = None) -> Layout:
+def layout(
+    doc: ast.Document, template: str | None = None, settings: str | None = None, slide_layout: str | None = None
+) -> Layout:
     """Lay out `doc`, from parse(), for a deck made from `template`, a
     .pptx or .potx, as `--template` does (docs/spec.md SS3.8): `fit`
     measures text in its theme's fonts, and its settings file, `settings`
@@ -48,9 +50,16 @@ def layout(doc: ast.Document, template: str | None = None, settings: str | None 
     colors. With no template, the built-in Office theme stands in, which
     is a warning. Raises LayoutError.
 
+    The theme is that of the master the slide's layout belongs to:
+    `slide_layout`, by its name or id, as `--layout` names it, or else the
+    settings file's `layout`. A template whose masters differ in their
+    fonts needs it, for the slide render_into() draws on.
+
     Where the diagram goes is the caller's, so unlike `--template`, a
     diagram bigger than the template slide's content area, or on a
     placeholder it keeps, isn't a warning."""
+    if slide_layout is not None and template is None:
+        raise ValueError("slide_layout names a slide layout of template, so it needs template")
     settings_text = None
     settings_base_dir = "."
     if template is not None or settings is not None:
@@ -61,7 +70,7 @@ def layout(doc: ast.Document, template: str | None = None, settings: str | None 
             settings_base_dir = os.path.dirname(os.path.abspath(settings_path))
     result = resolve_for_pptx(
         doc, base_dir=doc.base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir,
-        template_path=template, own_slide=False,
+        template_path=template, layout_name=slide_layout, own_slide=False,
     )
     warnings = [LayoutWarning(s) for s in result.stand_ins] + result.warnings
     if template is None:

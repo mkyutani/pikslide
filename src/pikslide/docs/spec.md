@@ -377,11 +377,13 @@ shape wedgeRectCallout "Note" fit
   shape bentArrow flipH                        # bends to the left
   ```
 
-  Its box stays the unturned one, as PowerPoint's does: `wid`, `ht`, the
-  edge names and where it goes. What is drawn turns: the slide holds it,
-  `tip at` points the turned callout there, an attached line ends on its
-  turned connection sites, and the overlap warnings follow it. `same as`
-  copies them.
+  `wid` and `ht` size the shape unturned, as PowerPoint's size boxes do.
+  Its box is the one it is drawn in, turned: the edge names, where it goes,
+  `A.wid` and `A.ht`, and `--check`'s place for it (a shape turned 90°
+  has its width and height swapped). `tip at` points a turned callout
+  there, an attached line ends on its turned connection sites, and the
+  overlap warnings follow it. `same as` copies the turn, and the size
+  unturned.
 - Existing classes map onto presets as follows:
 
   | Class | PowerPoint |

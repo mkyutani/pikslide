@@ -33,10 +33,15 @@ def test_only_a_preset_shape_turns(word: str):
         shapes(f"box {word}\n")
 
 
-def test_the_box_stays_the_unturned_one():
-    [arrow] = shapes("A: shape rightArrow wid 1 ht 0.5 rotate 90\n")
-    assert (arrow.w, arrow.h) == (1, 0.5)
-    assert arrow.bbox == pytest.approx((-0.5, -0.25, 0.5, 0.25))
+def test_the_box_is_where_the_turned_shape_is_drawn():
+    # wid and ht size it unturned; its box, edges and A.wid are as drawn.
+    arrow, line = shapes("A: shape rightArrow wid 1 ht 0.5 rotate 90 at (0, 0)\nline from A.s down 0.5\n")
+    assert arrow.drawn == (1, 0.5)
+    assert (arrow.w, arrow.h) == pytest.approx((0.5, 1))
+    assert arrow.bbox == pytest.approx((-0.25, -0.5, 0.25, 0.5))
+    assert line.path[0] == pytest.approx((0, -0.5))  # the arrow's point, turned down
+    [turned] = shapes("shape rect wid 1 ht 1 rotate 45\n")
+    assert (turned.w, turned.h) == pytest.approx((2 ** 0.5, 2 ** 0.5))
 
 
 def test_turn_flips_then_turns_clockwise():
@@ -70,6 +75,9 @@ def test_the_deck_has_the_turn_and_flips(tmp_path: pathlib.Path):
     turned, plain = (s._element.spPr.find(qn("a:xfrm")) for s in Presentation(str(out)).slides[0].shapes)
     assert (turned.get("rot"), turned.get("flipH"), turned.get("flipV")) == (str(270 * 60000), "1", None)
     assert (plain.get("rot"), plain.get("flipH")) == (None, None)
+    # Its own size, unturned, which PowerPoint turns about its center.
+    ext = turned.find(qn("a:ext"))
+    assert (int(ext.get("cx")), int(ext.get("cy"))) == (int(0.75 * 914400), int(0.5 * 914400))
 
 
 def test_the_slide_holds_a_turned_shape(tmp_path: pathlib.Path):

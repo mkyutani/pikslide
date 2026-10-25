@@ -343,8 +343,8 @@ ENTRIES: tuple[Entry, ...] = (
           group="attribute", see=("shape", "rad")),
     Entry(("rotate", "flipH", "flipV"), "turn or mirror a preset shape",
           synopsis=("rotate DEG", "flipH", "flipV"),
-          body="Clockwise about its center, or mirrored in its box, as in PowerPoint. Its box, "
-               "edges and wid/ht stay the unturned shape's.",
+          body="Clockwise about its center, or mirrored in its box, as in PowerPoint. wid and ht "
+               "size it unturned; its edges and A.wid, A.ht are as drawn.",
           example="shape triangle wid 0.3 ht 0.22 rotate -90", group="attribute", see=("shape",)),
 
     # --- positions and references ------------------------------------------

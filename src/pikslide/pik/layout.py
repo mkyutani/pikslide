@@ -376,8 +376,13 @@ class Shape:
     """Where a callout points (`tip at`), as given."""
     rotate: float = 0.0
     """`rotate` (issue #26): degrees clockwise, 0 to 360, that a preset
-    shape is turned about its center; its box (bbox, edges) stays the
-    unturned one, as PowerPoint's does. See turn()."""
+    shape is turned about its center. Its w and h are then the box it is
+    drawn in, which its edges and where it goes follow, and `drawn` its
+    own size. See turn()."""
+    drawn: tuple[float, float] | None = None
+    """A turned shape's own width and height, unturned, as `wid` and `ht`
+    set them and PowerPoint's size boxes show them (drawn_size()); None
+    when it isn't turned."""
     flip_h: bool = False
     flip_v: bool = False
     """`flipH`, `flipV` (issue #26): a preset shape mirrored in its box."""
@@ -1343,17 +1348,24 @@ def preset_of(shape: Shape) -> str | None:
     return _KIND_PRESETS.get(shape.kind)
 
 
+def drawn_size(shape: Shape) -> tuple[float, float]:
+    """`shape`'s own width and height: a turned one's unturned (`drawn`),
+    any other's w and h."""
+    return shape.drawn or (shape.w, shape.h)
+
+
 def _text_area_width(shape: Shape) -> float:
     """The width PowerPoint sets `shape`'s text in: its preset's text
     rectangle (text_area.text_rect()), less `margin` on each side. A
     diamond's rectangle is its middle half, a circle's its inscribed
     square, a parallelogram's leaves out the slanted ends."""
     preset = preset_of(shape)
+    w, h = drawn_size(shape)
     adjust = {}
-    if preset == "roundRect" and shape.rad > 0 and min(shape.w, shape.h) > 0:
+    if preset == "roundRect" and shape.rad > 0 and min(w, h) > 0:
         # As pptx_writer sets it: the corner radius over the shorter side.
-        adjust = {"adj": min(0.5, shape.rad / min(shape.w, shape.h)) * 100000}
-    left, _top, right, _bottom = text_rect(preset, shape.w, shape.h, {**adjust, **shape.adjust})
+        adjust = {"adj": min(0.5, shape.rad / min(w, h)) * 100000}
+    left, _top, right, _bottom = text_rect(preset, w, h, {**adjust, **shape.adjust})
     return right - left - 2 * shape.text_margin
 
 
@@ -1540,15 +1552,16 @@ def _resolve_handles(shape: Shape, ctx: _Ctx) -> None:
     """Turn a laid-out shape's named handles and tip into adjust values,
     warning about a handle longer than the preset draws it. Relative to
     the shape, they stay right when a block moves it."""
+    w, h = drawn_size(shape)
     if shape.handles:
-        for name, handle, length, along in _handle_lengths(shape, shape.w, shape.h):
+        for name, handle, length, along in _handle_lengths(shape, w, h):
             if length > handle.limit * along + 1e-6:
                 ctx.warnings.append(LayoutWarning(
                     f"{shape.name}: {name} {length:.2f} in is longer than {shape.preset} can draw it "
                     f"({handle.limit * along:.2f} in, so it is drawn at that); make it shorter, or the shape bigger",
                     (shape.name,) if shape.name else (),
                 ))
-        shape.adjust.update(_handle_values(shape, shape.w, shape.h))
+        shape.adjust.update(_handle_values(shape, w, h))
     if shape.tip is not None:
         shape.adjust.update(_tip_values(shape, shape.tip))
 
@@ -1558,7 +1571,7 @@ def _tip_values(shape: Shape, tip: tuple[float, float]) -> dict[str, float]:
     (turn())."""
     [tip] = turn(shape, [tip], back=True)
     preset = shape.preset or ""
-    w, h = max(shape.w, 1e-9), max(shape.h, 1e-9)
+    w, h = (max(side, 1e-9) for side in drawn_size(shape))
     if preset in _WEDGE_CALLOUTS:
         return {"adj1": (tip[0] - shape.cx) / w * 100000, "adj2": (shape.cy - tip[1]) / h * 100000}
     # A leader line: from the side facing the tip, at the point nearest
@@ -1598,12 +1611,12 @@ def callout_points(shape: Shape) -> list[tuple[float, float]]:
     if preset not in TIP_CALLOUTS:
         return []
     values = {**dict(ADJUST_VALUES[preset]), **shape.adjust}
+    w, h = drawn_size(shape)
     if preset in _WEDGE_CALLOUTS:
-        return turn(shape, [(shape.cx + values["adj1"] / 100000 * shape.w,
-                             shape.cy - values["adj2"] / 100000 * shape.h)])
-    left, top = shape.cx - shape.w / 2, shape.cy + shape.h / 2
+        return turn(shape, [(shape.cx + values["adj1"] / 100000 * w, shape.cy - values["adj2"] / 100000 * h)])
+    left, top = shape.cx - w / 2, shape.cy + h / 2
     return turn(shape, [
-        (left + values[f"adj{2 * k + 2}"] / 100000 * shape.w, top - values[f"adj{2 * k + 1}"] / 100000 * shape.h)
+        (left + values[f"adj{2 * k + 2}"] / 100000 * w, top - values[f"adj{2 * k + 1}"] / 100000 * h)
         for k in range(TIP_CALLOUTS[preset])
     ])
 
@@ -1890,7 +1903,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         same_from = resolve_object(attr.obj, ctx) if attr.obj is not None else _find_same_class(ctx, shape.kind)
         if same_from is not None:
             if shape.kind not in LINE_LIKE:
-                shape.w, shape.h = same_from.w, same_from.h
+                shape.w, shape.h = drawn_size(same_from)
             shape.rad = same_from.rad
             shape.sw = same_from.sw
             shape.dashed = same_from.dashed
@@ -2127,6 +2140,12 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
             _autosize_text(shape, ctx)
         if shape.texts:
             shape.text_dy, shape.text_split = _text_placement(shape, ctx)
+        if shape.rotate:
+            # The box the turned shape is drawn in (issue #26): its edges,
+            # and where it goes, are where it is drawn.
+            shape.drawn = (shape.w, shape.h)
+            cos, sin = abs(math.cos(math.radians(shape.rotate))), abs(math.sin(math.radians(shape.rotate)))
+            shape.w, shape.h = shape.w * cos + shape.h * sin, shape.w * sin + shape.h * cos
         ofst = shape.offset(with_edge)
         shape.cx = with_pos[0] - ofst[0]
         shape.cy = with_pos[1] - ofst[1]
@@ -2307,9 +2326,10 @@ def _sites(shape: Shape) -> list[tuple[tuple[float, float], tuple[int, int]]]:
     preset = "rect" if shape.kind == "image" else preset_of(shape)
     if preset is None:
         return []
-    left, top = shape.cx - shape.w / 2, shape.cy + shape.h / 2
+    w, h = drawn_size(shape)
+    left, top = shape.cx - w / 2, shape.cy + h / 2
     out = []
-    for x, y, angle in _connection_sites(preset, shape.w, shape.h, shape.adjust):
+    for x, y, angle in _connection_sites(preset, w, h, shape.adjust):
         # Clockwise from the right, y down; turned with the shape (turn()),
         # which a flip mirrors.
         if shape.flip_h:

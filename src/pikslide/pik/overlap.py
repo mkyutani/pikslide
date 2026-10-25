@@ -33,7 +33,7 @@ from __future__ import annotations
 import math
 from typing import Callable
 
-from .layout import LINE_LIKE, LayoutWarning, Shape, line_points, turn
+from .layout import LINE_LIKE, LayoutWarning, Shape, drawn_size, line_points, turn
 
 Point = tuple[float, float]
 Polygon = list[Point]
@@ -204,15 +204,16 @@ class _Convex:
 def _outline(shape: Shape, text: list[_Convex]) -> list[_Convex]:
     if shape.kind == "text" or (shape.kind != "image" and shape.sw < 0 and shape.fill is None):
         return text
-    x0, y0, x1, y1 = shape.bbox
+    # Its own box, which turn() turns as it's drawn.
+    rx, ry = (side / 2 for side in drawn_size(shape))
+    x0, y0, x1, y1 = shape.cx - rx, shape.cy - ry, shape.cx + rx, shape.cy + ry
     if shape.kind in _ELLIPSES or shape.preset in _ELLIPSE_PRESETS:
-        rx, ry = shape.w / 2, shape.h / 2
         polygon = [(shape.cx + rx * math.cos(a), shape.cy + ry * math.sin(a))
                    for a in (2 * math.pi * k / _ELLIPSE_SIDES for k in range(_ELLIPSE_SIDES))]
     elif shape.kind == "diamond" or shape.preset in _DIAMOND_PRESETS:
         polygon = [(shape.cx, y1), (x1, shape.cy), (shape.cx, y0), (x0, shape.cy)]
     else:
-        polygon = _corners(shape.bbox)
+        polygon = _corners((x0, y0, x1, y1))
     return [_Convex(turn(shape, polygon))]
 
 

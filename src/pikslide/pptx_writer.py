@@ -47,6 +47,7 @@ from .pik.layout import (
     assign_text_slots,
     callout_points,
     default_text_sizes,
+    drawn_size,
     flatten_shapes,
     line_points,
     preset_of,
@@ -419,11 +420,13 @@ class _Transform:
             self.margin_x, self.margin_y = origin
 
     def rect(self, shape: Shape) -> tuple[float, float, float, float]:
-        """Return (left, top, width, height) in inches for shape's bbox."""
-        bx0, by0, bx1, by1 = shape.bbox
-        left = (bx0 - self.x0) + self.margin_x
-        top = (self.y1 - by1) + self.margin_y
-        return left, top, bx1 - bx0, by1 - by0
+        """Return (left, top, width, height) in inches for shape's own
+        box: its bbox, or a turned shape's unturned (drawn_size()), which
+        PowerPoint turns about the same center."""
+        w, h = drawn_size(shape)
+        left = (shape.cx - w / 2 - self.x0) + self.margin_x
+        top = (self.y1 - (shape.cy + h / 2)) + self.margin_y
+        return left, top, w, h
 
     def point(self, pt: tuple[float, float]) -> tuple[float, float]:
         return (pt[0] - self.x0) + self.margin_x, (self.y1 - pt[1]) + self.margin_y
@@ -916,9 +919,10 @@ def _text_rects(shape: Shape, metrics: PilFontMetrics) -> list[tuple[float, floa
         return out
     image = shape.kind == "image"
     margin = 0.0 if image else shape.text_margin
+    own_w, _own_h = drawn_size(shape)
     usable = None
     if not shape.fit:
-        usable = shape.w if image else _text_area_width(shape) if shape.kind in _FRAMED_TEXT_KINDS else None
+        usable = own_w if image else _text_area_width(shape) if shape.kind in _FRAMED_TEXT_KINDS else None
     heights = [metrics.line_height(flags, shape.text_sizes) for _text, flags in shape.texts]
     split = 0.0 if image else shape.text_split
     first_below = None
@@ -934,9 +938,9 @@ def _text_rects(shape: Shape, metrics: PilFontMetrics) -> list[tuple[float, floa
         if usable is not None:
             w = min(w, usable)
         if "ljust" in flags and not image:
-            left = shape.cx - shape.w / 2 + margin
+            left = shape.cx - own_w / 2 + margin
         elif "rjust" in flags and not image:
-            left = shape.cx + shape.w / 2 - margin - w
+            left = shape.cx + own_w / 2 - margin - w
         else:
             left = shape.cx - w / 2
         out.append((left, top - h, left + w, top))
@@ -971,22 +975,20 @@ def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
         _apply_color(run.font.color, string_color(shape, i - 1) or Color(rgb=0))
 
 
-def _turned_bbox(shape: Shape) -> tuple[float, float, float, float]:
-    """shape.bbox, or the box round it turned (`rotate`, turn())."""
-    x0, y0, x1, y1 = shape.bbox
-    if not shape.rotate:
-        return x0, y0, x1, y1
+def _turned_rect(shape: Shape, rect: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    """`rect`, in a turned shape's own box, as the box round it drawn
+    turned (turn())."""
+    x0, y0, x1, y1 = rect
     xs, ys = zip(*turn(shape, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]))
     return min(xs), min(ys), max(xs), max(ys)
 
 
 def _drawn_extent(shape: Shape) -> tuple[float, float, float, float]:
-    """Where `shape` is drawn: its bbox, turned with it (_turned_bbox()),
-    and what is drawn outside that: a line's labels -- a line's own bbox
-    is just its path, so a label floating above/below it (see
-    _line_label_rects()) can stick out past it -- and a callout's tip or
-    leader line (callout_points())."""
-    x0, y0, x1, y1 = _turned_bbox(shape)
+    """shape.bbox, expanded to also cover what is drawn outside it: a
+    line's labels -- a line's own bbox is just its path, so a label
+    floating above/below it (see _line_label_rects()) can stick out past
+    it -- and a callout's tip or leader line (callout_points())."""
+    x0, y0, x1, y1 = shape.bbox
     rects = [rect for rect, _text, _flags in _line_label_rects(shape)] if shape.kind in LINE_LIKE else []
     rects += [(x, y, x, y) for x, y in callout_points(shape)]
     for rx0, ry0, rx1, ry1 in rects:
@@ -995,16 +997,15 @@ def _drawn_extent(shape: Shape) -> tuple[float, float, float, float]:
 
 
 def _content_bbox(result: LayoutResult) -> tuple[float, float, float, float]:
-    """result.bbox, but of where each shape is drawn (_drawn_extent()):
-    with a line's labels and a callout's tip, and a turned shape's turned
-    box in place of its own. flatten_shapes(), not result.shapes
+    """result.bbox, expanded to also cover what each shape draws outside
+    its own (_drawn_extent()). flatten_shapes(), not result.shapes
     directly, since a line can be nested inside a block (docs/spec.md
     SS3.1, ext) at any depth."""
-    extents = [_drawn_extent(shape) for shape in flatten_shapes(result.shapes)]
-    if not extents:
-        return result.bbox
-    x0s, y0s, x1s, y1s = zip(*extents)
-    return min(x0s), min(y0s), max(x1s), max(y1s)
+    x0, y0, x1, y1 = result.bbox
+    for shape in flatten_shapes(result.shapes):
+        sx0, sy0, sx1, sy1 = _drawn_extent(shape)
+        x0, y0, x1, y1 = min(x0, sx0), min(y0, sy0), max(x1, sx1), max(y1, sy1)
+    return x0, y0, x1, y1
 
 
 # ---------------------------------------------------------------------------
@@ -1277,8 +1278,9 @@ def _on_kept_placeholders(
         elif shape.kind == "text" or (shape.kind != "image" and shape.sw < 0 and shape.fill is None):
             outline = []
         else:
-            outline = [_turned_bbox(shape)]
-        rects = [(*tf.point((x0, y1)), *tf.point((x1, y0))) for x0, y0, x1, y1 in outline + _text_rects(shape, metrics)]
+            outline = [shape.bbox]
+        texts = [_turned_rect(shape, rect) for rect in _text_rects(shape, metrics)]
+        rects = [(*tf.point((x0, y1)), *tf.point((x1, y0))) for x0, y0, x1, y1 in outline + texts]
         drawn.append((shape.name or "", rects))
     warnings = []
     for placeholder in layout.iter_cloneable_placeholders():

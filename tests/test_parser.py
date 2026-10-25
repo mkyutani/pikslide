@@ -362,7 +362,7 @@ def test_macro_invocation_requires_adjacent_parens():
     # A space before '(' means "invoke with no args": arguments are only
     # parsed from text immediately following the macro name token, so "(...)" with a preceding space is left as
     # ordinary tokens rather than being consumed as the argument list.
-    tokens, _ = expand_macros("define one { box } one (ignored)\n")
+    tokens, _, _ = expand_macros("define one { box } one (ignored)\n")
     kinds = [t.type for t in tokens]
     assert kinds == [
         TokType.CLASSNAME,  # 'box', from expanding 'one'
@@ -403,9 +403,52 @@ def test_recursive_macro_raises():
 def test_string_literal_dollar_is_not_substituted():
     # A STRING token is opaque to macro expansion,
     # so "$1" typed inside quotes is never substituted.
-    tokens, _ = expand_macros('define m { box "$1" }\nm(hello)\n')
+    tokens, _, _ = expand_macros('define m { box "$1" }\nm(hello)\n')
     doc = Parser(tokens).parse_document()
     assert doc.statements[0].attributes[0].text == "$1"
+
+
+# ---------------------------------------------------------------------------
+# A macro is pasted in as text, as in pikchr (issue #28): a warning when an
+# operator next to it takes only part of an argument, or of a body.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "warning"),
+    [
+        ("define row { 5 - $1 }\nbox at (0, row(1 + 1))\n",
+         "line 2: row(1 + 1): the '-' before $1 in row's body takes only part of 1 + 1, "
+         "pasted in as text; write ($1) there"),
+        ("define twice { $1 * 2 }\nbox ht twice(A.ht + 0.1)\n",
+         "line 2: twice(A.ht + 0.1): the '*' after $1 in twice's body takes only part of A.ht + 0.1, "
+         "pasted in as text; write ($1) there"),
+        ("define half { 6 / $1 }\nbox ht half(2 * 3)\n", "the '/' before $1 in half's body"),
+        ("define neg { -$1 }\nbox ht neg(1 + 1)\n", "the '-' before $1 in neg's body"),
+        ("define gap { 0.5 + 0.5 }\nbox ht 5 - gap\n",
+         "line 2: the '-' before gap takes only part of its body, 0.5 + 0.5, pasted in as text; "
+         "put the body in parentheses"),
+    ],
+)
+def test_an_operator_that_takes_part_of_a_pasted_expression_warns(text: str, warning: str):
+    [message] = parse(text).warnings
+    assert warning in message
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "define row { 5 - ($1) }\nbox at (0, row(1 + 1))\n",
+        "define row { 5 + $1 - 1 }\nbox at (0, row(1 - 1))\n",
+        "define twice { 2 * $1 }\nbox ht twice(3 / 4)\n",
+        "define neg { -$1 }\nbox ht neg(2 * 3)\n",
+        "define at2 { at ($1, -$2) }\nbox at2(1, -1)\n",
+        "define gap { (0.5 + 0.5) }\nbox ht 5 - gap\n",
+        'define card { box $1 fill accent1 fit }\ncard("Web")\n',
+    ],
+)
+def test_an_expression_that_means_what_it_reads_as_does_not_warn(text: str):
+    assert parse(text).warnings == []
 
 
 # ---------------------------------------------------------------------------

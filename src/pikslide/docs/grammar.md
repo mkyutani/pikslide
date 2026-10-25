@@ -107,6 +107,13 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
   Substitution doesn't reach inside `STRING` tokens: an already-tokenized
   string is opaque to macro expansion, so `$1` written inside a quoted
   string stays literal text, not a substitution.
+- An argument is pasted in as text, not evaluated first, and so is the
+  body, as in pikchr: with `define row { 5 - $1 }`, `row(1 + 1)` is
+  `5 - 1 + 1`, which is 5. Write `($1)` in the body, and an expression
+  body in parentheses. An operator beside `$N`, or beside a call, that
+  takes only part of the expression pasted there is a **warning** naming
+  the call, since a diagram may be written by an LLM, and the misplaced
+  object it makes says nothing of the macro.
 - The body replaces the call without its leading and trailing newlines
   (or `;`), so it joins the call's own statement however it's laid out:
   `P: pair` labels the first statement of `pair`, even when the body

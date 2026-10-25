@@ -513,3 +513,5 @@ class Document:
 
     statements: list[Statement] = field(default_factory=list)
     macros: list[MacroDefinition] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    """What the macro pass warned about, for the layout's warnings."""

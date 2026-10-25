@@ -377,7 +377,8 @@ ENTRIES: tuple[Entry, ...] = (
     # --- statements -----------------------------------------------------
     Entry(("define",), "defines a macro", synopsis=("define NAME { BODY }", "NAME(ARG, ...)"),
           body="Defines a macro; `$1` ... `$9` in BODY are its arguments. The name must "
-               "start with a lowercase letter and not already be a variable.",
+               "start with a lowercase letter and not already be a variable. An argument is "
+               "pasted in as text: `5 - $1` with `1 + 1` is `5 - 1 + 1`, so write `($1)`.",
           example='define card { box $1 fill accent1 fit }\ncard("Web")'),
     Entry(("include",), "reads definitions from another file", synopsis=('include "PATH"',),
           body="Reads variables and macros from PATH (relative to the file, or a "

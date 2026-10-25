@@ -572,6 +572,13 @@ def test_a_callout_that_doesnt_show_warns():
     assert warnings('shape borderCallout1 "note"\n') == []
 
 
+def test_the_macro_pass_warnings_are_the_layouts_too():
+    # Issue #28: the macro pass knows the call, not the object it makes.
+    [w] = resolve_layout(parse("define row { 5 - $1 }\nbox at (0, row(1 + 1))\n")).warnings
+    assert w.message.startswith("line 2: row(1 + 1): the '-' before $1")
+    assert w.objects == ()
+
+
 def test_text_area_is_the_preset_text_rectangle():
     # issue #12: what PowerPoint wraps the text in, less `margin` each side.
     class FixedMetrics:

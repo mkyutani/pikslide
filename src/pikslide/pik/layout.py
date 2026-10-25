@@ -2440,6 +2440,7 @@ def resolve_layout(
     `margin`/`vmargin`), assigned after the prelude and before the
     settings file."""
     ctx = _Ctx(metrics, image_metrics, base_dir, settings_text, settings_base_dir, template_defaults)
+    ctx.warnings.extend(LayoutWarning(message) for message in doc.warnings)
     shapes, _direction, _bbox = _layout_statements(doc.statements, DIR_RIGHT, ctx)
     flat = flatten_shapes(shapes)
     _attach_lines(flat, ctx)

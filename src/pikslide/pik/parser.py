@@ -887,7 +887,8 @@ def parse(text: str, base_dir: str = ".", include_paths: list[str] | None = None
     `base_dir` is the source file's own directory (docs/spec.md SS3.6): an
     `include "path"` resolves against it first, then against each of
     `include_paths` in order (ext, for a future `--include-path`)."""
-    tokens, macros = expand_macros(text, base_dir, include_paths)
+    tokens, macros, warnings = expand_macros(text, base_dir, include_paths)
     doc = Parser(tokens).parse_document()
     doc.macros = macros
+    doc.warnings = warnings
     return doc

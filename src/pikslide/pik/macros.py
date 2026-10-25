@@ -154,22 +154,26 @@ class _Macro:
 class _State:
     macros: dict[str, _Macro] = field(default_factory=dict)
     out: list[Token] = field(default_factory=list)
+    texts: dict[str | None, str] = field(default_factory=dict)
+    """Each file's text, by Token.file, to quote a call from."""
+    warnings: list[str] = field(default_factory=list)
 
 
 def expand_macros(
     text: str, base_dir: str = ".", include_paths: list[str] | None = None
-) -> tuple[list[Token], list[MacroDefinition]]:
+) -> tuple[list[Token], list[MacroDefinition], list[str]]:
     """Tokenize ``text`` and expand all macro invocations and `include`
     statements (ext; docs/spec.md SS3.6). `base_dir` is the source file's
     own directory, against which an `include "path"` resolves first;
     `include_paths` (ext, for a future `--include-path`) are tried next,
-    in order, if it isn't found there."""
+    in order, if it isn't found there. Also returns the warnings about
+    calls an operator takes part of (_binding_warnings())."""
     tokens = Lexer(text).tokenize()
-    state = _State()
+    state = _State(texts={None: text})
     _expand(tokens, 0, len(tokens), None, state, depth=0,
             current_dir=base_dir, include_paths=include_paths or [], include_stack=())
     defs = [MacroDefinition(m.name, m.body) for m in state.macros.values()]
-    return state.out, defs
+    return state.out, defs, state.warnings
 
 
 def _expand(
@@ -216,6 +220,7 @@ def _expand(
                     f"cannot read included file: {e}", path_tok.line, raw_path, pos=path_tok.pos, file=path_tok.file
                 ) from e
             included_tokens = Lexer(included_text, file=resolved).tokenize()
+            state.texts[resolved] = included_text
             out_start = len(state.out)
             _expand(
                 included_tokens, 0, len(included_tokens), None, state, depth + 1,
@@ -271,6 +276,8 @@ def _expand(
             mac.in_use = True
             try:
                 body_tokens = mac.tokens()
+                _binding_warnings(tokens[i - 1] if i > start else None, tokens[i:j],
+                                  tokens[j] if j < end else None, body_tokens, args, state)
                 _expand(body_tokens, 0, len(body_tokens), args, state, depth + 1,
                         current_dir, include_paths, include_stack)
             finally:
@@ -282,6 +289,86 @@ def _expand(
         if len(state.out) > TOKEN_LIMIT:
             raise PikSyntaxError("script is too complex", tok.line, pos=tok.pos, file=tok.file)
         i += 1
+
+
+# A `+` or `-` after one of these, or first, is unary.
+_BEFORE_UNARY = {
+    TokType.PLUS, TokType.MINUS, TokType.STAR, TokType.SLASH,
+    TokType.LP, TokType.LB, TokType.COMMA, TokType.ASSIGN,
+}
+
+
+def _operators(tokens: list[Token]) -> set[TokType]:
+    """The binary arithmetic operators in `tokens`, outside parentheses
+    and brackets."""
+    found = set()
+    depth = 0
+    for k, t in enumerate(tokens):
+        if t.type in (TokType.LP, TokType.LB):
+            depth += 1
+        elif t.type in (TokType.RP, TokType.RB):
+            depth -= 1
+        elif depth == 0 and t.type in (TokType.STAR, TokType.SLASH):
+            found.add(t.type)
+        elif depth == 0 and t.type in (TokType.PLUS, TokType.MINUS):
+            if k > 0 and tokens[k - 1].type not in _BEFORE_UNARY:
+                found.add(t.type)
+    return found
+
+
+def _taker(before: Token | None, pasted: list[Token], after: Token | None) -> str | None:
+    """The operator next to `pasted` that takes only part of it, `pasted`
+    being an expression the macro pass puts between `before` and `after`
+    as text: a `-` or `*` before a sum (`5 - $1` with `1 + 1` is
+    `5 - 1 + 1`), a `*` or `/` after one, a `/` before any. As "'-'
+    before"; None when there is none."""
+    found = _operators(pasted)
+    if not found:
+        return None
+    sum_ = bool(found & {TokType.PLUS, TokType.MINUS})
+    if before is not None and (before.type == TokType.SLASH or (before.type in (TokType.MINUS, TokType.STAR) and sum_)):
+        return f"'{before.text}' before"
+    if after is not None and after.type in (TokType.STAR, TokType.SLASH) and sum_:
+        return f"'{after.text}' after"
+    return None
+
+
+def _quote(tokens: list[Token], state: _State) -> str:
+    """`tokens` (a run of them, in one file) as written."""
+    text = state.texts.get(tokens[0].file)
+    if text is None:
+        return " ".join(t.text for t in tokens)
+    return text[tokens[0].pos : tokens[-1].pos + len(tokens[-1].text)]
+
+
+def _binding_warnings(
+    before: Token | None,
+    call: list[Token],
+    after: Token | None,
+    body: list[Token],
+    args: list[list[Token]] | None,
+    state: _State,
+) -> None:
+    """Warn about a call that the macro pass, pasting text, makes mean
+    something other than it reads as (issue #28): an argument that an
+    operator beside its `$N` in `body` takes only part of, or a body
+    that an operator beside `call` does. pikchr pastes text too, so
+    this stays; `($1)` in the body, or the body in parentheses, is the
+    way out."""
+    where = f"line {call[0].line}" + (f" of {call[0].file}" if call[0].file else "")
+    found = []
+    for k, t in enumerate(body):
+        if t.type == TokType.PARAMETER and args is not None and t.code < len(args) and args[t.code]:
+            taker = _taker(body[k - 1] if k > 0 else None, args[t.code], body[k + 1] if k + 1 < len(body) else None)
+            if taker:
+                found.append(f"{where}: {_quote(call, state)}: the {taker} {t.text} in {call[0].text}'s body "
+                             f"takes only part of {_quote(args[t.code], state)}, pasted in as text; "
+                             f"write ({t.text}) there")
+    taker = _taker(before, body, after) if body else None
+    if taker:
+        found.append(f"{where}: the {taker} {_quote(call, state)} takes only part of its body, "
+                     f"{_quote(body, state)}, pasted in as text; put the body in parentheses")
+    state.warnings.extend(w for w in found if w not in state.warnings)
 
 
 def _parse_macro_args(

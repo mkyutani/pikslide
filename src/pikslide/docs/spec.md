@@ -712,6 +712,9 @@ Humans and LLMs both need errors they can act on.
   a fixed-size object stays a warning: it is a fact about the diagram,
   visible in the output itself.
 - A `define` naming an already-defined variable is an **error** (§3.6).
+- An operator that takes only part of a macro's argument or body, pasted
+  in as text (`5 - $1` with `1 + 1`), is a **warning** naming the call;
+  see [grammar.md](grammar.md), *Macros*.
 - `--check` lays the source out without writing anything and prints the
   result as JSON, for an LLM or a tool to read: the errors; the warnings,
   each a `message` and the `objects` it names, by the names in the object

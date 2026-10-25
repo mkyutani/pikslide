@@ -479,6 +479,13 @@ class Parser:
             self.expect(TokType.AT)
             return ast.Tip(self.parse_position())
 
+        if tt == TokType.ROTATE:
+            self.advance()
+            return ast.Rotate(self.parse_expr())
+
+        if tt == TokType.FLIP:
+            return ast.Flip(self.advance().code)
+
         if tt == TokType.ATTACH:
             self.advance()
             return ast.Attach()

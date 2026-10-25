@@ -374,6 +374,13 @@ class Shape:
     given: its value, and whether that is a percentage."""
     tip: tuple[float, float] | None = field(default=None, compare=False, repr=False)
     """Where a callout points (`tip at`), as given."""
+    rotate: float = 0.0
+    """`rotate` (issue #26): degrees clockwise, 0 to 360, that a preset
+    shape is turned about its center; its box (bbox, edges) stays the
+    unturned one, as PowerPoint's does. See turn()."""
+    flip_h: bool = False
+    flip_v: bool = False
+    """`flipH`, `flipV` (issue #26): a preset shape mirrored in its box."""
     image_path: str | None = None
     """Resolved (absolute) path to the picture file, when `kind == "image"`
     (docs/spec.md SS3.5)."""
@@ -1547,7 +1554,9 @@ def _resolve_handles(shape: Shape, ctx: _Ctx) -> None:
 
 
 def _tip_values(shape: Shape, tip: tuple[float, float]) -> dict[str, float]:
-    """The adjust values that point a callout at `tip`."""
+    """The adjust values that point a callout at `tip`, a turned one too
+    (turn())."""
+    [tip] = turn(shape, [tip], back=True)
     preset = shape.preset or ""
     w, h = max(shape.w, 1e-9), max(shape.h, 1e-9)
     if preset in _WEDGE_CALLOUTS:
@@ -1590,12 +1599,36 @@ def callout_points(shape: Shape) -> list[tuple[float, float]]:
         return []
     values = {**dict(ADJUST_VALUES[preset]), **shape.adjust}
     if preset in _WEDGE_CALLOUTS:
-        return [(shape.cx + values["adj1"] / 100000 * shape.w, shape.cy - values["adj2"] / 100000 * shape.h)]
+        return turn(shape, [(shape.cx + values["adj1"] / 100000 * shape.w,
+                             shape.cy - values["adj2"] / 100000 * shape.h)])
     left, top = shape.cx - shape.w / 2, shape.cy + shape.h / 2
-    return [
+    return turn(shape, [
         (left + values[f"adj{2 * k + 2}"] / 100000 * shape.w, top - values[f"adj{2 * k + 1}"] / 100000 * shape.h)
         for k in range(TIP_CALLOUTS[preset])
-    ]
+    ])
+
+
+def turn(shape: Shape, points: list[tuple[float, float]], back: bool = False) -> list[tuple[float, float]]:
+    """Where `points`, in the box of a preset shape turned or flipped
+    (issue #26), are drawn: mirrored in the box, then turned clockwise
+    about its center, as PowerPoint draws it (checked). `back`, the other
+    way: where in the box a point drawn there is."""
+    if not (shape.rotate or shape.flip_h or shape.flip_v):
+        return points
+    angle = math.radians(shape.rotate)
+    cos, sin = math.cos(angle), math.sin(angle)
+    fx, fy = (-1 if shape.flip_h else 1), (-1 if shape.flip_v else 1)
+    out = []
+    for x, y in points:
+        dx, dy = x - shape.cx, y - shape.cy
+        if back:
+            dx, dy = dx * cos - dy * sin, dx * sin + dy * cos
+            dx, dy = dx * fx, dy * fy
+        else:
+            dx, dy = dx * fx, dy * fy
+            dx, dy = dx * cos + dy * sin, dy * cos - dx * sin
+        out.append((shape.cx + dx, shape.cy + dy))
+    return out
 
 
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
@@ -1835,6 +1868,15 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
             raise LayoutError(f"'tip' is only valid on a callout with a tip or a leader line "
                               f"(wedgeRectCallout, callout1, ...), not {preset}")
         shape.tip = eval_position(attr.position, ctx)
+    elif isinstance(attr, ast.Rotate):
+        _handled_preset(shape, "rotate")
+        shape.rotate = _as_number(eval_expr(attr.degrees, ctx)) % 360
+    elif isinstance(attr, ast.Flip):
+        _handled_preset(shape, f"flip{attr.axis.upper()}")
+        if attr.axis == "h":
+            shape.flip_h = True
+        else:
+            shape.flip_v = True
     elif isinstance(attr, ast.At):
         build.at = eval_position(attr.position, ctx)
         build.with_edge = C
@@ -1859,6 +1901,8 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
             shape.cw = same_from.cw
             if same_from.preset == shape.preset:
                 shape.adjust = dict(same_from.adjust)
+            if shape.kind == "shape":
+                shape.rotate, shape.flip_h, shape.flip_v = same_from.rotate, same_from.flip_h, same_from.flip_v
             shape.larrow = same_from.larrow
             shape.rarrow = same_from.rarrow
             shape.closed = same_from.closed
@@ -2266,8 +2310,15 @@ def _sites(shape: Shape) -> list[tuple[tuple[float, float], tuple[int, int]]]:
     left, top = shape.cx - shape.w / 2, shape.cy + shape.h / 2
     out = []
     for x, y, angle in _connection_sites(preset, shape.w, shape.h, shape.adjust):
-        quarter = round(angle / 90) % 4  # clockwise from the right, y down
-        out.append(((left + x, top - y), ((1, 0), (0, -1), (-1, 0), (0, 1))[quarter]))
+        # Clockwise from the right, y down; turned with the shape (turn()),
+        # which a flip mirrors.
+        if shape.flip_h:
+            angle = 180 - angle
+        if shape.flip_v:
+            angle = -angle
+        quarter = round((angle + shape.rotate) / 90) % 4
+        [site] = turn(shape, [(left + x, top - y)])
+        out.append((site, ((1, 0), (0, -1), (-1, 0), (0, 1))[quarter]))
     return out
 
 

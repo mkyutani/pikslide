@@ -341,6 +341,11 @@ ENTRIES: tuple[Entry, ...] = (
           example='shape rightArrow "Next" adjust head.length 0.15\n'
                   'shape wedgeRectCallout "Slow" tip at B.ne',
           group="attribute", see=("shape", "rad")),
+    Entry(("rotate", "flipH", "flipV"), "turn or mirror a preset shape",
+          synopsis=("rotate DEG", "flipH", "flipV"),
+          body="Clockwise about its center, or mirrored in its box, as in PowerPoint. Its box, "
+               "edges and wid/ht stay the unturned shape's.",
+          example="shape triangle wid 0.3 ht 0.22 rotate -90", group="attribute", see=("shape",)),
 
     # --- positions and references ------------------------------------------
     Entry(("edges", "n", "north", "ne", "e", "east", "se", "s", "south", "sw", "w", "west", "nw",

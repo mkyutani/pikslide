@@ -383,6 +383,22 @@ class Tip(Attribute):
 
 
 @dataclass
+class Rotate(Attribute):
+    """``rotate DEGREES`` (ext, issue #26): turns a preset shape clockwise
+    about its center, as PowerPoint's rotation does."""
+
+    degrees: Expr
+
+
+@dataclass
+class Flip(Attribute):
+    """``flipH`` / ``flipV`` (ext, issue #26): mirrors a preset shape left
+    to right ("h") or top to bottom ("v") in its box."""
+
+    axis: str
+
+
+@dataclass
 class Attach(Attribute):
     """``attach`` (ext, issue #18): a line's ends attach to the objects
     they lie on, so that it is written as a connector."""

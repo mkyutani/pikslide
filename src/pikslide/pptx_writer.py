@@ -54,6 +54,7 @@ from .pik.layout import (
     resolve_layout,
     slot_step,
     string_color,
+    turn,
 )
 from .pik.overlap import TOLERANCE, find_overlaps
 from .pik.preset_text_rects import ADJUST_VALUES
@@ -662,6 +663,11 @@ def _add_block_shape(container, shape: Shape, tf: _Transform):
         pptx_shape.adjustments[0] = min(0.5, shape.rad / min(w, h))
     if shape.adjust:
         _set_adjust_values(pptx_shape, shape)
+    if shape.rotate:
+        pptx_shape.rotation = shape.rotate
+    for flip, flipped in (("flipH", shape.flip_h), ("flipV", shape.flip_v)):
+        if flipped:
+            pptx_shape._element.spPr.get_or_add_xfrm().set(flip, "1")
 
     if shape.kind == "text":
         pptx_shape.fill.background()
@@ -965,12 +971,22 @@ def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
         _apply_color(run.font.color, string_color(shape, i - 1) or Color(rgb=0))
 
 
-def _drawn_extent(shape: Shape) -> tuple[float, float, float, float]:
-    """shape.bbox, expanded to also cover what is drawn outside it: a
-    line's labels -- a line's own bbox is just its path, so a label
-    floating above/below it (see _line_label_rects()) can stick out past
-    it -- and a callout's tip or leader line (callout_points())."""
+def _turned_bbox(shape: Shape) -> tuple[float, float, float, float]:
+    """shape.bbox, or the box round it turned (`rotate`, turn())."""
     x0, y0, x1, y1 = shape.bbox
+    if not shape.rotate:
+        return x0, y0, x1, y1
+    xs, ys = zip(*turn(shape, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]))
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _drawn_extent(shape: Shape) -> tuple[float, float, float, float]:
+    """Where `shape` is drawn: its bbox, turned with it (_turned_bbox()),
+    and what is drawn outside that: a line's labels -- a line's own bbox
+    is just its path, so a label floating above/below it (see
+    _line_label_rects()) can stick out past it -- and a callout's tip or
+    leader line (callout_points())."""
+    x0, y0, x1, y1 = _turned_bbox(shape)
     rects = [rect for rect, _text, _flags in _line_label_rects(shape)] if shape.kind in LINE_LIKE else []
     rects += [(x, y, x, y) for x, y in callout_points(shape)]
     for rx0, ry0, rx1, ry1 in rects:
@@ -979,15 +995,16 @@ def _drawn_extent(shape: Shape) -> tuple[float, float, float, float]:
 
 
 def _content_bbox(result: LayoutResult) -> tuple[float, float, float, float]:
-    """result.bbox, expanded to also cover what each shape draws outside
-    its own (_drawn_extent()). flatten_shapes(), not result.shapes
+    """result.bbox, but of where each shape is drawn (_drawn_extent()):
+    with a line's labels and a callout's tip, and a turned shape's turned
+    box in place of its own. flatten_shapes(), not result.shapes
     directly, since a line can be nested inside a block (docs/spec.md
     SS3.1, ext) at any depth."""
-    x0, y0, x1, y1 = result.bbox
-    for shape in flatten_shapes(result.shapes):
-        sx0, sy0, sx1, sy1 = _drawn_extent(shape)
-        x0, y0, x1, y1 = min(x0, sx0), min(y0, sy0), max(x1, sx1), max(y1, sy1)
-    return x0, y0, x1, y1
+    extents = [_drawn_extent(shape) for shape in flatten_shapes(result.shapes)]
+    if not extents:
+        return result.bbox
+    x0s, y0s, x1s, y1s = zip(*extents)
+    return min(x0s), min(y0s), max(x1s), max(y1s)
 
 
 # ---------------------------------------------------------------------------
@@ -1260,7 +1277,7 @@ def _on_kept_placeholders(
         elif shape.kind == "text" or (shape.kind != "image" and shape.sw < 0 and shape.fill is None):
             outline = []
         else:
-            outline = [shape.bbox]
+            outline = [_turned_bbox(shape)]
         rects = [(*tf.point((x0, y1)), *tf.point((x1, y0))) for x0, y0, x1, y1 in outline + _text_rects(shape, metrics)]
         drawn.append((shape.name or "", rects))
     warnings = []

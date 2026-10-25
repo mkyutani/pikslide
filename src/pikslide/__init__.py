@@ -5,7 +5,7 @@ import sys
 from importlib.metadata import version
 
 from .pik import PikSyntaxError, dump, format_syntax_error, parse
-from .pik.layout import LayoutError, LayoutWarning, flatten_shapes
+from .pik.layout import LayoutError, LayoutWarning, callout_points, flatten_shapes
 from .pik.tokens import column_at
 from .pptx_writer import find_settings_file, resolve_for_pptx, slide_frame, write_pptx, write_pptx_from_template
 from .help import hint as help_hint
@@ -239,7 +239,8 @@ def _succeed_check(warnings: list[LayoutWarning], slide: dict, shapes: list) -> 
 def _geometry(shape) -> dict:
     """Where `shape` went, as the source itself would measure it: x, y,
     wid and ht as `A.x`, `A.y`, `A.wid` and `A.ht` give them (inches, y
-    up), or for a line the points it passes through."""
+    up), and a callout's tip, which is often outside them (issue #30); or
+    for a line the points it passes through."""
     kind = f"shape {shape.preset}" if shape.kind == "shape" else shape.kind
     obj: dict = {"name": shape.name, "kind": kind}
     if shape.texts:
@@ -251,6 +252,9 @@ def _geometry(shape) -> dict:
             obj["attached"] = attached
     else:
         obj.update(x=round(shape.cx, 2), y=round(shape.cy, 2), wid=round(shape.w, 2), ht=round(shape.h, 2))
+        points = callout_points(shape)
+        if points:
+            obj["tip"] = [round(points[-1][0], 2), round(points[-1][1], 2)]
     return obj
 
 

@@ -45,6 +45,7 @@ from .pik.layout import (
     _text_size_name,
     arc_control_point,
     assign_text_slots,
+    callout_points,
     default_text_sizes,
     flatten_shapes,
     line_points,
@@ -964,19 +965,28 @@ def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
         _apply_color(run.font.color, string_color(shape, i - 1) or Color(rgb=0))
 
 
+def _drawn_extent(shape: Shape) -> tuple[float, float, float, float]:
+    """shape.bbox, expanded to also cover what is drawn outside it: a
+    line's labels -- a line's own bbox is just its path, so a label
+    floating above/below it (see _line_label_rects()) can stick out past
+    it -- and a callout's tip or leader line (callout_points())."""
+    x0, y0, x1, y1 = shape.bbox
+    rects = [rect for rect, _text, _flags in _line_label_rects(shape)] if shape.kind in LINE_LIKE else []
+    rects += [(x, y, x, y) for x, y in callout_points(shape)]
+    for rx0, ry0, rx1, ry1 in rects:
+        x0, y0, x1, y1 = min(x0, rx0), min(y0, ry0), max(x1, rx1), max(y1, ry1)
+    return x0, y0, x1, y1
+
+
 def _content_bbox(result: LayoutResult) -> tuple[float, float, float, float]:
-    """result.bbox, expanded to also cover line labels -- a line's own
-    bbox is just its path, so a label floating above/below it (see
-    _line_label_rects()) can stick out past result.bbox on its own.
-    flatten_shapes(), not result.shapes directly, since a line can be
-    nested inside a block (docs/spec.md SS3.1, ext) at any depth."""
+    """result.bbox, expanded to also cover what each shape draws outside
+    its own (_drawn_extent()). flatten_shapes(), not result.shapes
+    directly, since a line can be nested inside a block (docs/spec.md
+    SS3.1, ext) at any depth."""
     x0, y0, x1, y1 = result.bbox
     for shape in flatten_shapes(result.shapes):
-        if shape.kind not in ("line", "arrow", "spline", "arc"):
-            continue
-        for (lx0, ly0, lx1, ly1), _text, _flags in _line_label_rects(shape):
-            x0, y0 = min(x0, lx0), min(y0, ly0)
-            x1, y1 = max(x1, lx1), max(y1, ly1)
+        sx0, sy0, sx1, sy1 = _drawn_extent(shape)
+        x0, y0, x1, y1 = min(x0, sx0), min(y0, sy0), max(x1, sx1), max(y1, sy1)
     return x0, y0, x1, y1
 
 
@@ -1209,7 +1219,7 @@ def _content_area_overflow(prs: Presentation, layout, result: LayoutResult) -> l
     """A warning, if the diagram is wider or taller than the content area
     it goes in: it is never scaled to fit (docs/spec.md SS4), so it runs
     past it, to the right and down. It names the objects that do, a
-    line's labels counting as part of it."""
+    line's labels and a callout's tip counting as part of it."""
     (_left, _top, area_w, area_h), what = _content_area(prs, layout)
     x0, y0, x1, y1 = _content_bbox(result)
     w, h = x1 - x0, y1 - y0
@@ -1217,10 +1227,7 @@ def _content_area_overflow(prs: Presentation, layout, result: LayoutResult) -> l
         return []
     past = []
     for shape in flatten_shapes(result.shapes):
-        sx0, sy0, sx1, sy1 = shape.bbox
-        labels = _line_label_rects(shape) if shape.kind in LINE_LIKE else []
-        for (lx0, ly0, lx1, ly1), _text, _flags in labels:
-            sx0, sy0, sx1, sy1 = min(sx0, lx0), min(sy0, ly0), max(sx1, lx1), max(sy1, ly1)
+        _sx0, sy0, sx1, _sy1 = _drawn_extent(shape)
         if sx1 - x0 > area_w + 1e-6 or y1 - sy0 > area_h + 1e-6:
             past.append(shape.name or "")
     return [LayoutWarning(

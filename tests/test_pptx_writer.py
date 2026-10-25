@@ -775,6 +775,15 @@ def test_diagram_bigger_than_the_content_area_is_a_warning(tmp_path: pathlib.Pat
     assert w.objects == ("box 1",)
 
 
+def test_a_callouts_tip_past_the_content_area_is_a_warning(tmp_path: pathlib.Path):
+    # Issue #30: the box fits, its tip doesn't.
+    tmpl = _template_deck(tmp_path)
+    [w] = resolve_for_pptx(parse("C: shape wedgeRectCallout wid 1 ht 1 at (0, 0) tip at (9, 0)\n"),
+                           template_path=str(tmpl)).warnings
+    assert w.message.startswith("the diagram (9.50 x 1.00 in) is bigger than")
+    assert w.objects == ("C",)
+
+
 def test_template_uses_title_and_content_by_default(tmp_path: pathlib.Path):
     # The first layout with exactly one placeholder besides its title,
     # subtitle, date, footer and slide number: not Title Slide (a title and

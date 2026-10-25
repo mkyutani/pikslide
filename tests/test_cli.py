@@ -271,6 +271,14 @@ def test_check_reports_where_each_object_went(monkeypatch, capsys, tmp_path):
                      "points": [[1.38, 2.0], [2.38, 2.0], [2.38, 3.0]]}
 
 
+def test_check_reports_a_callouts_tip(monkeypatch, capsys, tmp_path):
+    # Issue #30: often outside x, y, wid and ht.
+    src = _write(tmp_path, "d.pik", 'C: shape wedgeRectCallout "note" at (0, 0) tip at (1.5, -1)\n')
+    _run(monkeypatch, [str(src), "--check"])
+    [callout] = json.loads(capsys.readouterr().out)["objects"]
+    assert callout["tip"] == [1.5, -1.0]
+
+
 def test_check_names_a_preset_and_leaves_out_what_isnt_drawn(monkeypatch, capsys, tmp_path):
     src = _write(tmp_path, "d.pik", "P: (0, 0)\nmove\nshape chevron\n")
     _run(monkeypatch, [str(src), "--check"])

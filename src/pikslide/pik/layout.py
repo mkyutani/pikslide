@@ -1580,6 +1580,24 @@ def _tip_values(shape: Shape, tip: tuple[float, float]) -> dict[str, float]:
     return values
 
 
+def callout_points(shape: Shape) -> list[tuple[float, float]]:
+    """Where a callout's tip, or the points of its leader line, are drawn
+    (inches, y up), the tip last, from its adjust values or else the
+    preset's defaults: often outside its box, which its bbox is (issue
+    #30). Empty for any other shape."""
+    preset = shape.preset or ""
+    if preset not in TIP_CALLOUTS:
+        return []
+    values = {**dict(ADJUST_VALUES[preset]), **shape.adjust}
+    if preset in _WEDGE_CALLOUTS:
+        return [(shape.cx + values["adj1"] / 100000 * shape.w, shape.cy - values["adj2"] / 100000 * shape.h)]
+    left, top = shape.cx - shape.w / 2, shape.cy + shape.h / 2
+    return [
+        (left + values[f"adj{2 * k + 2}"] / 100000 * shape.w, top - values[f"adj{2 * k + 1}"] / 100000 * shape.h)
+        for k in range(TIP_CALLOUTS[preset])
+    ]
+
+
 def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     """Size a "fit" object to its text using ctx.metrics: the pptx
     backend's PilFontMetrics measures actual glyph widths; only the fallback _ApproxMetrics estimates from flat constants.

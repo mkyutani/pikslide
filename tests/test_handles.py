@@ -10,7 +10,7 @@ import pytest
 from pptx import Presentation
 
 from pikslide.pik import ast, parse
-from pikslide.pik.layout import LayoutError, flatten_shapes, resolve_layout
+from pikslide.pik.layout import LayoutError, callout_points, flatten_shapes, resolve_layout
 from pikslide.pik.text_area import text_rect
 from pikslide.pptx_writer import resolve_for_pptx, write_pptx
 
@@ -161,3 +161,21 @@ def test_the_deck_has_the_adjust_values(tmp_path: pathlib.Path):
     assert guides(arrow) == [("adj1", "val 50000"), ("adj2", "val 30000")]
     assert guides(card) == [("adj", "val 30000")]
     assert guides(callout) == [("adj1", "val 200000"), ("adj2", "val 200000")]
+
+
+def test_callout_points_are_where_its_tip_and_leader_line_are_drawn():
+    # Issue #30: outside the box, for the slide to hold them.
+    assert callout_points(shape("shape wedgeRectCallout at (0, 0) tip at (1.5, -1)\n")) == [pytest.approx((1.5, -1))]
+    # The preset's defaults, with no tip: an eighth of its height below it.
+    assert callout_points(shape("shape wedgeRectCallout wid 1 ht 1\n")) == [pytest.approx((-0.20833, -0.625))]
+    # A leader line's points, the tip last.
+    [*bends, tip] = callout_points(shape("shape callout2 at (0, 0) tip at (-1.5, -0.5)\n"))
+    assert len(bends) == 2 and tip == pytest.approx((-1.5, -0.5))
+    assert callout_points(shape("shape rightArrow\n")) == []
+
+
+def test_the_slide_holds_a_callouts_tip(tmp_path: pathlib.Path):
+    out = tmp_path / "out.pptx"
+    write_pptx(resolve_for_pptx(parse("shape wedgeRectCallout wid 1 ht 1 at (0, 0) tip at (2, -2)\n")), str(out), margin=0)
+    prs = Presentation(str(out))
+    assert (prs.slide_width.inches, prs.slide_height.inches) == pytest.approx((2.5, 2.5))

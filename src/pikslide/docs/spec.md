@@ -640,7 +640,8 @@ pikslide diagram.pik [OUTPUT.pptx] [--template FILE] [--layout NAME|ID] [--setti
 (unless `--template` is given, see below). Otherwise a new one-slide
 presentation is written there, and an existing file is overwritten. With
 no `--template`, it has the built-in Office theme, and the slide is sized
-to the diagram plus a margin.
+to the diagram plus a margin: all of it that is drawn, a line's labels and
+a callout's tip or leader line too, which can be outside their objects.
 
 `--template deck.pptx` (or a `.potx`) makes it from that file instead, so
 theme colors and fonts resolve the way the real deck will (see §3.3). The
@@ -727,7 +728,8 @@ Humans and LLMs both need errors they can act on.
   diagram's coordinates, its size, and the placeholders it keeps beside
   the diagram (§4) -- and each drawn object's name, kind, text and place:
   `x`, `y`, `wid` and `ht` as `A.x`, `A.y`, `A.wid` and `A.ht` give them,
-  or a line's `points`. Without `--check`, diagnostics are plain text.
+  and a callout's `tip`, which is often outside them, or a line's
+  `points`. Without `--check`, diagnostics are plain text.
 - An error names the help topics that explain it (`see: pikslide --help
   box`; in JSON, each error's `help` list): the syntax error's statement
   class or keyword, or the list an unknown name belongs to (`colors`,

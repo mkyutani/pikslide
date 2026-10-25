@@ -119,6 +119,17 @@ def test_layout_reads_the_templates_settings_file(tmp_path: pathlib.Path):
     assert box["wid"] == 2.0
 
 
+def test_slide_layout_picks_the_layout_and_so_the_master(tmp_path: pathlib.Path):
+    # The default layout never raises this: the name reaches the template.
+    tmpl = _template_deck(tmp_path)
+    doc = pikslide.parse('box "A"\n')
+    assert pikslide.layout(doc, template=str(tmpl), slide_layout="Title Only").objects()
+    with pytest.raises(pikslide.LayoutError, match="no slide layout named 'Nope'"):
+        pikslide.layout(doc, template=str(tmpl), slide_layout="Nope")
+    with pytest.raises(ValueError, match="needs template"):
+        pikslide.layout(doc, slide_layout="Title Only")
+
+
 def test_an_image_resolves_against_the_base_dir_parse_was_given(tmp_path: pathlib.Path):
     Image.new("RGB", (100, 50)).save(tmp_path / "logo.png")
     _prs, slide = _slide()

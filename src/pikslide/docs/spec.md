@@ -787,7 +787,10 @@ Humans and LLMs both need errors they can act on.
   `--template` does: `fit` measures text in its theme's fonts, and its
   settings file (§3.8; `settings=` names another) sets the text sizes and
   colors. With none, the built-in Office theme stands in, which is a
-  warning. `render_into()` draws onto `slide`, a python-pptx slide, on top
+  warning. The theme is that of the master the slide's layout belongs to,
+  named by `slide_layout=` as `--layout` names it, or else by the settings
+  file's `layout`: a template whose masters differ in their fonts needs
+  it. `render_into()` draws onto `slide`, a python-pptx slide, on top
   of what it has, with the top left of all that is drawn at `origin`, in
   EMU as python-pptx measures a slide. A diagram is never scaled (§4).
   Each shape is named as §3.1 says, with `-<name_suffix>` after it when
@@ -797,7 +800,11 @@ Humans and LLMs both need errors they can act on.
   `result.objects()` and `result.warnings()` are `--check`'s object list
   and warnings (§5). The box round the objects is all that is drawn, so a
   caller places the diagram by it: aligns it in a cell, or finds it
-  doesn't fit and revises the `.pik`. Unlike with `--template`, a diagram
+  doesn't fit and revises the `.pik`. It is the box round all of these
+  together: each object's own box (`x`, `y`, `wid`, `ht`, with `x` and `y`
+  its center), a callout's `leader` points, a line's `points`, and the
+  box of each of its `labels`. Leaving out the labels or the leader line
+  can make it smaller than what is drawn. Unlike with `--template`, a diagram
   bigger than the template slide's content area, or on a placeholder it
   keeps, isn't a warning: where it goes is the caller's.
 

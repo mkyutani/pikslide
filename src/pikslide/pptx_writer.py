@@ -21,7 +21,7 @@ from PIL import ImageFont
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.dml import MSO_LINE_DASH_STYLE, MSO_THEME_COLOR
-from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE, PP_PLACEHOLDER
+from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE, MSO_SHAPE_TYPE, PP_PLACEHOLDER
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.oxml import parse_xml
@@ -276,6 +276,7 @@ def resolve_for_pptx(
     template_path: str | None = None,
     layout_name: str | None = None,
     font_index: FontIndex | None = None,
+    own_slide: bool = True,
 ) -> LayoutResult:
     """resolve_layout(), measuring "fit" text with the fonts the deck
     will actually be drawn in (PilFontMetrics), so objects are sized to
@@ -293,7 +294,9 @@ def resolve_for_pptx(
     prelude's and under the settings file's. Objects, text and lines that
     overlap (pikslide.pik.overlap) are warnings, and so are a diagram
     bigger than the content area it goes in (_content_area()) and one on
-    a placeholder the slide keeps (_on_kept_placeholders()).
+    a placeholder the slide keeps (_on_kept_placeholders()), unless
+    `own_slide` is false: the diagram doesn't go on a slide of its own,
+    made from the template, but where render_into()'s caller puts it.
 
     `base_dir` is the source file's own directory, against which an
     `image` object's path resolves (docs/spec.md SS3.5). `settings_text`/
@@ -323,8 +326,9 @@ def resolve_for_pptx(
                 template_defaults=template_defaults_from_xml(_master_theme_xml(master)),
             )
             result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_rects(s, metrics))
-            result.warnings += _content_area_overflow(prs, layout, result)
-            result.warnings += _on_kept_placeholders(prs, layout, layout_name, result, metrics)
+            if own_slide:
+                result.warnings += _content_area_overflow(prs, layout, result)
+                result.warnings += _on_kept_placeholders(prs, layout, layout_name, result, metrics)
         finally:
             if tmp_path is not None:
                 os.remove(tmp_path)
@@ -589,7 +593,7 @@ def _attach_svg_extension(picture, svg_path: str) -> None:
     picture._element.blipFill.blip.append(parse_xml(ext_xml))
 
 
-def _add_image_shape(container, shape: Shape, tf: _Transform):
+def _add_image_shape(container, shape: Shape, tf: _Transform, name: str):
     """`image` (docs/spec.md SS3.5). A Picture has no text_frame of its own
     in python-pptx (checked, like a connector), so any text on it is drawn
     as a separate textbox, centred over it -- one box, not per-string
@@ -612,8 +616,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform):
         _attach_svg_extension(picture, shape.image_path)
     else:
         picture = container.shapes.add_picture(shape.image_path, Inches(left), Inches(top), width=Inches(w), height=Inches(h))
-    if shape.name:
-        picture.name = shape.name
+    picture.name = name
     if shape.alt_text:
         # python-pptx 1.0.2 has no real `alt_text` property (checked: it
         # silently becomes a plain, never-saved instance attribute --
@@ -645,7 +648,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform):
     return picture
 
 
-def _add_block_shape(container, shape: Shape, tf: _Transform):
+def _add_block_shape(container, shape: Shape, tf: _Transform, name: str):
     left, top, w, h = tf.rect(shape)
     w, h = max(w, 0.01), max(h, 0.01)
     # A `shape`'s preset was validated in layout.py's _resolve_preset_name();
@@ -655,8 +658,7 @@ def _add_block_shape(container, shape: Shape, tf: _Transform):
     autoshape_type = MSO_SHAPE.from_xml(preset_of(shape) or "rect")
     pptx_shape = container.shapes.add_shape(autoshape_type, Inches(left), Inches(top), Inches(w), Inches(h))
     _no_theme_effects(pptx_shape)
-    if shape.name:
-        pptx_shape.name = shape.name
+    pptx_shape.name = name
     if autoshape_type == MSO_SHAPE.ROUNDED_RECTANGLE and shape.rad > 0:
         # `adjustments[0]` is the corner radius as a fraction of min(w, h),
         # not an absolute length. `rad == 0` (no explicit `rad` attribute,
@@ -699,15 +701,14 @@ def _set_adjust_values(pptx_shape, shape: Shape) -> None:
     geometry.rewrite_guides(list(values.items()))
 
 
-def _add_line_shape(container, shape: Shape, tf: _Transform):
+def _add_line_shape(container, shape: Shape, tf: _Transform, name: str):
     assert shape.path is not None
     points = [tf.point(p) for p in shape.path]
 
     if shape.routed:
         connector = _add_elbow_connector(container, points, curved=shape.connector_path == "curved")
         _no_theme_effects(connector)
-        if shape.name:
-            connector.name = shape.name
+        connector.name = name
         _apply_line_style(connector.line, shape)
         _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
         drawn = connector
@@ -715,8 +716,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform):
         (x1, y1), (x2, y2) = points
         connector = container.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2))
         _no_theme_effects(connector)
-        if shape.name:
-            connector.name = shape.name
+        connector.name = name
         _apply_line_style(connector.line, shape)
         _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
         drawn = connector
@@ -729,14 +729,13 @@ def _add_line_shape(container, shape: Shape, tf: _Transform):
             builder.add_line_segments([(Inches(x), Inches(y)) for x, y in points[1:]], close=shape.closed)
             freeform = builder.convert_to_shape()
         _no_theme_effects(freeform)
-        if shape.name:
-            freeform.name = shape.name
+        freeform.name = name
         freeform.fill.background()
         _apply_line_style(freeform.line, shape)
         _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
         drawn = freeform
 
-    _add_line_text(container, shape, tf)
+    _add_line_text(container, shape, tf, name)
     return drawn
 
 
@@ -948,17 +947,17 @@ def _text_rects(shape: Shape, metrics: PilFontMetrics) -> list[tuple[float, floa
     return out
 
 
-def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
+def _add_line_text(container, shape: Shape, tf: _Transform, name: str) -> None:
     """A connector/freeform shape has no text_frame in python-pptx, so a
     line's text (e.g. an arrow's label) is rendered as small floating
     textboxes instead, placed above/on/below the line per
     assign_text_slots(); named "<line name> text <k>" (docs/spec.md SS3.1,
-    ext), 1-based among *this line's own* labels, not a diagram-wide count."""
+    ext), 1-based among *this line's own* labels, not a diagram-wide count,
+    after `name`, the one the line itself has on the slide."""
     for i, ((x0, y0, x1, y1), text, flags) in enumerate(_line_label_rects(shape), start=1):
         left, top = tf.point((x0, y1))
         textbox = container.shapes.add_textbox(Inches(left), Inches(top), Inches(x1 - x0), Inches(y1 - y0))
-        if shape.name:
-            textbox.name = f"{shape.name} text {i}"
+        textbox.name = _label_name(name, i)
         text_frame = textbox.text_frame
         text_frame.word_wrap = False
         text_frame.margin_left = text_frame.margin_right = 0
@@ -973,6 +972,12 @@ def _add_line_text(container, shape: Shape, tf: _Transform) -> None:
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
         _apply_color(run.font.color, string_color(shape, i - 1) or Color(rgb=0))
+
+
+def _label_name(name: str, k: int) -> str:
+    """The name of the text box a line named `name` draws its `k`th label
+    in (1-based)."""
+    return f"{name} text {k}"
 
 
 def _turned_rect(shape: Shape, rect: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
@@ -994,6 +999,49 @@ def _drawn_extent(shape: Shape) -> tuple[float, float, float, float]:
     for rx0, ry0, rx1, ry1 in rects:
         x0, y0, x1, y1 = min(x0, rx0), min(y0, ry0), max(x1, rx1), max(y1, ry1)
     return x0, y0, x1, y1
+
+
+def object_list(shapes: list[Shape]) -> list[dict]:
+    """Where each of `shapes` (flatten_shapes()) went, as --check's JSON
+    gives it (docs/spec.md SS5): all of what is drawn, so the box round
+    them is _content_bbox()'s (issue #21)."""
+    return [_geometry(shape) for shape in shapes]
+
+
+def _geometry(shape: Shape) -> dict:
+    """Where `shape` went, as the source itself would measure it: x, y,
+    wid and ht as `A.x`, `A.y`, `A.wid` and `A.ht` give them (inches, y
+    up), and a callout's tip, which is often outside them (issue #30), and
+    its leader line, whose bends can be too, and a preset shape's rotate,
+    flipH and flipV (issue #26); or for a line the points it passes
+    through, and its labels' boxes, which can stick out past it."""
+    kind = f"shape {shape.preset}" if shape.kind == "shape" else shape.kind
+    obj: dict = {"name": shape.name, "kind": kind}
+    if shape.texts:
+        obj["text"] = [text for text, _flags in shape.texts]
+    if shape.path is not None:
+        obj["points"] = [[round(x, 2), round(y, 2)] for x, y in shape.path]
+        labels = [_box(*rect) for rect, _text, _flags in _line_label_rects(shape)]
+        if labels:
+            obj["labels"] = labels
+        attached = {which: end[0].name for which, end in zip(("start", "end"), shape.attached) if end is not None}
+        if attached:
+            obj["attached"] = attached
+    else:
+        obj.update(x=round(shape.cx, 2), y=round(shape.cy, 2), wid=round(shape.w, 2), ht=round(shape.h, 2))
+        points = callout_points(shape)
+        if points:
+            obj["tip"] = [round(points[-1][0], 2), round(points[-1][1], 2)]
+        if len(points) > 1:
+            obj["leader"] = [[round(x, 2), round(y, 2)] for x, y in points]
+        if shape.rotate:
+            obj["rotate"] = round(shape.rotate, 2)
+        obj.update({flip: True for flip, flipped in (("flipH", shape.flip_h), ("flipV", shape.flip_v)) if flipped})
+    return obj
+
+
+def _box(x0: float, y0: float, x1: float, y1: float) -> dict:
+    return {"x": round((x0 + x1) / 2, 2), "y": round((y0 + y1) / 2, 2), "wid": round(x1 - x0, 2), "ht": round(y1 - y0, 2)}
 
 
 def _content_bbox(result: LayoutResult) -> tuple[float, float, float, float]:
@@ -1334,11 +1382,19 @@ def write_pptx_from_template(
         for placeholder in list(slide.placeholders):
             if not layout_name or _is_content(placeholder):
                 placeholder.element.getparent().remove(placeholder.element)
-        _add_all_shapes(slide, result.shapes, _Transform(_content_bbox(result), 0.0, origin=(left, top)))
+        draw_at(slide, result, (left, top))
         prs.save(path)
     finally:
         if tmp_path is not None:
             os.remove(tmp_path)
+
+
+def draw_at(slide, result: LayoutResult, origin: tuple[float, float], suffix: str = "") -> dict[str, str]:
+    """Draw `result` onto `slide`, on top of what it has, with the top
+    left of all that is drawn (_content_bbox()) at `origin` (slide
+    inches): write_pptx_from_template()'s, and render_into()'s (issue
+    #21). Returns _add_all_shapes()'s names."""
+    return _add_all_shapes(slide, result.shapes, _Transform(_content_bbox(result), 0.0, origin=origin), suffix)
 
 
 def slide_frame(result: LayoutResult, template_path: str | None = None, layout_name: str = "") -> dict:
@@ -1367,10 +1423,10 @@ def slide_frame(result: LayoutResult, template_path: str | None = None, layout_n
             "wid": tf.slide_width, "ht": tf.slide_height, "placeholders": placeholders}
 
 
-def _add_all_shapes(container, shapes: list[Shape], tf: _Transform) -> None:
+def _add_all_shapes(container, shapes: list[Shape], tf: _Transform, suffix: str = "") -> dict[str, str]:
     """Draw every shape in `shapes` into `container` (a Slide, for
-    `write_pptx()` and `write_pptx_from_template()` alike), then attach
-    the attached lines' ends (_connect_ends()).
+    `write_pptx()`, `write_pptx_from_template()` and `render_into()`
+    alike), then attach the attached lines' ends (_connect_ends()).
 
     pikslide never creates a PowerPoint group anywhere in its own output
     (ext): PowerPoint's own group-resize math was found to silently
@@ -1386,26 +1442,85 @@ def _add_all_shapes(container, shapes: list[Shape], tf: _Transform) -> None:
     sit in the *same* global pik coordinate space as everything else
     (`_translate()`, at layout time, already placed them there), so `tf`
     -- the one already in effect for this whole call -- maps them
-    correctly without adjustment."""
+    correctly without adjustment.
+
+    Each shape's name is its own, with `suffix` after it if given, unless
+    a shape `container` already has, or one in its groups, takes it
+    (_slide_names()). Returns each drawn shape's own name (Shape.name, as
+    object_list() gives it) mapped to the one it got."""
+    flat = flatten_shapes(shapes)
+    names = _slide_names(flat, _names_on(container.shapes), suffix)
     drawn: dict[int, object] = {}
-    _draw_shapes(container, shapes, tf, drawn)
-    _connect_ends(flatten_shapes(shapes), drawn)
+    _draw_shapes(container, shapes, tf, drawn, names)
+    _connect_ends(flat, drawn)
+    return {shape.name or "": names[id(shape)] for shape in flat}
 
 
-def _draw_shapes(container, shapes: list[Shape], tf: _Transform, drawn: dict[int, object]) -> None:
+def _names_on(shapes) -> set[str]:
+    """The names of `shapes`, a slide's, and of the shapes in its groups."""
+    names = set()
+    for shape in shapes:
+        names.add(shape.name)
+        if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            names |= _names_on(shape.shapes)
+    return names
+
+
+def _slide_names(shapes: list[Shape], taken: set[str], suffix: str = "") -> dict[int, str]:
+    """The name each of `shapes` (flatten_shapes(), whose names are their
+    own, _unique_name()) gets, by id(), on a slide whose shapes have the
+    names `taken` (issue #21): its own, with `-<suffix>` after it when a
+    suffix is given, or if that, or the name of one of its line's label
+    text boxes (_label_name()), is taken, the same with `-2`, `-3`, ...
+    after it, the first that's free. The shapes whose names are free keep
+    them before any other is given one, so that a diagram's own `Start-2`
+    stays that when its `Start` moves on to `Start-3`."""
+
+    def with_labels(shape: Shape, name: str) -> list[str]:
+        labels = len(shape.texts) if shape.kind in LINE_LIKE else 0
+        return [name, *(_label_name(name, k) for k in range(1, labels + 1))]
+
+    def free(shape: Shape, name: str) -> bool:
+        return not any(n in taken for n in with_labels(shape, name))
+
+    def claim(shape: Shape, name: str) -> None:
+        names[id(shape)] = name
+        taken.update(with_labels(shape, name))
+
+    taken = set(taken)
+    names: dict[int, str] = {}
+    own = {id(shape): f"{shape.name}-{suffix}" if suffix else shape.name or "" for shape in shapes}
+    moved = []
+    for shape in shapes:
+        if free(shape, own[id(shape)]):
+            claim(shape, own[id(shape)])
+        else:
+            moved.append(shape)
+    for shape in moved:
+        n = 2
+        while not free(shape, f"{own[id(shape)]}-{n}"):
+            n += 1
+        claim(shape, f"{own[id(shape)]}-{n}")
+    return names
+
+
+def _draw_shapes(
+    container, shapes: list[Shape], tf: _Transform, drawn: dict[int, object], names: dict[int, str]
+) -> None:
     """_add_all_shapes()'s drawing, recursively; `drawn` maps each Shape
-    (by id()) to the PowerPoint shape drawn for it."""
+    (by id()) to the PowerPoint shape drawn for it, and `names` to the
+    name it gets."""
     for shape in shapes:
         if shape.kind == "block":
-            _draw_shapes(container, shape.sublist, tf, drawn)
+            _draw_shapes(container, shape.sublist, tf, drawn, names)
         elif shape.kind in NOT_RENDERED:
             continue
         elif shape.kind in ("line", "arrow", "spline", "arc"):
-            drawn[id(shape)] = _add_line_shape(container, shape, tf)
+            drawn[id(shape)] = _add_line_shape(container, shape, tf, names[id(shape)])
         elif shape.kind == "image":
-            drawn[id(shape)] = _add_image_shape(container, shape, tf)
+            drawn[id(shape)] = _add_image_shape(container, shape, tf, names[id(shape)])
         else:
-            drawn[id(shape)] = _add_block_shape(container, shape, tf)
+            drawn[id(shape)] = _add_block_shape(container, shape, tf, names[id(shape)])
 
 
 def _connect_ends(shapes: list[Shape], drawn: dict[int, object]) -> None:

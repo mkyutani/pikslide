@@ -262,11 +262,37 @@ def test_unnamed_block_gets_a_default_block_n_name():
 
 
 def test_default_naming_restarts_in_each_block_scope():
+    # The ordinal does; a name an object already has moves on to -2.
     result = layout('box "top"\nInner: [ box "a"; box "b" ]\n')
     outer_box = result.shapes[0]
     inner = result.shapes[1]
     assert outer_box.name == "box 1"
-    assert [s.name for s in inner.sublist] == ["box 1", "box 2"]
+    assert [s.name for s in inner.sublist] == ["box 1-2", "box 2"]
+
+
+def test_a_name_two_objects_have_moves_on_to_one_no_label_can_be():
+    # Issue #21: two blocks with a Start each, and a Start_2 of its own,
+    # which a label can be and Start-2 can't.
+    result = layout(
+        'A: [ Start: box "Start"; arrow; box "x" ]\n'
+        'B: [ Start: box "Start"; arrow; box "y" ] with .nw at A.sw - (0, 0.3in)\n'
+        'Start_2: box "s2" with .w at A.e + (0.3in, 0)\n'
+    )
+    assert [s.name for s in flatten_shapes(result.shapes)] == [
+        "Start", "arrow 1", "box 2", "Start-2", "arrow 1-2", "box 2-2", "Start_2"]
+
+
+def test_a_name_only_drawn_objects_take():
+    # A block's own label, a move's and a place's aren't on the slide.
+    result = layout('Start: [ Start: box "a" ]\nM: move\nP: (0, 0)\nM: box with .w at Start.e\nP: box\n')
+    assert [s.name for s in flatten_shapes(result.shapes)] == ["Start", "M", "P"]
+
+
+def test_a_warning_names_an_object_by_the_name_it_takes():
+    long = '"a string much too wide for the box it is in"'
+    result = layout(f"[ A: box {long} ]\n[ A: box {long} ]\n")
+    assert [w.objects for w in result.warnings if "overflows" in w.message] == [("A",), ("A-2",)]
+    assert [w.message.split(":")[0] for w in result.warnings if "overflows" in w.message] == ["A", "A-2"]
 
 
 def test_behind_reorders_the_shape_immediately_before_its_target():

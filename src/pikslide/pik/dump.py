@@ -24,7 +24,8 @@ def dump(node: object) -> str:
 def _dump_node(node: object, depth: int, lines: list[str]) -> None:
     pad = _INDENT * depth
     if dataclasses.is_dataclass(node) and not isinstance(node, type):
-        fields = dataclasses.fields(node)
+        # A field repr() leaves out isn't part of the tree.
+        fields = [f for f in dataclasses.fields(node) if f.repr]
         if not fields:
             lines.append(f"{pad}{type(node).__name__}()")
             return

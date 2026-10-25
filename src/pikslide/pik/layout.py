@@ -885,6 +885,8 @@ class _Ctx:
         self.image_metrics: ImageMetrics = image_metrics if image_metrics is not None else _PILImageMetrics()
         self.base_dir = base_dir
         self.warnings: list[LayoutWarning] = []
+        # The names drawn objects have taken so far (_unique_name()).
+        self.names: set[str] = set()
         # `layout` (docs/spec.md SS3.8) may be assigned while loading the
         # prelude or a settings file, below, but not once the actual
         # program starts (_eval_assignment() checks this).
@@ -2255,9 +2257,11 @@ def _layout_statements(
                 ctx.scope_stack[-1][stmt.label] = shape
             else:
                 shape.name = f"{shape.kind} {class_counts[shape.kind]}"
+            if shape.kind != "block" and shape.kind not in NOT_RENDERED:
+                shape.name = _unique_name(shape.name, ctx)
             shape.behind = behind_target
             _resolve_handles(shape, ctx)
-            _check_text_overflow(shape, stmt.label, ctx)
+            _check_text_overflow(shape, shape.name if stmt.label else None, ctx)
             _check_unoutlined(shape, ctx)
             _place(shape, behind_target)
             prev = shape
@@ -2274,6 +2278,21 @@ def _layout_statements(
     else:
         bbox = (0.0, 0.0, 0.0, 0.0)
     return shapes, direction, bbox
+
+
+def _unique_name(name: str, ctx: _Ctx) -> str:
+    """`name`, or if a drawn object already has it (the same label in two
+    blocks, or a default name), `name-2`, `name-3`, ... the first that no
+    drawn object has (docs/spec.md SS3.1, issue #21): each shape on the
+    slide has a name of its own. A label can't have a `-`, so the name it
+    moves on to is never one."""
+    if name in ctx.names:
+        n = 2
+        while f"{name}-{n}" in ctx.names:
+            n += 1
+        name = f"{name}-{n}"
+    ctx.names.add(name)
+    return name
 
 
 def flatten_shapes(shapes: list[Shape]) -> list[Shape]:

@@ -18,7 +18,8 @@ from pptx.util import Inches
 
 from pikslide.pik import parse
 from pikslide.pik.layout import LayoutError
-from pikslide.pptx_writer import resolve_for_pptx, write_pptx
+from pikslide.pik.layout import flatten_shapes
+from pikslide.pptx_writer import _content_bbox, object_list, resolve_for_pptx, write_pptx
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "examples"
 EXAMPLE_FILES = sorted(FIXTURES_DIR.glob("*.pik"))
@@ -516,6 +517,42 @@ def test_line_label_textbox_naming(tmp_path: pathlib.Path):
     assert boxes["Top"] in ("Conn text 1", "Conn text 2")
     assert boxes["Bottom"] in ("Conn text 1", "Conn text 2")
     assert boxes["Top"] != boxes["Bottom"]
+
+
+def test_a_name_two_objects_have_is_one_each_on_the_slide(tmp_path: pathlib.Path):
+    # Issue #21: the second block's shapes move on to -2, and so do the
+    # text boxes of its arrow's label.
+    prs = render('[ Start: box "a"; arrow "go" ]\n[ Start: box "b"; arrow "go" ]\n', tmp_path)
+    assert [s.name for s in prs.slides[0].shapes] == [
+        "Start", "arrow 1", "arrow 1 text 1", "Start-2", "arrow 1-2", "arrow 1-2 text 1"]
+
+
+def _listed_extent(objects: list[dict]) -> tuple[float, float, float, float]:
+    """The box round all that object_list() gives: what a caller of
+    render_into() measures a diagram by (issue #21)."""
+    xs: list[float] = []
+    ys: list[float] = []
+    for obj in objects:
+        boxes = [*obj.get("labels", []), *([] if "points" in obj else [obj])]
+        for box in boxes:
+            xs += [box["x"] - box["wid"] / 2, box["x"] + box["wid"] / 2]
+            ys += [box["y"] - box["ht"] / 2, box["y"] + box["ht"] / 2]
+        for x, y in [*obj.get("points", []), *obj.get("leader", [])]:
+            xs.append(x)
+            ys.append(y)
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+@pytest.mark.parametrize("text", [
+    *(path.read_text(encoding="utf-8") for path in EXAMPLE_FILES),
+    # A line's labels stick out past it, and a callout3's bend past its tip.
+    'A: box "A" ht 0.2in\narrow 0.8in "a much longer label than the arrow" "on two lines" above\nbox "B" ht 0.2in\n',
+    'C: shape callout3 "note" wid 2in ht 0.6in\n',
+])
+def test_the_object_list_covers_all_that_is_drawn(text: str):
+    result = resolve_for_pptx(parse(text))
+    listed = _listed_extent(object_list(flatten_shapes(result.shapes)))
+    assert listed == pytest.approx(_content_bbox(result), abs=0.01)
 
 
 def test_block_is_flattened_not_grouped(tmp_path: pathlib.Path):

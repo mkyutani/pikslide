@@ -100,6 +100,11 @@ pikslide diagram.pik --check                             # lay it out, write not
 a Windows install, and fall back to LibreOffice otherwise: good for a
 quick look, but not for checking exact layout against PowerPoint.
 
+A tool that assembles a deck with python-pptx can instead draw a diagram
+onto a slide of its own, with `pikslide.parse()`, `pikslide.layout()` and
+`pikslide.render_into()`: see
+[spec.md §6](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md#6-use-from-other-tools).
+
 `pikslide --help` lists every flag. The language reference is built in,
 so neither you nor an LLM needs this repository to write a diagram:
 

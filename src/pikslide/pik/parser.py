@@ -898,4 +898,5 @@ def parse(text: str, base_dir: str = ".", include_paths: list[str] | None = None
     doc = Parser(tokens).parse_document()
     doc.macros = macros
     doc.warnings = warnings
+    doc.base_dir = base_dir
     return doc

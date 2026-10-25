@@ -1040,7 +1040,7 @@ def llm_text() -> str:
         "the slide, its left and top edges, wid and ht, and placeholders (none",
         "without --template), nothing else being on it; and where each object went,",
         "x, y, wid and ht as A.x, A.y, A.wid and A.ht give them (and a callout's",
-        "tip), or a line's points.",
+        "tip and leader line), or a line's points and labels.",
         "",
         _INTRO_BODY,
         "KEYWORDS",

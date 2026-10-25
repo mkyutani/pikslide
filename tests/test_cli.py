@@ -268,7 +268,8 @@ def test_check_reports_where_each_object_went(monkeypatch, capsys, tmp_path):
     box, arrow = payload["objects"]
     assert box == {"name": "Web", "kind": "box", "text": ["Web"], "x": 1.0, "y": 2.0, "wid": 0.75, "ht": 0.5}
     assert arrow == {"name": "arrow 1", "kind": "arrow", "text": ["go"],
-                     "points": [[1.38, 2.0], [2.38, 2.0], [2.38, 3.0]]}
+                     "points": [[1.38, 2.0], [2.38, 2.0], [2.38, 3.0]],
+                     "labels": [{"x": 1.88, "y": 2.5, "wid": 0.3, "ht": 0.17}]}
 
 
 def test_check_reports_a_callouts_tip(monkeypatch, capsys, tmp_path):
@@ -277,6 +278,15 @@ def test_check_reports_a_callouts_tip(monkeypatch, capsys, tmp_path):
     _run(monkeypatch, [str(src), "--check"])
     [callout] = json.loads(capsys.readouterr().out)["objects"]
     assert callout["tip"] == [1.5, -1.0]
+
+
+def test_check_reports_a_callouts_leader_line(monkeypatch, capsys, tmp_path):
+    # Issue #21: its bends can be outside its box and its tip.
+    src = _write(tmp_path, "d.pik", 'C: shape callout3 "note" at (0, 0) wid 2 ht 0.6\n')
+    _run(monkeypatch, [str(src), "--check"])
+    [callout] = json.loads(capsys.readouterr().out)["objects"]
+    assert callout["leader"] == [[-1.17, 0.19], [-1.33, 0.19], [-1.33, -0.3], [-1.17, -0.38]]
+    assert callout["tip"] == callout["leader"][-1]
 
 
 def test_check_names_a_preset_and_leaves_out_what_isnt_drawn(monkeypatch, capsys, tmp_path):

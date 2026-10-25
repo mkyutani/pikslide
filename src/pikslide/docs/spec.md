@@ -16,10 +16,10 @@ restyle and move after the fact. (pikslide's own design traces back
 through two earlier languages; see Acknowledgments, §7.)
 
 The target is one *diagram*, not a deck. Deck structure (titles, ordering,
-body text) belongs to whatever assembles the deck; pikslide writes a diagram
-as a one-slide deck, sized to it, or with a template on the template's own
-slide, in its content area (§4), and its shapes are copied or moved into
-the real deck from there.
+body text) belongs to whatever assembles the deck. The command writes a
+diagram as a one-slide deck, sized to it, or with a template on the
+template's own slide, in its content area (§4); a tool that assembles a
+deck draws it onto a slide of its own through the library (§6).
 
 ### Scope of v1
 
@@ -62,6 +62,16 @@ Goal: the Selection Pane in PowerPoint reads like the source.
   shape named `Web`. Unlabeled objects are named `<class> <n>`, where `n` is
   the object's ordinal among that class in its scope (the same ordinal a
   `2nd box` reference would address).
+- **Each shape's name is its own.** A name an earlier object already has,
+  such as the same label in two blocks, or `box 1` in each, moves on to
+  `<name>-2`, `-3`, …, the first that no object has. A label can't have a
+  `-`, so the name it moves on to is never one. Only drawn objects count,
+  not a block's own label, a `move`'s or a place's. The name an object
+  moves on to is its name everywhere a name is given: in the warnings, in
+  `--check`'s object list (§5), and on the slide. Drawn onto a slide that
+  already has a shape of that name (§6), a shape moves on the same way;
+  the shapes whose names are free keep them first, so a diagram's own
+  `Start-2` stays that when its `Start` moves on to `Start-3`.
 - **Z-order** follows source order. `behind X` is honoured: the object is
   placed immediately below `X`.
 - **Blocks are flattened, not grouped.** A `[ ... ]` block is a grouping
@@ -72,7 +82,8 @@ Goal: the Selection Pane in PowerPoint reads like the source.
   found to silently distort a group's *children*'s sizes, so pikslide's
   output never contains a group at all.)
 - **Line labels.** A PowerPoint line cannot hold text, so a line's strings
-  become text boxes named `<line name> text <k>`.
+  become text boxes named `<line name> text <k>`, after the name the line
+  has on the slide.
 - `stroke invis` objects are still emitted (no outline, and no fill unless
   given one): they are legitimate text anchors.
 - **Text color and line color are separate.** `color` is a string attribute:
@@ -745,8 +756,11 @@ Humans and LLMs both need errors they can act on.
   diagram's coordinates, its size, and the placeholders it keeps beside
   the diagram (§4) -- and each drawn object's name, kind, text and place:
   `x`, `y`, `wid` and `ht` as `A.x`, `A.y`, `A.wid` and `A.ht` give them,
-  and a callout's `tip`, which is often outside them, or a line's
-  `points`. Without `--check`, diagnostics are plain text.
+  and a callout's `tip`, which is often outside them, and its `leader`
+  line's points, tip last, whose bends can be too; or a line's `points`,
+  and its `labels`, each an `x`, `y`, `wid` and `ht`, which can stick out
+  past it. The box round all of these is all that is drawn. Without
+  `--check`, diagnostics are plain text.
 - An error names the help topics that explain it (`see: pikslide --help
   box`; in JSON, each error's `help` list): the syntax error's statement
   class or keyword, or the list an unknown name belongs to (`colors`,
@@ -756,6 +770,40 @@ Humans and LLMs both need errors they can act on.
 
 - The diagram is written as native shapes directly, so a caller need not
   render a PNG, or convert a rendered diagram to shapes afterwards.
+- **The library** draws a diagram onto a slide that a tool assembling a
+  deck has, with python-pptx:
+
+  ```python
+  import pikslide
+  from pptx.util import Inches
+
+  doc = pikslide.parse(source, base_dir=".")
+  result = pikslide.layout(doc, template="corporate.potx")
+  names = pikslide.render_into(slide, result, origin=(Inches(1), Inches(1.5)))
+  ```
+
+  `parse()` takes the source and the directory its `include`s and images
+  resolve against. `layout()` takes the template the deck is made from, as
+  `--template` does: `fit` measures text in its theme's fonts, and its
+  settings file (§3.8; `settings=` names another) sets the text sizes and
+  colors. With none, the built-in Office theme stands in, which is a
+  warning. `render_into()` draws onto `slide`, a python-pptx slide, on top
+  of what it has, with the top left of all that is drawn at `origin`, in
+  EMU as python-pptx measures a slide. A diagram is never scaled (§4).
+  Each shape is named as §3.1 says, with `-<name_suffix>` after it when
+  `name_suffix=` is given, and `render_into()` returns each object's name
+  mapped to the one its shape got.
+
+  `result.objects()` and `result.warnings()` are `--check`'s object list
+  and warnings (§5). The box round the objects is all that is drawn, so a
+  caller places the diagram by it: aligns it in a cell, or finds it
+  doesn't fit and revises the `.pik`. Unlike with `--template`, a diagram
+  bigger than the template slide's content area, or on a placeholder it
+  keeps, isn't a warning: where it goes is the caller's.
+
+  Errors are `pikslide.PikSyntaxError` and `pikslide.LayoutError`. These,
+  `pikslide.Layout` and the three functions are the whole library; the
+  rest of the package can change between versions.
 - **`pikslide --help TOPIC`** answers from the installed package, so a
   person or an LLM writing a diagram needs no repository: a keyword
   (`box`, `chop`, `fill`, …) gives its synopsis, the attributes it takes and

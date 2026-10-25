@@ -4,15 +4,21 @@ import os
 import sys
 from importlib.metadata import version
 
+from .api import Layout, layout, render_into
 from .pik import PikSyntaxError, dump, format_syntax_error, parse
-from .pik.layout import LayoutError, LayoutWarning, callout_points, flatten_shapes
+from .pik.layout import LayoutError, LayoutWarning, flatten_shapes
 from .pik.tokens import column_at
-from .pptx_writer import find_settings_file, resolve_for_pptx, slide_frame, write_pptx, write_pptx_from_template
+from .pptx_writer import (
+    find_settings_file, object_list, resolve_for_pptx, slide_frame, write_pptx, write_pptx_from_template,
+)
 from .help import hint as help_hint
 from .help import layout_error_topics, syntax_error_topics
 from .help import show as show_help
 from .help import topics_text as help_topics_text
 from .render import FORMATS, RENDERERS, RenderError, render_deck
+
+# The library (src/pikslide/api.py, docs/spec.md SS6), and the command.
+__all__ = ["parse", "layout", "render_into", "Layout", "PikSyntaxError", "LayoutError", "main"]
 
 
 def main() -> None:
@@ -232,34 +238,8 @@ def _succeed_check(warnings: list[LayoutWarning], slide: dict, shapes: list) -> 
     slide = {k: round(v, 2) if isinstance(v, float) else v for k, v in slide.items()}
     warnings = [{"message": w.message, "objects": list(w.objects)} for w in warnings]
     head = json.dumps({"ok": True, "errors": [], "warnings": warnings, "slide": slide}, ensure_ascii=False)
-    objects = ",\n".join(f"  {json.dumps(_geometry(s), ensure_ascii=False)}" for s in shapes)
+    objects = ",\n".join(f"  {json.dumps(o, ensure_ascii=False)}" for o in object_list(shapes))
     print(f'{head[:-1]}, "objects": [\n{objects}\n]}}')
-
-
-def _geometry(shape) -> dict:
-    """Where `shape` went, as the source itself would measure it: x, y,
-    wid and ht as `A.x`, `A.y`, `A.wid` and `A.ht` give them (inches, y
-    up), and a callout's tip, which is often outside them (issue #30), and
-    a preset shape's rotate, flipH and flipV (issue #26); or for a line the
-    points it passes through."""
-    kind = f"shape {shape.preset}" if shape.kind == "shape" else shape.kind
-    obj: dict = {"name": shape.name, "kind": kind}
-    if shape.texts:
-        obj["text"] = [text for text, _flags in shape.texts]
-    if shape.path is not None:
-        obj["points"] = [[round(x, 2), round(y, 2)] for x, y in shape.path]
-        attached = {which: end[0].name for which, end in zip(("start", "end"), shape.attached) if end is not None}
-        if attached:
-            obj["attached"] = attached
-    else:
-        obj.update(x=round(shape.cx, 2), y=round(shape.cy, 2), wid=round(shape.w, 2), ht=round(shape.h, 2))
-        points = callout_points(shape)
-        if points:
-            obj["tip"] = [round(points[-1][0], 2), round(points[-1][1], 2)]
-        if shape.rotate:
-            obj["rotate"] = round(shape.rotate, 2)
-        obj.update({flip: True for flip, flipped in (("flipH", shape.flip_h), ("flipV", shape.flip_v)) if flipped})
-    return obj
 
 
 # ---------------------------------------------------------------------------

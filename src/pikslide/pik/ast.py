@@ -531,3 +531,7 @@ class Document:
     macros: list[MacroDefinition] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     """What the macro pass warned about, for the layout's warnings."""
+    base_dir: str = field(default=".", repr=False)
+    """The source file's own directory, as parse() was given it: an
+    `image` object's path resolves against it too (docs/spec.md SS3.5).
+    Not part of the tree, so dump() leaves it out."""

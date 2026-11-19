@@ -5,10 +5,11 @@ separate output mode.
 Prefers PowerPoint itself, through COM automation (`ps/pptx_to_*.ps1`,
 run with `powershell.exe`): that is the renderer pikslide's output is
 meant for, so it's the one a result can actually be checked against.
-Reachable on Windows, or from WSL with a Windows PowerPoint install. Falls
-back to LibreOffice (`soffice`), a different rendering engine -- good for
-a quick look, not for verifying exact layout or text fit -- only when
-PowerPoint isn't reachable at all, and says so with a warning.
+Reachable on Windows, or from WSL with a Windows PowerPoint install.
+Where it isn't, or fails, pikslide draws the picture itself (`direct`,
+pikslide.draw), from the layout, and says so with a note: close to
+PowerPoint's, but text never shows overflowing in it. LibreOffice
+(`soffice`), a different rendering engine, only when named.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from importlib import resources
 
 FORMATS = ("png", "pdf")
@@ -26,11 +28,14 @@ FORMATS = ("png", "pdf")
 #: plenty of room without waiting forever on a modal dialog nobody sees.
 _TIMEOUT_S = 120
 
-RENDERERS = ("auto", "powerpoint", "libreoffice")
+RENDERERS = ("auto", "powerpoint", "direct", "libreoffice")
 
-LIBREOFFICE_NOTE = (
-    "rendered with LibreOffice, not PowerPoint: good for a quick look, "
-    "not for checking exact layout or text fit"
+#: What drew a picture, by renderer, as the CLI reports it.
+DRAWN_BY = {"powerpoint": "PowerPoint", "direct": "pikslide", "libreoffice": "LibreOffice"}
+
+DIRECT_NOTE = (
+    "drawn by pikslide itself, not PowerPoint: close to it, but text never shows "
+    "overflowing in it (the warnings say where it does)"
 )
 
 
@@ -38,13 +43,24 @@ class RenderError(Exception):
     pass
 
 
-def render_deck(pptx_path: str, out_path: str, fmt: str, renderer: str = "auto") -> list[str]:
+def render_deck(
+    pptx_path: str, out_path: str, fmt: str, renderer: str = "auto",
+    draw: Callable[[str, str], None] | None = None,
+) -> tuple[str, list[str]]:
     """Render the first (for pikslide's own output, the only) slide of
     `pptx_path` to `out_path` as `fmt` ("png" or "pdf"), with `renderer`
-    (`--renderer`): "auto" tries PowerPoint, then LibreOffice; the other
-    two use only that one. Returns notes worth telling the user (what
-    was used, when that isn't PowerPoint); raises RenderError if nothing
-    could render it."""
+    (`--renderer`): "auto" tries PowerPoint, then draws it itself; the
+    others use only that one. `draw(out_path, fmt)` draws it itself
+    (pikslide.draw), from the layout the deck was written from. Returns
+    which renderer drew it (DRAWN_BY's key) and notes worth telling the
+    user (that it isn't PowerPoint, when that wasn't asked for); raises
+    RenderError if it couldn't be rendered."""
+    if renderer == "libreoffice":
+        soffice = shutil.which("soffice")
+        if soffice is None:
+            raise RenderError("LibreOffice (soffice) is not on PATH")
+        _render_libreoffice(soffice, pptx_path, out_path, fmt)
+        return renderer, []
     failure = None
     if renderer in ("auto", "powerpoint"):
         powershell = shutil.which("powershell.exe")
@@ -53,20 +69,15 @@ def render_deck(pptx_path: str, out_path: str, fmt: str, renderer: str = "auto")
         else:
             try:
                 _render_powerpoint(powershell, pptx_path, out_path, fmt)
-                return []
+                return "powerpoint", []
             except RenderError as e:
                 failure = f"PowerPoint COM automation failed: {e}"
         if renderer == "powerpoint":
             raise RenderError(failure)
-
-    soffice = shutil.which("soffice")
-    if soffice is None:
-        missing = "LibreOffice (soffice) is not on PATH"
-        raise RenderError(f"{failure}; and {missing} to fall back to" if failure else missing)
-    _render_libreoffice(soffice, pptx_path, out_path, fmt)
-    if renderer == "libreoffice":
-        return []  # asked for by name: nothing to point out
-    return [f"{failure}; {LIBREOFFICE_NOTE}"]
+    if draw is None:
+        raise RenderError(f"{failure}; and nothing to draw it with instead" if failure else "nothing to draw it with")
+    draw(out_path, fmt)
+    return "direct", [f"{failure}; {DIRECT_NOTE}"] if failure else []
 
 
 def _render_powerpoint(powershell: str, pptx_path: str, out_path: str, fmt: str) -> None:

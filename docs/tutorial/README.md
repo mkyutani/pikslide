@@ -24,8 +24,8 @@ pikslide step1.pik step1.pptx --png
 ```
 
 That writes `step1.pptx`, a deck of one slide sized to the diagram, and
-`step1.png`, drawn by PowerPoint, or by LibreOffice where there's no
-PowerPoint. Every shape in the `.pptx` can be selected, moved and
+`step1.png`, drawn by PowerPoint, or by pikslide itself where there's
+no PowerPoint. Every shape in the `.pptx` can be selected, moved and
 restyled. The pictures here are PowerPoint's.
 
 ## 1. One object after another

@@ -715,11 +715,28 @@ to be written, so they are errors with no `OUTPUT` (and no `--template`)
 or with `--check`, and `PATH` must end in `.png`/`.pdf`. Rendering uses
 PowerPoint through COM automation when it is reachable (Windows, or WSL
 with a Windows PowerPoint install), since that is the renderer the output
-is meant for; otherwise LibreOffice, with a note (not a warning: it says
-how the image was made, not that anything is wrong with the diagram, so
-`--strict` leaves it alone) that its rendering is not PowerPoint's. With
-neither, it is an error. `--renderer powerpoint|libreoffice` uses only
-that one; the default, `auto`, is the order above.
+is meant for. Where it isn't, or fails, pikslide draws the picture itself
+(`direct`), with a note (not a warning: it says how the image was made,
+not that anything is wrong with the diagram, so `--strict` leaves it
+alone) that it isn't PowerPoint's. What drew each picture is named:
+`wrote diagram.png (drawn by PowerPoint)`.
+
+`direct` draws from the layout, not from the deck, what the deck has, as
+PowerPoint draws it: each preset's own outline (ECMA-376's), its shaded
+faces, turned and flipped; arrowheads at PowerPoint's sizes; text in the
+fonts `fit` measured with, where PowerPoint sets it; images. It draws on
+the deck's slide, a `--template`'s its size, but not the template's
+background, its master's graphics or its placeholders. It can differ
+from PowerPoint's picture a little (where a line of text breaks, a
+baseline by a pixel, an arrowhead's or a dash's shape), and it never
+shows text overflowing its shape, being drawn in the fonts that made
+room for it: the warnings and `--strict` tell that. Its PDF is the same
+picture as its PNG. It needs no program of its own (an SVG image needs
+`rsvg-convert`, as for the deck).
+
+`--renderer powerpoint|direct|libreoffice` uses only that one; the
+default, `auto`, is PowerPoint, then `direct`. LibreOffice, a different
+rendering engine, is used only when named.
 
 `pikslide --version` prints the installed version (`pikslide 0.1.0`).
 

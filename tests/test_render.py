@@ -12,7 +12,7 @@ import subprocess
 import pytest
 
 from pikslide import main, render
-from pikslide.render import LIBREOFFICE_NOTE, RenderError
+from pikslide.render import DIRECT_NOTE, RenderError
 
 
 class _FakeRun:
@@ -41,18 +41,28 @@ def _tools(monkeypatch, *available: str) -> None:
     monkeypatch.setattr(render.shutil, "which", lambda name: f"/fake/{name}" if name in available else None)
 
 
+class _Draw:
+    """Stands in for pikslide.draw: records each (path, fmt) it's asked to draw."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, str]] = []
+
+    def __call__(self, path: str, fmt: str) -> None:
+        self.calls.append((path, fmt))
+
+
 def test_powerpoint_is_preferred_when_reachable(monkeypatch, tmp_path):
     _tools(monkeypatch, "powershell.exe", "wslpath", "soffice")
-    fake = _FakeRun()
+    fake, draw = _FakeRun(), _Draw()
     monkeypatch.setattr(render.subprocess, "run", fake)
-    warnings = render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png")
-    assert warnings == []
+    assert render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", draw=draw) == ("powerpoint", [])
     ps = next(c for c in fake.calls if c[0].endswith("powershell.exe"))
     assert ps[ps.index("-File") + 1].endswith("pptx_to_png.ps1")
     # WSL paths are handed to PowerPoint as Windows paths.
     assert ps[ps.index("-PngPath") + 1].startswith("\\\\wsl.localhost\\")
     assert ps[ps.index("-PngPath") + 1].endswith("\\d.png")
     assert not any(c[0].endswith("soffice") for c in fake.calls)
+    assert draw.calls == []
 
 
 def test_pdf_uses_the_pdf_script(monkeypatch, tmp_path):
@@ -65,49 +75,61 @@ def test_pdf_uses_the_pdf_script(monkeypatch, tmp_path):
     assert ps[ps.index("-PdfPath") + 1] == str(tmp_path / "d.pdf")  # no wslpath: used as is
 
 
-def test_powerpoint_failure_falls_back_to_libreoffice_with_a_note(monkeypatch, tmp_path):
+def test_powerpoint_failure_is_drawn_by_pikslide_with_a_note(monkeypatch, tmp_path):
+    # issue #34: not LibreOffice, which is used only when named
     _tools(monkeypatch, "powershell.exe", "soffice")
-    monkeypatch.setattr(render.subprocess, "run", _FakeRun(fail=("powershell.exe",)))
-    out = tmp_path / "chart.png"
-    notes = render.render_deck(str(tmp_path / "d.pptx"), str(out), "png")
-    assert out.exists()  # renamed from soffice's own d.png
-    assert "boom" in notes[0] and LIBREOFFICE_NOTE in notes[0]
+    fake, draw = _FakeRun(fail=("powershell.exe",)), _Draw()
+    monkeypatch.setattr(render.subprocess, "run", fake)
+    out = str(tmp_path / "chart.png")
+    renderer, [note] = render.render_deck(str(tmp_path / "d.pptx"), out, "png", draw=draw)
+    assert renderer == "direct" and draw.calls == [(out, "png")]
+    assert "boom" in note and DIRECT_NOTE in note
+    assert not any(c[0].endswith("soffice") for c in fake.calls)
 
 
-def test_auto_without_powershell_uses_libreoffice_with_a_note(monkeypatch, tmp_path):
+def test_auto_without_powershell_is_drawn_by_pikslide_with_a_note(monkeypatch, tmp_path):
     _tools(monkeypatch, "soffice")
-    monkeypatch.setattr(render.subprocess, "run", _FakeRun())
-    [note] = render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.pdf"), "pdf")
-    assert "powershell.exe" in note and LIBREOFFICE_NOTE in note
+    draw = _Draw()
+    renderer, [note] = render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.pdf"), "pdf", draw=draw)
+    assert renderer == "direct" and draw.calls == [(str(tmp_path / "d.pdf"), "pdf")]
+    assert "powershell.exe" in note and DIRECT_NOTE in note
+
+
+def test_renderer_direct_never_tries_powerpoint(monkeypatch, tmp_path):
+    _tools(monkeypatch, "powershell.exe", "soffice")
+    fake, draw = _FakeRun(), _Draw()
+    monkeypatch.setattr(render.subprocess, "run", fake)
+    assert render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", "direct", draw) == ("direct", [])
+    assert fake.calls == [] and len(draw.calls) == 1
 
 
 def test_renderer_powerpoint_never_falls_back(monkeypatch, tmp_path):
     _tools(monkeypatch, "soffice")
-    fake = _FakeRun()
+    fake, draw = _FakeRun(), _Draw()
     monkeypatch.setattr(render.subprocess, "run", fake)
     with pytest.raises(RenderError, match="powershell.exe"):
-        render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", renderer="powerpoint")
-    assert fake.calls == []
+        render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", renderer="powerpoint", draw=draw)
+    assert fake.calls == [] and draw.calls == []
 
 
 def test_renderer_libreoffice_skips_powerpoint_silently(monkeypatch, tmp_path):
     _tools(monkeypatch, "powershell.exe", "soffice")
     fake = _FakeRun()
     monkeypatch.setattr(render.subprocess, "run", fake)
-    assert render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", renderer="libreoffice") == []
+    assert render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", renderer="libreoffice") == (
+        "libreoffice", [])
     assert [os.path.basename(c[0]) for c in fake.calls] == ["soffice"]
 
 
-def test_no_renderer_at_all_is_an_error(monkeypatch, tmp_path):
-    _tools(monkeypatch)
-    with pytest.raises(RenderError, match="soffice"):
-        render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png")
-
-
-def test_powerpoint_failure_without_libreoffice_reports_both(monkeypatch, tmp_path):
+def test_renderer_libreoffice_without_soffice_is_an_error(monkeypatch, tmp_path):
     _tools(monkeypatch, "powershell.exe")
-    monkeypatch.setattr(render.subprocess, "run", _FakeRun(fail=("powershell.exe",)))
-    with pytest.raises(RenderError, match="boom.*soffice"):
+    with pytest.raises(RenderError, match="soffice"):
+        render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png", renderer="libreoffice")
+
+
+def test_with_nothing_to_draw_with_it_is_an_error(monkeypatch, tmp_path):
+    _tools(monkeypatch)
+    with pytest.raises(RenderError, match="powershell.exe.*nothing to draw it with"):
         render.render_deck(str(tmp_path / "d.pptx"), str(tmp_path / "d.png"), "png")
 
 
@@ -126,10 +148,10 @@ def rendered(monkeypatch):
     """Replace render_deck() itself, recording (pptx, out, fmt, renderer)."""
     calls = []
 
-    def fake_render(pptx_path, out_path, fmt, renderer="auto"):
+    def fake_render(pptx_path, out_path, fmt, renderer="auto", draw=None):
         assert os.path.isfile(pptx_path)  # the deck is written first
         calls.append((pptx_path, out_path, fmt, renderer))
-        return []
+        return "powerpoint", []
 
     monkeypatch.setattr("pikslide.render_deck", fake_render)
     return calls
@@ -149,7 +171,8 @@ def test_png_and_pdf_default_beside_output(monkeypatch, capsys, tmp_path, render
         (str(out), str(tmp_path / "out.pdf"), "pdf", "auto"),
     ]
     stdout = capsys.readouterr().out
-    assert f"wrote {tmp_path / 'out.png'}" in stdout and f"wrote {tmp_path / 'out.pdf'}" in stdout
+    assert f"wrote {tmp_path / 'out.png'} (drawn by PowerPoint)" in stdout
+    assert f"wrote {tmp_path / 'out.pdf'} (drawn by PowerPoint)" in stdout
 
 
 def test_explicit_png_path(monkeypatch, tmp_path, rendered):
@@ -175,13 +198,13 @@ def test_renderer_flag_is_passed_through(monkeypatch, tmp_path, rendered):
 def test_a_fallback_is_a_note_not_a_warning_so_strict_allows_it(monkeypatch, capsys, tmp_path):
     from pptx import Presentation
 
-    monkeypatch.setattr("pikslide.render_deck", lambda *a, **k: ["used LibreOffice"])
+    monkeypatch.setattr("pikslide.render_deck", lambda *a, **k: ("direct", ["drawn without PowerPoint"]))
     tmpl = tmp_path / "tmpl.pptx"
     Presentation().save(str(tmpl))
     _run_cli(monkeypatch, [str(_src(tmp_path)), str(tmp_path / "o.pptx"), "--template", str(tmpl), "--png", "--strict"])
     captured = capsys.readouterr()
-    assert captured.err == "note: used LibreOffice\n"
-    assert "wrote" in captured.out
+    assert captured.err == "note: drawn without PowerPoint\n"
+    assert "(drawn by pikslide)" in captured.out
 
 
 def test_png_path_with_the_wrong_extension_is_an_error(monkeypatch, capsys, tmp_path, rendered):
@@ -211,6 +234,18 @@ def test_render_failure_is_a_clean_error(monkeypatch, capsys, tmp_path):
     assert exc.value.code == 1
     assert "could not render" in capsys.readouterr().err
     assert (tmp_path / "d.pptx").exists()  # the deck itself was still written
+
+
+@pytest.mark.parametrize("fmt, magic", [("png", b"\x89PNG"), ("pdf", b"%PDF")])
+def test_direct_draws_without_powerpoint(monkeypatch, capsys, tmp_path, fmt, magic):
+    # issue #34: no PowerPoint, no LibreOffice, and a picture all the same
+    _tools(monkeypatch)
+    out = tmp_path / "d.pptx"
+    _run_cli(monkeypatch, [str(_src(tmp_path)), str(out), f"--{fmt}"])
+    assert (tmp_path / f"d.{fmt}").read_bytes().startswith(magic)
+    captured = capsys.readouterr()
+    assert f"wrote {tmp_path / f'd.{fmt}'} (drawn by pikslide)" in captured.out
+    assert DIRECT_NOTE in captured.err
 
 
 @pytest.mark.skipif(not os.environ.get("PIKSLIDE_RENDER_TESTS"), reason="set PIKSLIDE_RENDER_TESTS=1 to run a real render")

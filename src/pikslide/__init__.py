@@ -15,7 +15,7 @@ from .help import hint as help_hint
 from .help import layout_error_topics, syntax_error_topics
 from .help import show as show_help
 from .help import topics_text as help_topics_text
-from .render import FORMATS, RENDERERS, RenderError, render_deck
+from .render import DRAWN_BY, FORMATS, RENDERERS, RenderError, render_deck
 
 # The library (src/pikslide/api.py, docs/spec.md SS6), and the command.
 __all__ = ["parse", "layout", "render_into", "Layout", "PikSyntaxError", "LayoutError", "main"]
@@ -100,8 +100,9 @@ def _parser() -> argparse.ArgumentParser:
         )
     parser.add_argument(
         "--renderer", choices=RENDERERS, default="auto",
-        help="what renders --png/--pdf: PowerPoint (via powershell.exe), LibreOffice (soffice), or "
-        "auto, PowerPoint if reachable, else LibreOffice (default: auto)",
+        help="what renders --png/--pdf: PowerPoint (via powershell.exe); direct, pikslide itself, close to "
+        "PowerPoint but never showing text overflowing (the warnings and --strict tell that); LibreOffice "
+        "(soffice); or auto, PowerPoint if reachable, else direct (default: auto)",
     )
     parser.add_argument(
         "--strict", action="store_true",
@@ -222,7 +223,7 @@ def _fail_layout(args: argparse.Namespace, err: LayoutError) -> None:
 
 def _succeed(args: argparse.Namespace, message: str, warnings: list[LayoutWarning] = (), notes: list[str] = ()) -> None:
     """`notes` are informational only -- unlike `warnings`, --strict never
-    makes them fatal (e.g. --png falling back to LibreOffice: a fact about
+    makes them fatal (e.g. --png drawn without PowerPoint: a fact about
     how the image was made, not a problem with the diagram)."""
     for w in warnings:
         print(f"warning: {w}", file=sys.stderr)
@@ -318,16 +319,24 @@ def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
         warnings.append(LayoutWarning(warning))
         write_pptx(result, out_path)
 
-    written = {"output": out_path}
+    written = [f"wrote {out_path}"]
     notes = []
+    template_layout = "" if args.template is None else args.layout if args.layout is not None else result.layout_name
+
+    def draw_direct(path: str, fmt: str) -> None:
+        from . import draw
+
+        draw.save(draw.draw(result, args.template, template_layout), path, fmt)
+
     for fmt in FORMATS:
         path = getattr(args, fmt)
         if path is None:
             continue
         try:
-            notes += render_deck(out_path, path, fmt, renderer=args.renderer)
+            renderer, more = render_deck(out_path, path, fmt, renderer=args.renderer, draw=draw_direct)
         except RenderError as e:
             _fail(args, f"could not render {path}: {e}")
             return
-        written[fmt] = path
-    _succeed(args, "\n".join(f"wrote {p}" for p in written.values()), warnings=warnings, notes=notes)
+        notes += more
+        written.append(f"wrote {path} (drawn by {DRAWN_BY[renderer]})")
+    _succeed(args, "\n".join(written), warnings=warnings, notes=notes)

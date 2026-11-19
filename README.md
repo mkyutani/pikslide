@@ -91,14 +91,15 @@ command.
 
 ```sh
 pikslide diagram.pik diagram.pptx                        # a one-slide deck, sized to the diagram
-pikslide diagram.pik diagram.pptx --png                  # and diagram.png, drawn by PowerPoint
+pikslide diagram.pik diagram.pptx --png                  # and diagram.png, drawn by PowerPoint where there is one
 pikslide diagram.pik --template corporate.potx           # on the template's slide, in its theme
 pikslide diagram.pik --check                             # lay it out, write nothing: errors, warnings and where each object went, as JSON
 ```
 
 `--png` (and `--pdf`) use PowerPoint itself, on Windows or from WSL with
-a Windows install, and fall back to LibreOffice otherwise: good for a
-quick look, but not for checking exact layout against PowerPoint.
+a Windows install. Anywhere else, pikslide draws the picture itself,
+close to PowerPoint's, except that it never shows text overflowing: the
+warnings tell that.
 
 A tool that assembles a deck with python-pptx can instead draw a diagram
 onto a slide of its own, with `pikslide.parse()`, `pikslide.layout()` and

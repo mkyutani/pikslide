@@ -5,6 +5,7 @@ import sys
 from importlib.metadata import version
 
 from .api import Layout, layout, render_into
+from .fonts import FontInstallError, install_fonts, on_windows
 from .pik import PikSyntaxError, dump, format_syntax_error, parse
 from .pik.layout import LayoutError, LayoutWarning, flatten_shapes
 from .pik.tokens import column_at
@@ -42,6 +43,9 @@ def main() -> None:
                 print(help_topics_text(), end="")
                 return
             raise SystemExit(show_help(topic))
+    # --install-font SOURCE ... (issue #37) takes no INPUT either.
+    if "--install-font" in argv:
+        raise SystemExit(_install_fonts(argv))
 
     args = _parse_args(argv)
     with open(args.input, encoding="utf-8") as f:
@@ -50,6 +54,30 @@ def main() -> None:
     # directory (docs/spec.md SS3.5).
     base_dir = os.path.dirname(os.path.abspath(args.input))
     _run(args, text, base_dir)
+
+
+def _install_fonts(argv: list[str]) -> int:
+    """`pikslide --install-font SOURCE ...`: each SOURCE's fonts in the
+    user's font directory (fonts.install_fonts()), each named with its
+    family names, as `typeface` takes them."""
+    i = argv.index("--install-font")
+    sources = argv[i + 1 :]
+    if argv[:i] or not sources or any(source.startswith("-") for source in sources):
+        print("usage: pikslide --install-font SOURCE [SOURCE ...]", file=sys.stderr)
+        return 2
+    for source in sources:
+        try:
+            installed = install_fonts(source)
+        except FontInstallError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        for path, families, already in installed:
+            print(f"{'already installed' if already else 'installed'} {path}: {' / '.join(families)}")
+    if on_windows():
+        sys.stdout.flush()  # after what was installed, even through a pipe
+        print("note: for `fit` and --renderer direct; PowerPoint draws only with fonts installed in Windows, "
+              "so for it, install them in Windows too (open each font file and choose Install)", file=sys.stderr)
+    return 0
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -67,6 +95,12 @@ def _parser() -> argparse.ArgumentParser:
         "a list (colors, shapes, ...) or a page (intro, template, llm)",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {version('pikslide')}")
+    parser.add_argument(
+        "--install-font", metavar="SOURCE", nargs="+",
+        help="install the fonts in SOURCE, a font file (.ttf .otf .ttc), a directory or zip of them, or a "
+        "URL of a font or a zip, in your font directory, for `fit` and --renderer direct to use, then exit; "
+        "on Windows and WSL, PowerPoint doesn't see them: install them in Windows for it",
+    )
     parser.add_argument("input", help="a .pik source file")
     parser.add_argument(
         "output", nargs="?", default=None,

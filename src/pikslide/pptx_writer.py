@@ -31,7 +31,7 @@ from pptx.oxml.xmlchemy import OxmlElement
 from pptx.parts.image import ImagePart
 from pptx.util import Emu, Inches, Pt
 
-from .fonts import FontIndex, ThemeFonts, installed_fonts, theme_fonts_from_xml
+from .fonts import FontIndex, ThemeFonts, glyph_coverage, installed_fonts, powerpoint_sees, theme_fonts_from_xml
 from .pik import ast
 from .pik.layout import (
     _FRAMED_TEXT_KINDS,
@@ -224,8 +224,13 @@ class PilFontMetrics:
         self.substitute = _find_measure_font()
         self._cache: dict[tuple, ImageFont.FreeTypeFont] = {}
         self._faces: dict[tuple, tuple[str, int] | None] = {}
+        self._coverage: dict[tuple[str, int], frozenset[int]] = {}
         self.missing: set[str] = set()
         """Family names asked for but not installed here."""
+        self.unseen: set[str] = set()
+        """Family names installed here only where PowerPoint doesn't draw
+        with them (fonts.powerpoint_sees()): under WSL, in WSL's own font
+        directories rather than Windows'."""
 
     def _size_pt(self, flags: list[str], text_sizes: dict[str, float] | None) -> float:
         # An explicit override (a specific object's own Shape.text_sizes,
@@ -252,6 +257,8 @@ class PilFontMetrics:
             if face is not None:
                 font = ImageFont.truetype(face.path, size_px, index=face.index)
                 self._faces[key] = (face.path, face.index)
+                if not powerpoint_sees(face.path):
+                    self.unseen.add(family)
             else:
                 if family:
                     self.missing.add(family)
@@ -282,6 +289,28 @@ class PilFontMetrics:
             font = self._font(family, bold, italic, size_px)
             out.append((run, font, self._faces[(family, bold, italic, size_px)]))
         return out
+
+    def missing_glyphs(self, text: str, flags: list[str], typeface: str) -> list[tuple[str, str]]:
+        """The characters of `text` its fonts have no glyph for, by family:
+        PowerPoint draws them in another font, which `fit` can't measure.
+        A family not installed here, measured with a substitute, is not
+        looked at: that is a warning of its own."""
+        latin, ea = self._families(flags, typeface)
+        bold, italic = "bold" in flags, "italic" in flags
+        out: dict[str, str] = {}
+        for is_ea, run in _script_runs(text):
+            family = ea if is_ea else latin
+            face = self._index.find(family, bold, italic) if family else None
+            if face is None or face.path == self.substitute:
+                continue
+            key = (face.path, face.index)
+            if key not in self._coverage:
+                self._coverage[key] = glyph_coverage(*key)
+            coverage = self._coverage[key]
+            lacking = "".join(ch for ch in run if not ch.isspace() and ord(ch) not in coverage)
+            if lacking and coverage:
+                out[family] = out.get(family, "") + lacking
+        return list(out.items())
 
     def size_pt(self, flags: list[str], text_sizes: dict[str, float] | None = None) -> float:
         """The size, in points, `flags` set text in."""
@@ -367,11 +396,40 @@ def resolve_for_pptx(
         finally:
             if tmp_path is not None:
                 os.remove(tmp_path)
+    result.warnings += _glyph_warnings(flatten_shapes(result.shapes), metrics)
+    result.stand_ins += [
+        f"font not installed in Windows: {family}; `fit` measured it, but PowerPoint draws another font in its "
+        f"place (install it in Windows)" for family in sorted(metrics.unseen)
+    ]
     substitute = os.path.basename(metrics.substitute) if metrics.substitute else "Pillow's own font (Latin only)"
     result.stand_ins += [
-        f"font not installed: {family}; `fit` measured it with {substitute} instead" for family in sorted(metrics.missing)
+        f"font not installed: {family}; `fit` measured it with {substitute} instead "
+        f"(pikslide --install-font installs one)" for family in sorted(metrics.missing)
     ]
     return result
+
+
+def _glyph_warnings(shapes: list[Shape], metrics: PilFontMetrics) -> list[LayoutWarning]:
+    """A warning for each font with no glyphs for some of the text set in
+    it (Arial, for Japanese), naming the objects: PowerPoint draws those
+    characters in another font, which `fit` can't measure, and
+    --renderer direct shows them as boxes."""
+    found: dict[str, tuple[list[str], list[str]]] = {}
+    for shape in shapes:
+        for text, flags in shape.texts:
+            for family, _lacking in metrics.missing_glyphs(text, flags, shape.typeface):
+                names, texts = found.setdefault(family, ([], []))
+                if shape.name not in names:
+                    names.append(shape.name or "")
+                if text not in texts:
+                    texts.append(text)
+    warnings = []
+    for family, (names, texts) in found.items():
+        quoted = ", ".join(f'"{t}"' for t in texts[:2]) + (f" and {len(texts) - 2} more" if len(texts) > 2 else "")
+        warnings.append(LayoutWarning(
+            f"{family} has no glyphs for some of {quoted}: PowerPoint draws them in another font, which `fit` "
+            f"can't measure; set them in a font that has them", tuple(names)))
+    return warnings
 
 
 def _font_size(flags: list[str], text_sizes: dict[str, float]) -> Pt:

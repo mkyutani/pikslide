@@ -12,10 +12,16 @@ since those are the ones PowerPoint draws with.
 from __future__ import annotations
 
 import glob
+import io
 import json
 import os
+import platform
 import struct
+import sys
 import unicodedata
+import urllib.parse
+import urllib.request
+import zipfile
 from dataclasses import dataclass
 
 from lxml import etree
@@ -38,6 +44,7 @@ def _font_dirs() -> list[str]:
         # Linux
         "/usr/share/fonts",
         "/usr/local/share/fonts",
+        user_font_dir(),
         os.path.join(home, ".local", "share", "fonts"),
         os.path.join(home, ".fonts"),
     ]
@@ -65,11 +72,12 @@ def _decode_name(platform_id: int, encoding_id: int, raw: bytes) -> str | None:
     return None
 
 
-def _read_face(f, offset: int) -> tuple[list[str], bool, bool] | None:
-    """One font's family names (name ID 1, every language) and whether it
-    is bold/italic (OS/2 fsSelection, else head macStyle), from the table
-    directory at `offset` of the open file `f`. Reads only what it needs:
-    fonts can be large, and slow to read whole (over WSL's /mnt/c)."""
+def _read_face(f, offset: int, normalize: bool = True) -> tuple[list[str], bool, bool] | None:
+    """One font's family names (name ID 1, every language; normalized
+    for lookup unless `normalize` is false) and whether it is bold/italic
+    (OS/2 fsSelection, else head macStyle), from the table directory at
+    `offset` of the open file `f`. Reads only what it needs: fonts can be
+    large, and slow to read whole (over WSL's /mnt/c)."""
 
     def read(at: int, size: int) -> bytes:
         f.seek(at)
@@ -97,7 +105,7 @@ def _read_face(f, offset: int) -> tuple[list[str], bool, bool] | None:
         start = string_offset + str_offset
         decoded = _decode_name(platform_id, encoding_id, name[start : start + length])
         if decoded:
-            families.add(_normalize(decoded))
+            families.add(_normalize(decoded) if normalize else decoded.strip())
     bold = italic = False
     if b"OS/2" in tables:
         fs_selection = struct.unpack(">H", read(tables[b"OS/2"][0] + 62, 2))[0]
@@ -111,19 +119,28 @@ def _read_face(f, offset: int) -> tuple[list[str], bool, bool] | None:
 def _read_font_file(path: str) -> list[tuple[int, list[str], bool, bool]]:
     try:
         with open(path, "rb") as f:
-            header = f.read(12)
-            if header[:4] == b"ttcf":
-                num_fonts = struct.unpack_from(">I", header, 8)[0]
-                offsets = struct.unpack(f">{num_fonts}I", f.read(4 * num_fonts))
-            else:
-                offsets = (0,)
-            out = []
-            for index, offset in enumerate(offsets):
-                face = _read_face(f, offset)
-                if face is not None:
-                    out.append((index, *face))
-            return out
-    except (OSError, struct.error):
+            return _read_faces(f)
+    except OSError:
+        return []
+
+
+def _read_faces(f, normalize: bool = True) -> list[tuple[int, list[str], bool, bool]]:
+    """Each face in the open font file `f` (one, or a collection's): its
+    index, family names (_read_face()), and whether bold and italic."""
+    try:
+        header = f.read(12)
+        if header[:4] == b"ttcf":
+            num_fonts = struct.unpack_from(">I", header, 8)[0]
+            offsets = struct.unpack(f">{num_fonts}I", f.read(4 * num_fonts))
+        else:
+            offsets = (0,)
+        out = []
+        for index, offset in enumerate(offsets):
+            face = _read_face(f, offset, normalize)
+            if face is not None:
+                out.append((index, *face))
+        return out
+    except struct.error:
         return []
 
 
@@ -155,6 +172,221 @@ def baseline_ratio(path: str, index: int = 0) -> float:
     except (OSError, struct.error):
         pass
     return 0.96
+
+
+def glyph_coverage(path: str, index: int = 0) -> frozenset[int]:
+    """The code points the font at `path` (`index` in a collection) has a
+    glyph for, from its `cmap` table: the full-repertoire subtable
+    (format 12) if it has one, else the BMP one (format 4). Empty when the
+    font can't be read."""
+    try:
+        with open(path, "rb") as f:
+            offset = 0
+            if f.read(4) == b"ttcf":
+                f.seek(12 + 4 * index)
+                offset = struct.unpack(">I", f.read(4))[0]
+            f.seek(offset + 4)
+            num_tables = struct.unpack(">H", f.read(2))[0]
+            f.seek(offset + 12)
+            directory = f.read(16 * num_tables)
+            tables = {}
+            for i in range(num_tables):
+                tag, _checksum, t_offset, t_length = struct.unpack_from(">4sIII", directory, 16 * i)
+                tables[tag] = (t_offset, t_length)
+            if b"cmap" not in tables:
+                return frozenset()
+            f.seek(tables[b"cmap"][0])
+            cmap = f.read(tables[b"cmap"][1])
+    except (OSError, struct.error):
+        return frozenset()
+    try:
+        _version, count = struct.unpack_from(">HH", cmap, 0)
+        subtables = {}
+        for i in range(count):
+            platform_id, encoding_id, sub_offset = struct.unpack_from(">HHI", cmap, 4 + 8 * i)
+            fmt = struct.unpack_from(">H", cmap, sub_offset)[0]
+            subtables.setdefault((fmt, platform_id, encoding_id), sub_offset)
+        for (fmt, platform_id, encoding_id), sub_offset in sorted(subtables.items(), key=lambda kv: kv[0][0] != 12):
+            if fmt == 12 and (platform_id, encoding_id) in ((3, 10), (0, 4), (0, 6)):
+                return frozenset(_format12(cmap, sub_offset))
+        for (fmt, platform_id, encoding_id), sub_offset in subtables.items():
+            if fmt == 4 and (platform_id == 0 or (platform_id, encoding_id) == (3, 1)):
+                return frozenset(_format4(cmap, sub_offset))
+    except struct.error:
+        pass
+    return frozenset()
+
+
+def _format12(cmap: bytes, at: int):
+    n_groups = struct.unpack_from(">I", cmap, at + 12)[0]
+    for g in range(n_groups):
+        start, end, glyph = struct.unpack_from(">III", cmap, at + 16 + 12 * g)
+        yield from range(start + (glyph == 0), end + 1)
+
+
+def _format4(cmap: bytes, at: int):
+    seg_count = struct.unpack_from(">H", cmap, at + 6)[0] // 2
+    ends = struct.unpack_from(f">{seg_count}H", cmap, at + 14)
+    starts = struct.unpack_from(f">{seg_count}H", cmap, at + 16 + 2 * seg_count)
+    deltas = struct.unpack_from(f">{seg_count}h", cmap, at + 16 + 4 * seg_count)
+    range_at = at + 16 + 6 * seg_count
+    range_offsets = struct.unpack_from(f">{seg_count}H", cmap, range_at)
+    for i, (start, end, delta, range_offset) in enumerate(zip(starts, ends, deltas, range_offsets)):
+        for c in range(start, min(end, 0xFFFE) + 1):
+            if range_offset == 0:
+                glyph = (c + delta) & 0xFFFF
+            else:
+                glyph = struct.unpack_from(">H", cmap, range_at + 2 * i + range_offset + 2 * (c - start))[0]
+                glyph = (glyph + delta) & 0xFFFF if glyph else 0
+            if glyph:
+                yield c
+
+
+def powerpoint_sees(path: str) -> bool:
+    """Whether PowerPoint on this machine draws with the font at `path`,
+    as far as pikslide can tell: on Windows, one installed in Windows, not
+    one --install-font put in pikslide's own directory; under WSL, one in
+    Windows (under /mnt), not one in WSL's own directories. Elsewhere,
+    any: PowerPoint for Mac uses the user's fonts, and on Linux there is
+    no PowerPoint to tell about."""
+    if sys.platform == "win32":
+        own = os.path.normcase(os.path.abspath(user_font_dir()))
+        return not os.path.normcase(os.path.abspath(path)).startswith(own)
+    if on_windows():
+        return os.path.abspath(path).startswith("/mnt/")
+    return True
+
+
+# ---------------------------------------------------------------------------
+# --install-font (issue #37): a font this machine lacks, for `fit` and
+# --renderer direct to use
+# ---------------------------------------------------------------------------
+
+# How a font file starts: TrueType (1.0 or Apple's `true`), CFF
+# OpenType, or a collection.
+_FONT_MAGIC = (b"\x00\x01\x00\x00", b"true", b"OTTO", b"ttcf")
+# The most --install-font downloads, or takes from one zip.
+_MAX_FONT_BYTES = 200_000_000
+
+
+class FontInstallError(Exception):
+    pass
+
+
+def user_font_dir() -> str:
+    """Where --install-font puts fonts, and FontIndex looks: the user's
+    own font directory, `~/Library/Fonts` on macOS, `$XDG_DATA_HOME/fonts`
+    (`~/.local/share/fonts`) on Linux and WSL; on Windows, pikslide's own,
+    `%LOCALAPPDATA%\\pikslide\\fonts`, Windows' being Windows' to install
+    fonts in (PowerPoint draws with those)."""
+    home = os.path.expanduser("~")
+    if sys.platform == "darwin":
+        return os.path.join(home, "Library", "Fonts")
+    if sys.platform == "win32":
+        return os.path.join(os.environ.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local"), "pikslide", "fonts")
+    return os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share"), "fonts")
+
+
+def on_windows() -> bool:
+    """Windows, or WSL, where PowerPoint draws with the fonts installed in
+    Windows, not with those --install-font installs."""
+    return sys.platform == "win32" or "microsoft" in platform.uname().release.lower()
+
+
+def install_fonts(source: str, dest: str | None = None) -> list[tuple[str, list[str], bool]]:
+    """Put the fonts `source` names in `dest` (user_font_dir()), where
+    FontIndex finds them by name: a font file (.ttf, .otf, .ttc, .otc), a
+    directory of them, a zip of them, or a URL of a font file or a zip.
+    Returns each font's path there, its family names, and whether it was
+    there already. pikslide fetches what it is told to and ships no font:
+    a font's license is its user's to see to.
+
+    PowerPoint on Windows (and WSL) doesn't draw with a font installed so
+    (on_windows()): that is installed in Windows, by its user.
+
+    Raises FontInstallError where `source` can't be had or has no font."""
+    if source.startswith(("http://", "https://")):
+        name, data = _download(source)
+        fonts = _fonts_in(name, data)
+    elif os.path.isdir(source):
+        fonts = []
+        for root, _subdirs, files in os.walk(source):
+            for file in sorted(files):
+                if file.lower().endswith(_FONT_EXTENSIONS + (".zip",)):
+                    with open(os.path.join(root, file), "rb") as f:
+                        fonts += _fonts_in(file, f.read())
+    elif os.path.isfile(source):
+        with open(source, "rb") as f:
+            fonts = _fonts_in(os.path.basename(source), f.read())
+    else:
+        raise FontInstallError(f"no such file or directory: {source}")
+    if not fonts:
+        raise FontInstallError(f"no font in {source} (a .ttf, .otf, .ttc or .otc, or a zip of them)")
+    dest = dest or user_font_dir()
+    os.makedirs(dest, exist_ok=True)
+    out = []
+    for name, data, families in fonts:
+        path = os.path.join(dest, name)
+        try:
+            with open(path, "rb") as f:
+                already = f.read() == data
+        except OSError:
+            already = False
+        if not already:
+            # Written aside, then moved into place: the directory's time
+            # changes, so FontIndex's cache reads it again (_build()).
+            temp = path + ".part"
+            with open(temp, "wb") as f:
+                f.write(data)
+            os.replace(temp, path)
+        out.append((path, families, already))
+    return out
+
+
+def _download(url: str) -> tuple[str, bytes]:
+    """The file at `url`: its name, from the URL's path, and its bytes."""
+    request = urllib.request.Request(url, headers={"User-Agent": "pikslide"})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            data = response.read(_MAX_FONT_BYTES + 1)
+            final = response.geturl()
+    except (OSError, ValueError) as e:
+        raise FontInstallError(f"could not download {url}: {e}") from None
+    if len(data) > _MAX_FONT_BYTES:
+        raise FontInstallError(f"{url} is bigger than {_MAX_FONT_BYTES // 1_000_000} MB")
+    name = os.path.basename(urllib.request.url2pathname(urllib.parse.urlsplit(final).path)) or "font"
+    return name, data
+
+
+def _fonts_in(name: str, data: bytes) -> list[tuple[str, bytes, list[str]]]:
+    """The fonts in a file named `name`, a font or a zip of them: each
+    one's file name, bytes and family names. Anything else in a zip, or
+    a file that isn't a font, is passed over."""
+    if data[:4] == b"PK\x03\x04":
+        out = []
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                for member in archive.infolist():
+                    base = os.path.basename(member.filename)
+                    # Only fonts, by name alone (never a path in the zip), and
+                    # not macOS's ._ resource files.
+                    if member.is_dir() or base.startswith("._") or not base.lower().endswith(_FONT_EXTENSIONS):
+                        continue
+                    if member.file_size > _MAX_FONT_BYTES:
+                        raise FontInstallError(f"{base} in {name} is bigger than {_MAX_FONT_BYTES // 1_000_000} MB")
+                    out += _fonts_in(base, archive.read(member))
+        except zipfile.BadZipFile as e:
+            raise FontInstallError(f"{name} is not a zip that can be read: {e}") from None
+        return out
+    if data[:4] not in _FONT_MAGIC:
+        return []
+    faces = _read_faces(io.BytesIO(data), normalize=False)
+    families = sorted({family for _index, names, _bold, _italic in faces for family in names})
+    if not families:
+        return []
+    if not name.lower().endswith(_FONT_EXTENSIONS):
+        name += {b"ttcf": ".ttc", b"OTTO": ".otf"}.get(data[:4], ".ttf")
+    return [(name, data, families)]
 
 
 def _cache_path() -> str:

@@ -306,6 +306,26 @@ Japanese (`Jpan`) choice. `bold` and `italic` use those faces.
   read from the font files once and cached (`~/.cache/pikslide/fonts.json`).
 - **A font that is not installed** is measured with a substitute, with a
   warning naming it; the object may then come out too wide or too narrow.
+  `pikslide --install-font SOURCE` installs one, from a font file
+  (`.ttf`, `.otf`, `.ttc`), a directory or zip of them, or a URL of a font
+  or a zip, in the user's font directory (`~/.local/share/fonts` on Linux
+  and WSL, `~/Library/Fonts` on macOS, pikslide's own
+  `%LOCALAPPDATA%\pikslide\fonts` on Windows), where it is found by name
+  like any other: it prints the family names to write in `typeface`. It
+  is for `fit` and `--renderer direct`: PowerPoint on Windows draws only
+  with fonts installed in Windows, which is the user's to do, and on
+  Windows and WSL it says so. pikslide fetches what it is told to and
+  ships no font: a font's license is its user's to see to.
+- **A font PowerPoint doesn't draw with**, on Windows one `--install-font`
+  put in pikslide's own directory, under WSL one in WSL's own font
+  directories rather than Windows' (a family named the same in both is
+  told apart by name: Windows' BIZ UD明朝 is `BIZ UD明朝 Medium`), is
+  measured all the same, with a warning: PowerPoint draws another font in
+  its place.
+- **A font with no glyphs for some of the text set in it** (Arial, for
+  Japanese) is a warning naming the objects: PowerPoint draws those
+  characters in another font, which `fit` can't measure, and
+  `--renderer direct` draws them as boxes.
 - **Text containing East Asian characters is marked Japanese** (`lang`),
   as PowerPoint marks Japanese input. Unmarked, PowerPoint draws it in its
   own default Japanese font instead of the theme's, which is not the font
@@ -775,14 +795,16 @@ Humans and LLMs both need errors they can act on.
 - A callout whose box has no outline (`callout1`, `accentCallout1`, and
   their 2 and 3), with no fill, is a **warning**: only its lines show.
 - A font that is not installed, so `fit` measured with a substitute, is a
-  **warning** (§3.3).
+  **warning** (§3.3), and so is one installed where PowerPoint doesn't
+  draw with it, and one with no glyphs for some of the text set in it.
 - Unknown names (color, theme slot, preset, image path) are
   **errors with suggestions**, not silent fallbacks. A slide layout name
   that no layout has, or that two share, is an error that lists the
   template's layouts, each with its id and master (§3.8).
 - `--strict` makes a **stand-in** an error: the built-in theme in place of
-  a `--template`, or a substitute for a font that is not installed. Both
-  mean the output is not what the deck will really show. Text overflowing
+  a `--template`, or a substitute for a font that is not installed, or
+  one PowerPoint doesn't draw with. All three mean the output is not what
+  the deck will really show. Text overflowing
   a fixed-size object stays a warning: it is a fact about the diagram,
   visible in the output itself.
 - A `define` naming an already-defined variable is an **error** (§3.6).

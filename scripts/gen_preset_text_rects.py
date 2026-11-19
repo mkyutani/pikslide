@@ -1,6 +1,7 @@
 """Write src/pikslide/pik/preset_text_rects.py: the text rectangle, the
-adjust values and the connection sites of every preset shape, from
-OOXML's preset shape definitions.
+adjust values and the connection sites of every preset shape, and
+src/pikslide/pik/preset_paths.py: its outline, from OOXML's preset shape
+definitions.
 
     uv run python scripts/gen_preset_text_rects.py presetShapeDefinitions.xml
 
@@ -21,6 +22,12 @@ attaches to it (`attach`, issue #18), each a `<pos x y>` and the angle a
 connector leaves it at (`ang`), naming guides, in the order a connector
 numbers them (`idx`); this keeps them and the guides they need, as for
 the text rectangle.
+
+A preset's outline, `<pathLst>`, is one or more paths, each drawn with
+the shape's fill or none (`fill`), or a lighter or darker shade of it, and
+outlined or not (`stroke`), in a coordinate space of its own if it has a
+`w` and `h`; each a list of commands naming guides. This keeps them and
+the guides they need, for --renderer direct (issue #34) to draw.
 """
 
 from __future__ import annotations
@@ -32,18 +39,35 @@ import xml.etree.ElementTree as ET
 from pikslide.pik.layout import PRESET_NAMES
 
 OUT = pathlib.Path(__file__).resolve().parent.parent / "src" / "pikslide" / "pik" / "preset_text_rects.py"
+PATHS_OUT = OUT.with_name("preset_paths.py")
 NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 # What a preset with no <rect> gets: the whole shape (ECMA-376 Part 1, 20.1.9.22).
 WHOLE_SHAPE = ("l", "t", "r", "b")
 # The definitions' own mistakes: pie's <rect> swaps t and r (l="il" t="ir"
 # r="it" b="ib"), which puts its top below its bottom.
 ERRATA = {"pie": ("il", "it", "ir", "ib")}
+# How many arguments each guide formula's operator takes (ECMA-376 Part 1,
+# 20.1.10.30). Some formulas have one too many (circularArrow's
+# `+- xH 0 dxB 0`): the first are the ones read.
+ARITY = {"val": 1, "abs": 1, "sqrt": 1, "max": 2, "min": 2, "sin": 2, "cos": 2, "tan": 2, "at2": 2,
+         "*/": 3, "+-": 3, "+/": 3, "?:": 3, "pin": 3, "mod": 3, "cat2": 3, "sat2": 3}
+
+
+# curvedLeftArrow's third connection site leaves at `cd3`, which is no
+# built-in guide (ECMA-376 Part 1, 20.1.9.11): its mirror image's,
+# curvedRightArrow's, leaves rightward (0), so this one leaves leftward.
+ANGLE_ERRATA = {"cd3": "cd2"}
+
+
+def _formula(fmla: str) -> str:
+    op, *args = fmla.split()
+    return fmla if len(args) <= ARITY[op] else " ".join([op, *args[:ARITY[op]]])
 
 
 def needed_guides(preset: ET.Element, names) -> list[tuple[str, str]]:
     """The guides `names` need, in order."""
     guides = [
-        (gd.get("name"), gd.get("fmla"))
+        (gd.get("name"), _formula(gd.get("fmla")))
         for lst in ("avLst", "gdLst")
         if (el := preset.find(NS + lst)) is not None
         for gd in el.findall(NS + "gd")
@@ -74,9 +98,81 @@ def connection_sites(preset: ET.Element) -> tuple[list[tuple[str, str]], list[tu
     site's x, y and angle, in the order a connector numbers them."""
     cxn_lst = preset.find(NS + "cxnLst")
     sites = [] if cxn_lst is None else [
-        (pos.get("x"), pos.get("y"), cxn.get("ang")) for cxn in cxn_lst.findall(NS + "cxn") for pos in cxn.findall(NS + "pos")
+        (pos.get("x"), pos.get("y"), ANGLE_ERRATA.get(cxn.get("ang"), cxn.get("ang")))
+        for cxn in cxn_lst.findall(NS + "cxn") for pos in cxn.findall(NS + "pos")
     ]
     return needed_guides(preset, {name for site in sites for name in site}), sites
+
+
+# Each path command, as preset_paths.py writes it, and the attributes of
+# its own (arcTo) or of its points (the rest) that it takes, in order.
+_COMMANDS = {"moveTo": "M", "lnTo": "L", "arcTo": "A", "cubicBezTo": "C", "quadBezTo": "Q", "close": "Z"}
+_ARC = ("wR", "hR", "stAng", "swAng")
+
+
+def outline(preset: ET.Element) -> tuple[list[tuple[str, str]], list[tuple]]:
+    """The guides a preset's paths need, in order, and each path as (w,
+    h, fill, stroke, commands): w and h are its coordinate space, "" for
+    the shape's own; fill is norm, none, lighten, lightenLess, darken or
+    darkenLess (ECMA-376 Part 1, 20.1.10.37); each command is its letter
+    and the guides or numbers it takes."""
+    paths = []
+    for path in preset.find(NS + "pathLst").findall(NS + "path"):
+        commands = []
+        for el in path:
+            letter = _COMMANDS[el.tag.removeprefix(NS)]
+            if letter == "A":
+                commands.append((letter, *(el.get(k) for k in _ARC)))
+            else:
+                commands.append((letter, *(v for pt in el.findall(NS + "pt") for v in (pt.get("x"), pt.get("y")))))
+        paths.append((path.get("w", ""), path.get("h", ""), path.get("fill", "norm"),
+                      path.get("stroke", "true") != "false", commands))
+    names = {arg for *_, commands in paths for _letter, *args in commands for arg in args}
+    return needed_guides(preset, names), paths
+
+
+def paths_module_source(xml_path: pathlib.Path) -> str:
+    root = ET.parse(xml_path).getroot()
+    out = [
+        '"""The outline of each preset shape: the guides its paths need, and each',
+        "path as (w, h, fill, stroke, commands), commands being M x y, L x y,",
+        "A wR hR stAng swAng, C x1 y1 x2 y2 x y, Q x1 y1 x y and Z (see",
+        "pikslide.pik.outline).",
+        "",
+        "Written by scripts/gen_preset_text_rects.py from ECMA-376's",
+        "presetShapeDefinitions.xml: don't edit.",
+        '"""',
+        "",
+        "Path = tuple[str, str, str, bool, tuple[tuple[str, ...], ...]]",
+        "",
+        "PATHS: dict[str, tuple[tuple[tuple[str, str], ...], tuple[Path, ...]]] = {",
+    ]
+    for name in sorted(PRESET_NAMES.values(), key=str.lower):
+        guides, paths = outline(root.find(name))
+        out.append(f"    {_str(name)}: (")
+        if guides:
+            out += ["        (", *(f"            ({_str(g)}, {_str(f)})," for g, f in guides), "        ),"]
+        else:
+            out.append("        (),")
+        out.append("        (")
+        for w, h, fill, stroke, commands in paths:
+            out.append(f"            ({_str(w)}, {_str(h)}, {_str(fill)}, {stroke}, (")
+            out += _packed([_tuple(map(_str, command)) + "," for command in commands], "                ")
+            out.append("            )),")
+        out += ["        ),", "    ),"]
+    out.append("}")
+    return "\n".join(out) + "\n"
+
+
+def _packed(items: list[str], indent: str, width: int = 100) -> list[str]:
+    """`items` on as few lines as fit in `width`."""
+    lines: list[str] = []
+    for item in items:
+        if lines and len(lines[-1]) + 1 + len(item) <= width:
+            lines[-1] += " " + item
+        else:
+            lines.append(indent + item)
+    return lines
 
 
 def adjust_values(preset: ET.Element) -> list[tuple[str, int]]:
@@ -152,6 +248,8 @@ def main() -> None:
     args = ap.parse_args()
     OUT.write_text(module_source(args.xml), encoding="utf-8")
     print(f"wrote {OUT}")
+    PATHS_OUT.write_text(paths_module_source(args.xml), encoding="utf-8")
+    print(f"wrote {PATHS_OUT}")
 
 
 if __name__ == "__main__":

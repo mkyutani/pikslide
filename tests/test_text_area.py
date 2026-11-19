@@ -7,11 +7,20 @@ import pytest
 
 from pikslide.pik.layout import PRESET_NAMES
 from pikslide.pik.preset_text_rects import TEXT_RECTS
-from pikslide.pik.text_area import fit_size, text_rect
+from pikslide.pik.text_area import connection_sites, fit_size, text_rect
 
 
 def test_every_preset_has_a_text_rectangle():
     assert set(TEXT_RECTS) == set(PRESET_NAMES.values())
+
+
+@pytest.mark.parametrize("preset", sorted(PRESET_NAMES.values()))
+def test_every_presets_connection_sites_can_be_found(preset: str):
+    # The definitions' slips, circularArrow's `+- xH 0 dxB 0` (one argument
+    # too many) and curvedLeftArrow's angle `cd3` (no built-in guide),
+    # used to fail an attach to them (issue #34)
+    for x, y, angle in connection_sites(preset, 1.0, 0.7):
+        assert all(v == v for v in (x, y, angle))
 
 
 def test_text_rectangle_is_inside_the_shape():

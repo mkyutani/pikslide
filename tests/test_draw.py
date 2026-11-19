@@ -16,7 +16,7 @@ from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pikslide.draw import _dashes, _pixels, _wrap, draw
 from pikslide.fonts import installed_fonts
 from pikslide.pik import parse
-from pikslide.pptx_writer import resolve_for_pptx
+from pikslide.pptx_writer import FontRun, resolve_for_pptx
 
 DOCS = pathlib.Path(__file__).parent.parent / "docs"
 
@@ -111,6 +111,32 @@ def test_text_is_drawn_with_no_font_file_at_all(monkeypatch):
     assert sum(1 for v in image.get_flattened_data() if v < 128) > 100
 
 
+def test_a_bold_with_no_bold_face_is_emboldened_as_powerpoint_does_it(monkeypatch, tmp_path):
+    # BIZ UD明朝 Medium has no bold: PowerPoint draws its strokes thicker,
+    # to the right, as wide as before. DejaVu Sans with its bold face left
+    # out stands in for it.
+    import shutil
+
+    import pikslide.pptx_writer
+    from pikslide.fonts import FontIndex
+
+    regular = pathlib.Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+    if not regular.exists():
+        pytest.skip("DejaVu Sans not installed")
+    shutil.copy(regular, tmp_path / regular.name)
+    monkeypatch.setattr(pikslide.pptx_writer, "installed_fonts", lambda: FontIndex(dirs=[str(tmp_path)]))
+
+    def ink(flag: str) -> tuple[int, int, int]:
+        image = _draw(f'medium = 40pt\ntypeface = "DejaVu Sans"\ntext "lllll" {flag} ljust at (0, 0)\n').convert("L")
+        dark = [(x, y) for x in range(image.width) for y in range(image.height) if image.getpixel((x, y)) < 128]
+        return len(dark), min(x for x, _ in dark), max(x for x, _ in dark)
+
+    (plain, left, right), (bold, bold_left, bold_right) = ink(""), ink("bold")
+    assert bold > plain * 1.1
+    assert bold_left == pytest.approx(left, abs=1)  # grown to the right
+    assert bold_right - right == pytest.approx(40 / 72 * 200 / 55, abs=1.5)
+
+
 class _Font:
     """Ten pixels to a character."""
 
@@ -120,7 +146,7 @@ class _Font:
 
 def _lines(text: str, width: float) -> list[str]:
     font = _Font()
-    return ["".join(run for run, _font, _face in line) for line in _wrap([(text, font, None)], width)]
+    return ["".join(run.text for run in line) for line in _wrap([FontRun(text, font, None, False)], width)]
 
 
 def test_text_wraps_after_a_space_between_east_asian_characters_or_in_a_word_too_long():

@@ -744,7 +744,8 @@ alone) that it isn't PowerPoint's. What drew each picture is named:
 `direct` draws from the layout, not from the deck, what the deck has, as
 PowerPoint draws it: each preset's own outline (ECMA-376's), its shaded
 faces, turned and flipped; arrowheads at PowerPoint's sizes; text in the
-fonts `fit` measured with, where PowerPoint sets it; images. It draws on
+fonts `fit` measured with, where PowerPoint sets it, a bold the font has
+no face for emboldened as PowerPoint does it; images. It draws on
 the deck's slide, a `--template`'s its size, but not the template's
 background, its master's graphics or its placeholders. It can differ
 from PowerPoint's picture a little (where a line of text breaks, a

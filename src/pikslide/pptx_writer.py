@@ -17,6 +17,7 @@ import os
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from PIL import ImageFont
 from pptx import Presentation
@@ -199,6 +200,18 @@ def _master_theme_colors(master) -> dict[str, int]:
     return {ref: rgb[clr_map.get(ref, ref)] for ref in _MSO_THEME_COLOR}
 
 
+class FontRun(NamedTuple):
+    """Text in one font, as PilFontMetrics.run_fonts() gives it."""
+
+    text: str
+    font: ImageFont.FreeTypeFont
+    face: tuple[str, int] | None
+    """The font's file and index; None for Pillow's own."""
+    embolden: bool
+    """Bold asked for, of a font with no bold face: PowerPoint draws it
+    emboldened."""
+
+
 class PilFontMetrics:
     """A pikslide.pik.layout.FontMetrics that measures with the fonts the
     deck will actually be drawn in (docs/spec.md SS3.3), via Pillow: the
@@ -276,18 +289,19 @@ class PilFontMetrics:
 
     def run_fonts(
         self, text: str, flags: list[str], text_sizes: dict[str, float] | None, typeface: str, size_px: int
-    ) -> list[tuple[str, ImageFont.FreeTypeFont, tuple[str, int] | None]]:
+    ) -> list[FontRun]:
         """`text` in runs, each with the font it's drawn in at `size_px`
-        pixels to the em, as text_width() measures it, and that font's file
-        and index (None for Pillow's own): for --renderer direct to draw
-        text where `fit` made room for it."""
+        pixels to the em, as text_width() measures it: for --renderer
+        direct to draw text where `fit` made room for it."""
         latin, ea = self._families(flags, typeface)
         bold, italic = "bold" in flags, "italic" in flags
         out = []
         for is_ea, run in _script_runs(text):
             family = ea if is_ea else latin
             font = self._font(family, bold, italic, size_px)
-            out.append((run, font, self._faces[(family, bold, italic, size_px)]))
+            face = self._index.find(family, bold, italic) if family else None
+            embolden = bold and not (face.bold if face is not None else False)
+            out.append(FontRun(run, font, self._faces[(family, bold, italic, size_px)], embolden))
         return out
 
     def missing_glyphs(self, text: str, flags: list[str], typeface: str) -> list[tuple[str, str]]:

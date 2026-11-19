@@ -44,7 +44,7 @@ from .pik.layout import (
 )
 from .pik.outline import outline
 from .pik.text_area import text_rect
-from .pptx_writer import _LINE_PITCH, PilFontMetrics, _is_east_asian, _line_label_rects, slide_setup
+from .pptx_writer import _LINE_PITCH, FontRun, PilFontMetrics, _is_east_asian, _line_label_rects, slide_setup
 
 DPI = 200
 """Pixels to the inch, as pptx_to_png.ps1 exports PowerPoint's."""
@@ -67,6 +67,11 @@ _ARROW_SCALE = {"small": 2.0, None: 3.0, "large": 5.0}
 _ARROW_LEAST_BASE = 0.7 / 25.4
 # How far back from its tip a stealth arrowhead's notch is, of its length.
 _STEALTH_NOTCH = 2 / 3
+
+# How much thicker PowerPoint draws a bold it has no bold face for, of
+# the size, its strokes grown rightward, its widths kept (checked: BIZ
+# UD明朝 Medium at 40pt).
+_EMBOLDEN = 1 / 55
 
 # Dashes and gaps, as multiples of the line's width: PowerPoint's `dash`
 # and `sysDot`, which pptx_writer writes for `dashed` and `dotted`.
@@ -232,7 +237,7 @@ class _Painter:
             color = self.rgb(string_color(shape, i) or Color(rgb=0))
             runs = self.metrics.run_fonts(text, flags, shape.text_sizes, shape.typeface, size_px)
             for k, line_runs in enumerate(_wrap(runs, (fr - fl) * self.scale) if wrap and fr > fl else [runs]):
-                width = sum(font.getlength(run) for run, font, _face in line_runs) / self.scale
+                width = sum(run.font.getlength(run.text) for run in line_runs) / self.scale
                 if "ljust" in flags:
                     x = fl
                 elif "rjust" in flags:
@@ -241,7 +246,7 @@ class _Painter:
                     x = (fl + fr - width) / 2
                 # A line mixing scripts sits between its fonts' baselines
                 # (checked: Calibri's and MS PGothic's).
-                faces = {face for _run, _font, face in line_runs if face is not None}
+                faces = {run.face for run in line_runs if run.face is not None}
                 ratio = sum(self._ratio(face) for face in faces) / len(faces) if faces else 0.96
                 before = split if i == first_below and k == 0 else 0.0
                 lines.append(_TextLine(x, width, before, _LINE_PITCH * size_in, ratio * size_in, line_runs, color,
@@ -358,8 +363,8 @@ class _TextLine:
     """A line of text, in inches: its left edge and width, the space
     before it (a paragraph's), its height (_LINE_PITCH times its size)
     and its baseline below its top (fonts.baseline_ratio()), its runs
-    (text, font, face) and color; and the middle of the frame it's set
-    in. `top` is set once all of a frame's lines are known."""
+    (FontRun) and color; and the middle of the frame it's set in. `top`
+    is set once all of a frame's lines are known."""
 
     def __init__(self, x: float, width: float, before: float, pitch: float, baseline: float, runs,
                  color: tuple[int, int, int], frame_center: Point):
@@ -372,9 +377,13 @@ class _TextLine:
 
     def draw(self, draw: ImageDraw.ImageDraw, px) -> None:
         x, y = px((self.x, self.top + self.baseline))
-        for run, font, _face in self.runs:
-            draw.text((x, y), run, font=font, fill=self.color, anchor="ls")
-            x += font.getlength(run)
+        for run in self.runs:
+            # A bold with no bold face, emboldened as PowerPoint does it:
+            # thicker to the right, as wide as it was.
+            grow = round(run.font.size * _EMBOLDEN / 2) if run.embolden else 0
+            draw.text((x + grow, y), run.text, font=run.font, fill=self.color, anchor="ls",
+                      stroke_width=grow, stroke_fill=self.color)
+            x += run.font.getlength(run.text)
 
 
 def _pixels(inches: float, dpi: int) -> int:
@@ -385,52 +394,53 @@ def _pixels(inches: float, dpi: int) -> int:
     return max(1, round(round(int(inches * 914400) / 1587.5) * dpi / 576))
 
 
-def _wrap(runs, width: float):
-    """`runs` (text, font, face) broken into lines no wider than `width`
-    pixels where PowerPoint would break them: after a space, or between
-    East Asian characters, or else anywhere in a word too long for a
-    line of its own."""
-    pieces: list[tuple[str, object, object]] = []
-    for text, font, face in runs:
+def _wrap(runs: list[FontRun], width: float) -> list[list[FontRun]]:
+    """`runs` broken into lines no wider than `width` pixels where
+    PowerPoint would break them: after a space, or between East Asian
+    characters, or else anywhere in a word too long for a line of its
+    own."""
+    pieces: list[FontRun] = []
+    for run in runs:
         word = ""
-        for ch in text:
+        for ch in run.text:
             if _is_east_asian(ch):
                 if word:
-                    pieces.append((word, font, face))
+                    pieces.append(run._replace(text=word))
                     word = ""
-                pieces.append((ch, font, face))
+                pieces.append(run._replace(text=ch))
             else:
                 word += ch
                 if ch == " ":
-                    pieces.append((word, font, face))
+                    pieces.append(run._replace(text=word))
                     word = ""
         if word:
-            pieces.append((word, font, face))
+            pieces.append(run._replace(text=word))
 
-    def length(text: str, font) -> float:
-        return font.getlength(text)
+    def length(piece: FontRun, text: str | None = None) -> float:
+        return piece.font.getlength(piece.text if text is None else text)
 
-    lines: list[list[tuple[str, object, object]]] = [[]]
+    lines: list[list[FontRun]] = [[]]
     used = 0.0
-    for text, font, face in pieces:
-        w = length(text.rstrip(" "), font)
+    for piece in pieces:
+        w = length(piece, piece.text.rstrip(" "))
         if lines[-1] and used + w > width:
             lines.append([])
             used = 0.0
-        while not lines[-1] and w > width and len(text) > 1:
+        while not lines[-1] and w > width and len(piece.text) > 1:
             # A word too long for a line of its own: as much as fits.
-            n = max(1, max((k for k in range(1, len(text)) if length(text[:k], font) <= width), default=1))
-            lines[-1].append((text[:n], font, face))
+            text = piece.text
+            n = max(1, max((k for k in range(1, len(text)) if length(piece, text[:k]) <= width), default=1))
+            lines[-1].append(piece._replace(text=text[:n]))
             lines.append([])
-            text = text[n:]
-            w = length(text.rstrip(" "), font)
-        lines[-1].append((text, font, face))
-        used += length(text, font)
+            piece = piece._replace(text=text[n:])
+            w = length(piece, piece.text.rstrip(" "))
+        lines[-1].append(piece)
+        used += length(piece)
     out = []
     for line in lines:
         if line:
-            *head, (text, font, face) = line
-            out.append(head + [(text.rstrip(" "), font, face)])
+            *head, last = line
+            out.append(head + [last._replace(text=last.text.rstrip(" "))])
     return out or [[]]
 
 

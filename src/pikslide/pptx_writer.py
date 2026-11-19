@@ -16,6 +16,7 @@ import io
 import os
 import tempfile
 import zipfile
+from dataclasses import dataclass
 
 from PIL import ImageFont
 from pptx import Presentation
@@ -181,9 +182,14 @@ def default_theme_colors() -> dict[str, int]:
     """The built-in Office theme's colors as RGB, keyed by the slot names a
     shape refers to them with (`tx1`, `bg1`, `accent1`, ...; mapped onto the
     theme's `dk1`/`lt1`/... by the master's `<p:clrMap>`). Only to show what
-    a theme color looks like with no --template (pikslide --help): a deck
-    itself keeps theme colors symbolic (docs/spec.md SS3.3)."""
-    master = Presentation().slide_masters[0]
+    a theme color looks like with no --template (pikslide --help), and for
+    --renderer direct to draw it: a deck itself keeps theme colors
+    symbolic (docs/spec.md SS3.3)."""
+    return _master_theme_colors(Presentation().slide_masters[0])
+
+
+def _master_theme_colors(master) -> dict[str, int]:
+    """default_theme_colors(), of `master`'s theme."""
     scheme = parse_xml(master.part.part_related_by(RT.THEME).blob).find(".//" + qn("a:clrScheme"))
     rgb = {}
     for slot in scheme:  # <a:dk1><a:sysClr val="windowText" lastClr=.../>, <a:accent1><a:srgbClr val=.../>
@@ -201,7 +207,8 @@ class PilFontMetrics:
     CJK, as PowerPoint picks per character -- in the bold/italic face the
     flags ask for. Each is looked up among this machine's installed fonts
     (pikslide.fonts); one that isn't installed is measured with a
-    substitute instead (_MEASURE_FONT_CANDIDATES), and named in `.missing`.
+    substitute instead (_MEASURE_FONT_CANDIDATES), or with none of those
+    either, Pillow's own font, and named in `.missing`.
     """
 
     def __init__(
@@ -215,7 +222,8 @@ class PilFontMetrics:
         self._theme_fonts = theme_fonts if theme_fonts is not None else default_theme_fonts()
         self._index = font_index if font_index is not None else installed_fonts()
         self.substitute = _find_measure_font()
-        self._cache: dict[tuple, ImageFont.FreeTypeFont | None] = {}
+        self._cache: dict[tuple, ImageFont.FreeTypeFont] = {}
+        self._faces: dict[tuple, tuple[str, int] | None] = {}
         self.missing: set[str] = set()
         """Family names asked for but not installed here."""
 
@@ -237,18 +245,47 @@ class PilFontMetrics:
             return t.major_latin, t.major_ea or t.major_latin
         return t.minor_latin, t.minor_ea or t.minor_latin
 
-    def _font(self, family: str, bold: bool, italic: bool, size_px: int) -> ImageFont.FreeTypeFont | None:
+    def _font(self, family: str, bold: bool, italic: bool, size_px: int) -> ImageFont.FreeTypeFont:
         key = (family, bold, italic, size_px)
         if key not in self._cache:
             face = self._index.find(family, bold, italic) if family else None
             if face is not None:
                 font = ImageFont.truetype(face.path, size_px, index=face.index)
+                self._faces[key] = (face.path, face.index)
             else:
                 if family:
                     self.missing.add(family)
-                font = ImageFont.truetype(self.substitute, size_px) if self.substitute else None
+                if self.substitute:
+                    font = ImageFont.truetype(self.substitute, size_px)
+                    self._faces[key] = (self.substitute, 0)
+                else:
+                    # No font file at all on this machine, as in a bare
+                    # container: Pillow's own (Latin only), so that text is
+                    # still measured, and drawn by --renderer direct.
+                    font = ImageFont.load_default(size_px)
+                    self._faces[key] = None
             self._cache[key] = font
         return self._cache[key]
+
+    def run_fonts(
+        self, text: str, flags: list[str], text_sizes: dict[str, float] | None, typeface: str, size_px: int
+    ) -> list[tuple[str, ImageFont.FreeTypeFont, tuple[str, int] | None]]:
+        """`text` in runs, each with the font it's drawn in at `size_px`
+        pixels to the em, as text_width() measures it, and that font's file
+        and index (None for Pillow's own): for --renderer direct to draw
+        text where `fit` made room for it."""
+        latin, ea = self._families(flags, typeface)
+        bold, italic = "bold" in flags, "italic" in flags
+        out = []
+        for is_ea, run in _script_runs(text):
+            family = ea if is_ea else latin
+            font = self._font(family, bold, italic, size_px)
+            out.append((run, font, self._faces[(family, bold, italic, size_px)]))
+        return out
+
+    def size_pt(self, flags: list[str], text_sizes: dict[str, float] | None = None) -> float:
+        """The size, in points, `flags` set text in."""
+        return self._size_pt(flags, text_sizes)
 
     def text_width(
         self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
@@ -259,10 +296,7 @@ class PilFontMetrics:
         bold, italic = "bold" in flags, "italic" in flags
         px = 0.0
         for is_ea, run in _script_runs(text):
-            font = self._font(ea if is_ea else latin, bold, italic, size_px)
-            # No font file at all on this machine: a flat estimate rather
-            # than failing outright.
-            px += font.getlength(run) if font is not None else len(run) * size_px * 0.55
+            px += self._font(ea if is_ea else latin, bold, italic, size_px).getlength(run)
         return px / _MEASURE_SCALE / 72.0
 
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
@@ -333,7 +367,7 @@ def resolve_for_pptx(
         finally:
             if tmp_path is not None:
                 os.remove(tmp_path)
-    substitute = os.path.basename(metrics.substitute) if metrics.substitute else "a flat estimate"
+    substitute = os.path.basename(metrics.substitute) if metrics.substitute else "Pillow's own font (Latin only)"
     result.stand_ins += [
         f"font not installed: {family}; `fit` measured it with {substitute} instead" for family in sorted(metrics.missing)
     ]
@@ -1408,30 +1442,53 @@ def draw_at(slide, result: LayoutResult, origin: tuple[float, float], suffix: st
     return _add_all_shapes(slide, result.shapes, _Transform(_content_bbox(result), 0.0, origin=origin), suffix)
 
 
-def slide_frame(result: LayoutResult, template_path: str | None = None, layout_name: str = "") -> dict:
+@dataclass
+class SlideSetup:
+    """The slide write_pptx() or write_pptx_from_template() puts a diagram
+    on, and the theme it's drawn in (slide_setup())."""
+
+    tf: _Transform
+    """Where the diagram goes on it, and its size."""
+    theme_fonts: ThemeFonts
+    theme_colors: dict[str, int]
+    placeholders: list[str]
+    """The placeholders it keeps beside the diagram."""
+
+
+def slide_setup(result: LayoutResult, template_path: str | None = None, layout_name: str = "") -> SlideSetup:
     """The slide write_pptx() or, with `template_path`,
-    write_pptx_from_template() would put `result` on, for --check: its
-    left and top edges in the diagram's own coordinates (inches, y up),
-    its width and height, and the placeholders it keeps beside the
-    diagram -- none on a slide of its own, a layout's title when
+    write_pptx_from_template() would put `result` on: where the diagram
+    goes on it, its size, its theme's fonts and colors (those of the master
+    owning the layout `layout_name`), and the placeholders it keeps beside
+    the diagram -- none on a slide of its own, a layout's title when
     `layout_name` names the layout. Nothing else goes on it."""
-    placeholders: list[str] = []
     if template_path is None:
         tf = _Transform(_content_bbox(result), _SLIDE_MARGIN)
-    else:
-        prs, tmp_path = _open_template_base(template_path)
-        try:
-            layout = _resolve_template_layout(prs, layout_name)
-            (left, top, _w, _h), _what = _content_area(prs, layout)
-            tf = _Transform(_content_bbox(result), 0.0, origin=(left, top))
-            tf.slide_width, tf.slide_height = Emu(prs.slide_width).inches, Emu(prs.slide_height).inches
-            if layout_name:
-                placeholders = [p.name for p in layout.iter_cloneable_placeholders() if not _is_content(p)]
-        finally:
-            if tmp_path is not None:
-                os.remove(tmp_path)
+        return SlideSetup(tf, default_theme_fonts(), default_theme_colors(), [])
+    prs, tmp_path = _open_template_base(template_path)
+    try:
+        layout = _resolve_template_layout(prs, layout_name)
+        (left, top, _w, _h), _what = _content_area(prs, layout)
+        tf = _Transform(_content_bbox(result), 0.0, origin=(left, top))
+        tf.slide_width, tf.slide_height = Emu(prs.slide_width).inches, Emu(prs.slide_height).inches
+        placeholders = []
+        if layout_name:
+            placeholders = [p.name for p in layout.iter_cloneable_placeholders() if not _is_content(p)]
+        master = layout.slide_master
+        return SlideSetup(tf, _master_theme_fonts(master), _master_theme_colors(master), placeholders)
+    finally:
+        if tmp_path is not None:
+            os.remove(tmp_path)
+
+
+def slide_frame(result: LayoutResult, template_path: str | None = None, layout_name: str = "") -> dict:
+    """The slide (slide_setup()) for --check: its left and top edges in the
+    diagram's own coordinates (inches, y up), its width and height, and the
+    placeholders it keeps beside the diagram."""
+    setup = slide_setup(result, template_path, layout_name)
+    tf = setup.tf
     return {"left": tf.x0 - tf.margin_x, "top": tf.y1 + tf.margin_y,
-            "wid": tf.slide_width, "ht": tf.slide_height, "placeholders": placeholders}
+            "wid": tf.slide_width, "ht": tf.slide_height, "placeholders": setup.placeholders}
 
 
 def _add_all_shapes(container, shapes: list[Shape], tf: _Transform, suffix: str = "") -> dict[str, str]:

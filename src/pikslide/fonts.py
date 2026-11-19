@@ -127,6 +127,36 @@ def _read_font_file(path: str) -> list[tuple[int, list[str], bool, bool]]:
         return []
 
 
+def baseline_ratio(path: str, index: int = 0) -> float:
+    """Where PowerPoint sets the baseline in a line of single-spaced text
+    in the font at `path` (`index` in a collection), as a multiple of the
+    text size below the line's top: the line is 1.2 times the size
+    (pptx_writer._LINE_PITCH), split between the font's OS/2 winAscent and
+    winDescent. Checked against PowerPoint in Calibri, Arial, Meiryo and
+    MS PGothic, to within a hundredth; Yu Gothic, two. 0.96 when the font
+    can't be read."""
+    try:
+        with open(path, "rb") as f:
+            offset = 0
+            if f.read(4) == b"ttcf":
+                f.seek(12 + 4 * index)
+                offset = struct.unpack(">I", f.read(4))[0]
+            f.seek(offset + 4)
+            num_tables = struct.unpack(">H", f.read(2))[0]
+            f.seek(offset + 12)
+            directory = f.read(16 * num_tables)
+            for i in range(num_tables):
+                tag, _checksum, t_offset, _length = struct.unpack_from(">4sIII", directory, 16 * i)
+                if tag == b"OS/2":
+                    f.seek(t_offset + 74)
+                    ascent, descent = struct.unpack(">HH", f.read(4))
+                    if ascent + descent:
+                        return 1.2 * ascent / (ascent + descent)
+    except (OSError, struct.error):
+        pass
+    return 0.96
+
+
 def _cache_path() -> str:
     base = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
     return os.path.join(base, "pikslide", "fonts.json")

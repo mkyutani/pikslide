@@ -66,7 +66,8 @@ Goal: the Selection Pane in PowerPoint reads like the source.
   such as the same label in two blocks, or `box 1` in each, moves on to
   `<name>-2`, `-3`, …, the first that no object has. A label can't have a
   `-`, so the name it moves on to is never one. Only drawn objects count,
-  not a block's own label, a `move`'s or a place's. The name an object
+  not a block's own label, a `move`'s, a place's or a string-less
+  `text`'s. The name an object
   moves on to is its name everywhere a name is given: in the warnings, in
   `--check`'s object list (§5), and on the slide. Drawn onto a slide that
   already has a shape of that name (§6), a shape moves on the same way;
@@ -86,6 +87,10 @@ Goal: the Selection Pane in PowerPoint reads like the source.
   has on the slide.
 - `stroke invis` objects are still emitted (no outline, and no fill unless
   given one): they are legitimate text anchors.
+- **A `text` with no strings draws nothing.** It is laid out and can be
+  referred to, as a `move` can, but an empty, invisible shape would only
+  clutter the Selection Pane: a macro's optional label left out, say.
+  Nothing attaches to it.
 - **Text color and line color are separate.** `color` is a string attribute:
   `box "alert" color accent2 "details"` colors `"alert"` only; a string
   without one takes the `color` variable (prelude: `black`). The line or
@@ -119,6 +124,24 @@ quadratic Bézier, written as the cubic one PowerPoint's own curves use),
 with `stroke`'s `dashed`, `dotted`, `thick`, `thin` and the arrowheads
 `<-`, `->`, `<->` mapped to dash style, weight and arrowheads.
 
+**Arrowheads.** `->`, `<-` and `<->` put a filled triangle at a line's
+end, its start, or both. `start KIND` and `end KIND` set the one at that
+end, whatever the arrows say and wherever they're written: `triangle`,
+`open` (a V: OOXML's `arrow`), `stealth`, `diamond`, `oval` or `none`.
+`small` or `large` after it sizes it (OOXML's `sm` or `lg`, for its width
+and its length alike; medium otherwise). They are PowerPoint's own line
+ends, sized to the line's thickness: a `diamond` or an `oval` is centered
+on the end, the others have their tip there (checked). They are valid on
+a `line`, an `arrow`, a `spline` and an `arc`.
+
+```pikslide
+line from A.e to B.w start diamond end open large
+```
+
+A hollow triangle or circle, as on BPMN's message flow, is no line end in
+OOXML: it is a shape drawn over the line, turned along it with `rotate`
+and `atan2`.
+
 They are **not attached to shapes**, even when an endpoint lies exactly on
 a shape's edge: moving a box in PowerPoint leaves the line where it was.
 Nothing makes a line a link because of where one of its ends happens to
@@ -149,8 +172,8 @@ arrow from A.e to B.w attach
   out (in `A: box; arrow attach; B: box`, `B` is placed after the arrow).
 - An end that can't attach is a warning, naming the line, the end and
   why, and stays unattached: one on an object but on none of its sites
-  (the warning names the nearest site, `A.n`), one on a point, a move or
-  a line, which have none, and one on two objects' sites with neither
+  (the warning names the nearest site, `A.n`), one on a point, a move, a
+  line or a text with no strings, which have none, and one on two objects' sites with neither
   named (adjacent boxes). An unnamed end counts as on an object when it
   is on its outline, not merely inside it. A line with neither end on an
   object is an error, as is `attach` on anything but a line or an arrow.

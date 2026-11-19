@@ -70,7 +70,7 @@ text     "string" [flag ...] ...  labels, among the rest (--help flags)
          ljust  rjust
 path     [N]  up|down|left|right [N]  go N heading A  from P  to P  then
          right until even with P  close  chop
-heads    ->  <-  <->
+heads    ->  <-  <->  start|end KIND [small|large] (--help arrowheads)
 style    stroke [C] [thickness T] [thick] [thin] [dashed [L]] [dotted [L]]
          [solid] [invis]  fill C (a closed path)
 place    same [as X]  behind X
@@ -162,7 +162,8 @@ ENTRIES: tuple[Entry, ...] = (
           "A line, from the previous object's exit in the current direction unless its "
           "path says otherwise.", ("linewid", "lineht"), "line from A.e to B.w"),
     _line(("arrow",), "a line with an arrowhead at its end",
-          "A line with an arrowhead at its end (`->`); `<-` or `<->` change the heads.",
+          "A line with an arrowhead at its end (`->`); `<-` or `<->` change the heads, "
+          "`start` and `end` their kinds.",
           ("linewid", "lineht", "arrowht", "arrowwid"), 'arrow "request" above from A to B chop'),
     _line(("spline",), "a curve through its points (drawn as a polyline)",
           "A curve through its path's points; drawn as straight segments in v1.",
@@ -316,6 +317,13 @@ ENTRIES: tuple[Entry, ...] = (
                "there; one that can't is a warning. `path elbow` routes it at right angles, "
                "as PowerPoint does; `path curved` curves along that route.",
           example="arrow from A.e to B.n attach path elbow", group="attribute"),
+    Entry(("arrowheads",), "the kind and size of the arrowhead at a line's start or end",
+          synopsis=("start|end triangle|open|stealth|diamond|oval|none [small|large]",),
+          body="Sets the head at that end, whatever ->, <- or <-> say. open is a V; "
+               "diamond and oval are centered on the end. Each grows with the line's "
+               "thickness, and small or large makes it smaller or larger.",
+          example="line from A to B start diamond end open large", group="attribute",
+          see=("arrow",)),
     Entry(("cw", "ccw"), "an arc's direction: clockwise or counterclockwise",
           group="attribute", example="arc cw"),
     Entry(("same",), "copies size and style from another object",
@@ -375,9 +383,13 @@ ENTRIES: tuple[Entry, ...] = (
           example="box at (A.x, B.y)"),
     Entry(("dist",), "the distance between two points", synopsis=("dist(P, Q)",),
           example="line right dist(A, B)"),
-    Entry(("functions", "abs", "cos", "sin", "sqrt", "int", "min", "max"), "math functions",
-          synopsis=("abs(X)", "cos(X)", "sin(X)", "sqrt(X)", "int(X)", "min(X, Y)", "max(X, Y)"),
-          body="cos and sin take degrees."),
+    Entry(("functions", "abs", "cos", "sin", "sqrt", "int", "min", "max", "atan2"), "math functions",
+          synopsis=("abs(X)", "cos(X)", "sin(X)", "sqrt(X)", "int(X)", "min(X, Y)", "max(X, Y)",
+                    "atan2(Y, X)"),
+          body="cos and sin take degrees, and atan2 gives them: the angle from (0, 0) to (X, Y), "
+               "-180 to 180, counterclockwise from the right. A line's own is "
+               "atan2(B.y - A.y, B.x - A.x).",
+          example="shape triangle wid 0.2 ht 0.2 at B rotate 90 - atan2(B.y - A.y, B.x - A.x)"),
 
     # --- statements -----------------------------------------------------
     Entry(("define",), "defines a macro", synopsis=("define NAME { BODY }", "NAME(ARG, ...)"),

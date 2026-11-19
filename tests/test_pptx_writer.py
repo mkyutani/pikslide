@@ -181,6 +181,21 @@ def test_arc_becomes_a_freeform_with_one_curve(tmp_path: pathlib.Path):
     assert shape.line._get_or_add_ln().find(qn("a:tailEnd")).get("type") == "triangle"
 
 
+def test_arrowheads_are_written_as_powerpoints_line_ends(tmp_path: pathlib.Path):
+    # issue #36: open is OOXML's arrow; a size is both the width and the length
+    src = "line right start diamond end open large\narrow right then down start oval small\narc end stealth\n"
+    prs = render(src, tmp_path)
+    ends = []
+    for shape in prs.slides[0].shapes:
+        ln = shape.line._get_or_add_ln()
+        ends.append([dict(ln.find(qn(tag)).attrib) for tag in ("a:headEnd", "a:tailEnd")])
+    assert ends == [
+        [{"type": "diamond"}, {"type": "arrow", "w": "lg", "len": "lg"}],
+        [{"type": "oval", "w": "sm", "len": "sm"}, {"type": "triangle"}],
+        [{"type": "none"}, {"type": "stealth"}],
+    ]
+
+
 def test_slide_size_matches_diagram_bbox_plus_margin(tmp_path: pathlib.Path):
     result = resolve_for_pptx(parse("box\n"))
     out = tmp_path / "sized.pptx"
@@ -525,6 +540,18 @@ def test_a_name_two_objects_have_is_one_each_on_the_slide(tmp_path: pathlib.Path
     prs = render('[ Start: box "a"; arrow "go" ]\n[ Start: box "b"; arrow "go" ]\n', tmp_path)
     assert [s.name for s in prs.slides[0].shapes] == [
         "Start", "arrow 1", "arrow 1 text 1", "Start-2", "arrow 1-2", "arrow 1-2 text 1"]
+
+
+def test_a_text_with_no_strings_draws_nothing(tmp_path: pathlib.Path):
+    # Issue #36: a macro's optional label, left out, used to leave an empty
+    # shape in the Selection Pane. It's still laid out and referred to,
+    # isn't in --check's list, and doesn't take a name from a drawn object.
+    src = 'T: text at (0, 0)\nbox "a" with .n at T\n[ T: box "b" ] at (2, 0)\ntext\n'
+    prs = render(src, tmp_path)
+    assert [s.name for s in prs.slides[0].shapes] == ["box 1", "T"]
+    result = resolve_for_pptx(parse(src), base_dir=str(tmp_path))
+    assert [obj["name"] for obj in object_list(flatten_shapes(result.shapes))] == ["box 1", "T"]
+    assert result.shapes[1].cy + result.shapes[1].h / 2 == pytest.approx(0)
 
 
 def _listed_extent(objects: list[dict]) -> tuple[float, float, float, float]:

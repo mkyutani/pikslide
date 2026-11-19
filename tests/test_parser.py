@@ -73,6 +73,26 @@ def test_arrow_direction_flags():
     assert doc.statements[2].attributes[0] == ast.ArrowDirection("both")
 
 
+def test_arrowheads_by_end():
+    # issue #36: diamond and oval lex as class names, none as a color word
+    doc = parse("line start diamond end open large\nline end none start oval small\n")
+    assert doc.statements[0].attributes == [ast.Arrowhead("start", "diamond"), ast.Arrowhead("end", "open", "large")]
+    assert doc.statements[1].attributes == [ast.Arrowhead("end", "none"), ast.Arrowhead("start", "oval", "small")]
+
+
+def test_an_arrowhead_follows_a_position_and_end_of_stays_a_place():
+    doc = parse("L: line\narrow from L.end end open\narrow from end of L to L.start start stealth\n")
+    first, second = doc.statements[1].attributes, doc.statements[2].attributes
+    assert first[1] == ast.Arrowhead("end", "open")
+    assert second[0] == ast.From_(ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["L"]), "end")))
+    assert second[2] == ast.Arrowhead("start", "stealth")
+
+
+def test_an_end_with_no_arrowhead_is_an_error():
+    with pytest.raises(PikSyntaxError, match="expected an arrowhead after 'end': triangle, open"):
+        parse("line end\n")
+
+
 def test_bare_string_is_a_text_object():
     doc = parse('"floating text" bold\n')
     stmt = doc.statements[0]
@@ -307,9 +327,10 @@ def test_expr_unary_and_parens():
 
 
 def test_expr_function_calls():
-    doc = parse("foo = sqrt(4)\nbar = max(1, 2)\n")
+    doc = parse("foo = sqrt(4)\nbar = max(1, 2)\nbaz = atan2(1, 2)\n")
     assert doc.statements[0].value == ast.FuncCall("sqrt", [ast.Num(4.0)])
     assert doc.statements[1].value == ast.FuncCall("max", [ast.Num(1.0), ast.Num(2.0)])
+    assert doc.statements[2].value == ast.FuncCall("atan2", [ast.Num(1.0), ast.Num(2.0)])
 
 
 def test_expr_dist_and_place_coord():

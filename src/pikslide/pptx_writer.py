@@ -35,7 +35,6 @@ from .pik import ast
 from .pik.layout import (
     _FRAMED_TEXT_KINDS,
     LINE_LIKE,
-    NOT_RENDERED,
     Color,
     LayoutError,
     LayoutResult,
@@ -44,11 +43,13 @@ from .pik.layout import (
     _text_area_width,
     _text_size_name,
     arc_control_point,
+    arrowheads,
     assign_text_slots,
     callout_points,
     default_text_sizes,
     drawn_size,
     flatten_shapes,
+    is_drawn,
     line_points,
     preset_of,
     rasterize_svg,
@@ -436,16 +437,26 @@ class _Transform:
         return (pt[0] - self.x0) + self.margin_x, (self.y1 - pt[1]) + self.margin_y
 
 
-def _set_arrowheads(line, larrow: bool, rarrow: bool) -> None:
+# What each of layout.ARROWHEADS is in OOXML (ST_LineEndType), and each
+# size (ST_LineEndWidth and ST_LineEndLength alike; medium is the default).
+_LINE_END_TYPE = {"triangle": "triangle", "open": "arrow", "stealth": "stealth",
+                  "diamond": "diamond", "oval": "oval", "none": "none"}
+_LINE_END_SIZE = {"small": "sm", "large": "lg"}
+
+
+def _set_arrowheads(line, shape: Shape) -> None:
     """python-pptx has no high-level arrowhead API; add the OOXML elements
     directly. <a:headEnd> is the line's start, <a:tailEnd> its end."""
     ln = line._get_or_add_ln()
-    for tag, present in (("a:headEnd", larrow), ("a:tailEnd", rarrow)):
+    for tag, (kind, size) in zip(("a:headEnd", "a:tailEnd"), arrowheads(shape)):
         el = ln.find(qn(tag))
         if el is None:
             el = ln.makeelement(qn(tag), {})
             ln.append(el)
-        el.set("type", "triangle" if present else "none")
+        el.set("type", _LINE_END_TYPE[kind])
+        if size is not None:
+            el.set("w", _LINE_END_SIZE[size])
+            el.set("len", _LINE_END_SIZE[size])
 
 
 def _no_theme_effects(pptx_shape) -> None:
@@ -710,7 +721,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform, name: str):
         _no_theme_effects(connector)
         connector.name = name
         _apply_line_style(connector.line, shape)
-        _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
+        _set_arrowheads(connector.line, shape)
         drawn = connector
     elif len(points) == 2 and shape.kind != "arc":
         (x1, y1), (x2, y2) = points
@@ -718,7 +729,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform, name: str):
         _no_theme_effects(connector)
         connector.name = name
         _apply_line_style(connector.line, shape)
-        _set_arrowheads(connector.line, shape.larrow, shape.rarrow)
+        _set_arrowheads(connector.line, shape)
         drawn = connector
     else:
         if shape.kind == "arc":
@@ -732,7 +743,7 @@ def _add_line_shape(container, shape: Shape, tf: _Transform, name: str):
         freeform.name = name
         freeform.fill.background()
         _apply_line_style(freeform.line, shape)
-        _set_arrowheads(freeform.line, shape.larrow, shape.rarrow)
+        _set_arrowheads(freeform.line, shape)
         drawn = freeform
 
     _add_line_text(container, shape, tf, name)
@@ -1513,7 +1524,7 @@ def _draw_shapes(
     for shape in shapes:
         if shape.kind == "block":
             _draw_shapes(container, shape.sublist, tf, drawn, names)
-        elif shape.kind in NOT_RENDERED:
+        elif not is_drawn(shape):
             continue
         elif shape.kind in ("line", "arrow", "spline", "arc"):
             drawn[id(shape)] = _add_line_shape(container, shape, tf, names[id(shape)])

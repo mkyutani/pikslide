@@ -245,6 +245,7 @@ attribute       ::= numprop relexpr
                    | boolprop
                    | "ljust" | "rjust" | "aligned"
                    | arrowdir
+                   | ( "start" | "end" ) arrowhead [ "small" | "large" ]   (* lines only *)
                    | "at" position
                    | "with" [ "." ] edge "at" position
                    | "same" [ "as" object ]
@@ -270,6 +271,7 @@ stroke-attr     ::= "thickness" relexpr
                    | "thick" | "thin" | "solid" | "invis"
 dashprop        ::= "dashed" | "dotted"
 arrowdir        ::= "<-" | "->" | "<->"
+arrowhead       ::= "triangle" | "open" | "stealth" | "diamond" | "oval" | "none"
 
 relexpr         ::= expr [ "%" ]
 optrelexpr      ::= [ relexpr ]
@@ -344,7 +346,7 @@ expr            ::= expr ( "+" | "-" ) expr
 dotprop         ::= numprop | "thickness" | dashprop | "fill" | "color" | "stroke"
 
 FUNC1           ::= "abs" | "cos" | "int" | "sin" | "sqrt"
-FUNC2           ::= "max" | "min"
+FUNC2           ::= "atan2" | "max" | "min"
 ```
 
 `+`/`-` are left-associative and bind looser than `*`/`/`, which are
@@ -484,7 +486,8 @@ interior color; `stroke` sets the line or outline: its color, `thickness`,
 `thick`/`thin` (scale it by 1.5/0.67), `solid` (reset thickness and
 dashing), `invis` (hide it) and `dashed`/`dotted` with an optional length
 (default `dashwid`); `ljust`/`rjust` align all of the object's strings
-(see *Text*); `cw`/`ccw` set which way an arc turns (`ccw` by default); `<-`/`->`/`<->` add arrowheads;
+(see *Text*); `cw`/`ccw` set which way an arc turns (`ccw` by default); `<-`/`->`/`<->` add arrowheads,
+and `start`/`end` set the kind and size of the one at that end, over them;
 `fit` sizes the object to its text; `chop` shortens a line's ends to the
 outlines of the objects it joins; `attach` attaches a line's ends to the
 objects they lie on, and `path` picks the form of its connector; `close` closes a path; `behind X` places

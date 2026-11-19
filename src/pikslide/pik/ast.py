@@ -52,7 +52,7 @@ class UnaryOp(Expr):
 
 @dataclass
 class FuncCall(Expr):
-    name: str  # 'abs', 'cos', 'int', 'sin', 'sqrt', 'max', 'min'
+    name: str  # 'abs', 'cos', 'int', 'sin', 'sqrt', 'atan2', 'max', 'min'
     args: list[Expr]
 
 
@@ -321,6 +321,17 @@ class BoolProperty(Attribute):
 @dataclass
 class ArrowDirection(Attribute):
     kind: str  # 'left', 'right', 'both'
+
+
+@dataclass
+class Arrowhead(Attribute):
+    """``start KIND [SIZE]`` or ``end KIND [SIZE]`` (ext, issue #36): the
+    arrowhead at that end of a line, whatever `->`, `<-` or `<->` say.
+    KIND is checked in the layout stage."""
+
+    end: str  # 'start', 'end'
+    kind: str  # 'triangle', 'open', 'stealth', 'diamond', 'oval', 'none'
+    size: str | None = None  # 'small', 'large', or None for medium
 
 
 @dataclass

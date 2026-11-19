@@ -78,6 +78,7 @@ def test_an_end_off_a_site_warns_with_the_nearest_and_stays_unattached():
     ("Q: (0, 0)\nA: box at (2, 0)\narrow from Q to A.w attach\n", "Q, a point"),
     ("M: move\nA: box at (2, 0)\narrow from M.end to A.w attach\n", "M, a move"),
     ("L: line from (0, 0) right 1\nA: box at (2, 0)\narrow from L.end to A.w attach\n", "L, a line"),
+    ("T: text at (0, 0)\nA: box at (2, 0)\narrow from T.e to A.w attach\n", "T, a text with no strings"),
 ])
 def test_an_end_on_an_object_with_no_sites_warns(src: str, what: str):
     [message] = warnings(src)

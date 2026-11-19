@@ -141,7 +141,7 @@ def test_llm_fits_in_one_command_output():
     # Claude Code returns up to about 30,000 characters of a command's
     # output as it is; past that, it saves it to a file for the LLM to read
     # back, at more tokens. The room left is for a command run alongside.
-    assert len(render("llm", PLAIN)) < 27_000
+    assert len(render("llm", PLAIN)) < 28_000
 
 
 @pytest.mark.parametrize("columns", ["60", "200"])

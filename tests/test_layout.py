@@ -9,6 +9,7 @@ docstring in layout.py for what is deliberately left out.
 from __future__ import annotations
 
 import math
+import re
 import pathlib
 
 import pytest
@@ -17,6 +18,7 @@ from pikslide.pik import parse
 from pikslide.pik.layout import (
     Color,
     LayoutError,
+    arrowheads,
     assign_text_slots,
     flatten_shapes,
     resolve_layout,
@@ -373,10 +375,56 @@ def test_missing_image_file_suggests_a_close_match(tmp_path: pathlib.Path):
         resolve_layout(parse('image "logoo.png"\n'), base_dir=str(tmp_path))
 
 
+@pytest.mark.parametrize("src, heads", [
+    ("line", (("none", None), ("none", None))),
+    ("arrow", (("none", None), ("triangle", None))),
+    ("arrow start diamond", (("diamond", None), ("triangle", None))),
+    ("arrow end none", (("none", None), ("none", None))),
+    ("line <-> end open large", (("triangle", None), ("open", "large"))),
+    # whatever the arrow tokens say, wherever they're written
+    ("line end open <->", (("triangle", None), ("open", None))),
+    ("line start oval small <-", (("oval", "small"), ("none", None))),
+    ("spline right then up end stealth", (("none", None), ("stealth", None))),
+])
+def test_arrowheads_by_end(src, heads):
+    assert arrowheads(layout(src + "\n").shapes[0]) == heads
+
+
+def test_same_copies_the_arrowheads():
+    result = layout("line start diamond end open\nline same\n")
+    assert arrowheads(result.shapes[1]) == (("diamond", None), ("open", None))
+
+
+@pytest.mark.parametrize("src, message", [
+    ("box end open", "'end open' is only valid on a line, an arrow, a spline or an arc, not a box"),
+    ("move end open", "not a move"),
+    ("arrow end hollow", "unknown arrowhead 'end hollow': use triangle, open, stealth, diamond, oval or none"),
+    ("arrow end none large", "'end none large': no arrowhead has no size"),
+])
+def test_arrowhead_errors(src, message):
+    with pytest.raises(LayoutError, match=re.escape(message)):
+        layout(src + "\n")
+
+
 def test_expr_evaluates_functions_and_variables():
     result = layout("scale = 2\nbox width sqrt(4)*scale\n")
     box = result.shapes[0]
     assert box.w == pytest.approx(4.0)
+
+
+@pytest.mark.parametrize("y, x, degrees", [(1, 1, 45), (1, -1, 135), (-1, -1, -135), (0, -1, 180), (0, 0, 0)])
+def test_atan2_is_in_degrees_counterclockwise_from_the_right(y, x, degrees):
+    # issue #36: a line's angle, to turn a shape along it
+    result = layout(f"box width 1 + atan2({y}, {x})\n")
+    assert result.shapes[0].w == pytest.approx(1 + degrees)
+
+
+def test_atan2_turns_a_shape_along_a_slanted_line():
+    result = layout(
+        "A: dot at (0, 0)\nB: dot at (1, -1)\n"
+        "T: shape triangle at B rotate 90 - atan2(B.y - A.y, B.x - A.x)\n"
+    )
+    assert result.shapes[2].rotate == pytest.approx(135)  # pointing down and to the right
 
 
 # ---------------------------------------------------------------------------

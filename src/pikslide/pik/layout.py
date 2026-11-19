@@ -344,6 +344,10 @@ class Shape:
     """The color of a string with no `color` of its own."""
     larrow: bool = False
     rarrow: bool = False
+    start_head: tuple[str, str | None] | None = None
+    end_head: tuple[str, str | None] | None = None
+    """`start KIND [SIZE]` and `end KIND [SIZE]` (issue #36), over what
+    `larrow` and `rarrow` give: see arrowheads()."""
     cw: bool = False
     """Which way an arc turns: clockwise, or (the default, as in pikchr)
     counterclockwise."""
@@ -919,6 +923,8 @@ _FUNCS = {
     "sin": lambda x: math.sin(math.radians(x)),
     "sqrt": math.sqrt,
     "int": lambda x: float(int(x)),
+    # The angle from (0, 0) to (x, y), in degrees as cos and sin take them.
+    "atan2": lambda y, x: math.degrees(math.atan2(y, x)),
     "max": max,
     "min": min,
 }
@@ -1781,6 +1787,23 @@ def _append_segment(build: "_Build", shape: Shape, pt: tuple[float, float], obj:
     build.then_flag = False
 
 
+ARROWHEADS = ("triangle", "open", "stealth", "diamond", "oval", "none")
+"""The kinds of arrowhead `start` and `end` give (docs/spec.md SS3.2):
+PowerPoint's own line ends, `open` being its `arrow`, a V."""
+
+# What draws a line with ends to put arrowheads on.
+_HEADED = ("line", "arrow", "spline", "arc")
+
+
+def arrowheads(shape: Shape) -> tuple[tuple[str, str | None], tuple[str, str | None]]:
+    """The arrowhead at `shape`'s start and at its end, each as (kind,
+    size): its own `start`/`end`, whatever `->`, `<-` and `<->` say, else
+    their triangle, else none. A size is `small`, `large`, or None for
+    medium."""
+    return (shape.start_head or (("triangle" if shape.larrow else "none"), None),
+            shape.end_head or (("triangle" if shape.rarrow else "none"), None))
+
+
 # The objects that draw no line of their own, so `stroke` is an error on
 # them (docs/spec.md SS3.1), each with how the error names it.
 _NO_STROKE = {"text": "a text", "image": "an image", "move": "a move", "block": "a block"}
@@ -1865,6 +1888,20 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
     elif isinstance(attr, ast.ArrowDirection):
         shape.larrow = attr.kind in ("left", "both")
         shape.rarrow = attr.kind in ("right", "both")
+    elif isinstance(attr, ast.Arrowhead):
+        written = " ".join(word for word in (attr.end, attr.kind, attr.size) if word)
+        if shape.kind not in _HEADED:
+            raise LayoutError(f"'{written}' is only valid on a line, an arrow, a spline or an arc, "
+                              f"not {_a(shape.kind)}")
+        if attr.kind not in ARROWHEADS:
+            raise LayoutError(f"unknown arrowhead '{written}': "
+                              f"use {', '.join(ARROWHEADS[:-1])} or {ARROWHEADS[-1]}")
+        if attr.kind == "none" and attr.size is not None:
+            raise LayoutError(f"'{written}': no arrowhead has no size")
+        if attr.end == "start":
+            shape.start_head = (attr.kind, attr.size)
+        else:
+            shape.end_head = (attr.kind, attr.size)
     elif isinstance(attr, ast.TextAttribute):
         _add_text(shape, attr.text, attr.flags, attr.color, ctx)
     elif isinstance(attr, ast.Fit):
@@ -1920,6 +1957,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
                 shape.rotate, shape.flip_h, shape.flip_v = same_from.rotate, same_from.flip_h, same_from.flip_v
             shape.larrow = same_from.larrow
             shape.rarrow = same_from.rarrow
+            shape.start_head, shape.end_head = same_from.start_head, same_from.end_head
             shape.closed = same_from.closed
     elif isinstance(attr, ast.From_):
         pt = eval_position(attr.position, ctx)
@@ -2257,7 +2295,7 @@ def _layout_statements(
                 ctx.scope_stack[-1][stmt.label] = shape
             else:
                 shape.name = f"{shape.kind} {class_counts[shape.kind]}"
-            if shape.kind != "block" and shape.kind not in NOT_RENDERED:
+            if is_drawn(shape):
                 shape.name = _unique_name(shape.name, ctx)
             shape.behind = behind_target
             _resolve_handles(shape, ctx)
@@ -2295,11 +2333,24 @@ def _unique_name(name: str, ctx: _Ctx) -> str:
     return name
 
 
+def is_drawn(shape: Shape) -> bool:
+    """Whether `shape` is drawn as a shape of its own: not a block, whose
+    objects are drawn in its place, nor a `move` or a place
+    (`NOT_RENDERED`), nor a `text` with no strings, which would be an
+    empty shape nobody sees, only clutter in PowerPoint's Selection Pane
+    (docs/spec.md SS3.1, issue #36). Each is still laid out, and can be
+    referred to."""
+    if shape.kind == "block" or shape.kind in NOT_RENDERED:
+        return False
+    return shape.kind != "text" or bool(shape.texts)
+
+
 def flatten_shapes(shapes: list[Shape]) -> list[Shape]:
     """Every drawable shape in `shapes`, recursively -- a "block" shape
     (docs/spec.md SS3.1, ext) contributes its `sublist`'s own drawable
-    shapes in its place, not itself, and a `move`/`point` pseudo-object
-    (never drawn -- `NOT_RENDERED`) is dropped. `LayoutResult.shapes` keeps
+    shapes in its place, not itself, and what else isn't drawn
+    (is_drawn()) -- a `move`, a place, a `text` with no strings -- is
+    dropped. `LayoutResult.shapes` keeps
     the *tree* (a block shape and its `sublist` intact), mirroring the
     source's own nesting even though a renderer flattens it back out when
     drawing (SS3.1: blocks are a source-level grouping construct, never a
@@ -2309,7 +2360,7 @@ def flatten_shapes(shapes: list[Shape]) -> list[Shape]:
     for shape in shapes:
         if shape.kind == "block":
             out.extend(flatten_shapes(shape.sublist))
-        elif shape.kind not in NOT_RENDERED:
+        elif is_drawn(shape):
             out.append(shape)
     return out
 
@@ -2334,7 +2385,8 @@ def connection_sites(shape: Shape) -> list[tuple[float, float]]:
     """Where a connector's end can attach to `shape`, in the order a
     connector numbers them: its preset's sites (text_area), or a
     picture's four, at the middles of its sides; none for what isn't drawn
-    as a shape (a line, a point, a move, a block)."""
+    as a shape (a line, a point, a move, a block, a text with no
+    strings)."""
     return [site for site, _direction in _sites(shape)]
 
 
@@ -2343,7 +2395,7 @@ def _sites(shape: Shape) -> list[tuple[tuple[float, float], tuple[int, int]]]:
     in (y up), its angle to the nearest of right, up, left and down: an
     elbow connector leaves along an axis."""
     preset = "rect" if shape.kind == "image" else preset_of(shape)
-    if preset is None:
+    if preset is None or not is_drawn(shape):
         return []
     w, h = drawn_size(shape)
     left, top = shape.cx - w / 2, shape.cy + h / 2
@@ -2359,6 +2411,11 @@ def _sites(shape: Shape) -> list[tuple[tuple[float, float], tuple[int, int]]]:
         [site] = turn(shape, [(left + x, top - y)])
         out.append((site, ((1, 0), (0, -1), (-1, 0), (0, 1))[quarter]))
     return out
+
+
+def _what_draws_nothing(obj: Shape) -> str:
+    """What `obj`, which has no connection sites, is, for a warning."""
+    return "a text with no strings" if obj.kind == "text" else _a(obj.kind)
 
 
 def _site_at(sites: list[tuple[float, float]], pt: tuple[float, float]) -> int | None:
@@ -2415,7 +2472,7 @@ def _attach_lines(shapes: list[Shape], ctx: _Ctx) -> None:
             sites = connection_sites(obj)
             if not sites:
                 ctx.warnings.append(LayoutWarning(
-                    f"{line.name}'s {which} is on {obj.name}, {_a(obj.kind)}, which nothing attaches to: "
+                    f"{line.name}'s {which} is on {obj.name}, {_what_draws_nothing(obj)}, which nothing attaches to: "
                     f"it isn't attached", (line.name or "", obj.name or "")))
                 continue
             idx = _site_at(sites, pt)

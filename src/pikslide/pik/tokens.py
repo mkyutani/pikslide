@@ -141,7 +141,7 @@ class TokType(Enum):
 DIR_RIGHT, DIR_DOWN, DIR_LEFT, DIR_UP = 0, 1, 2, 3
 
 FN1 = {"abs", "cos", "int", "sin", "sqrt"}
-FN2 = {"max", "min"}
+FN2 = {"atan2", "max", "min"}
 
 CLASS_NAMES = {
     "arc", "arrow", "box", "circle", "cylinder", "diamond", "dot",
@@ -156,6 +156,7 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "and": (TokType.AND, None, None),
     "as": (TokType.AS, None, None),
     "at": (TokType.AT, None, None),
+    "atan2": (TokType.FUNC2, "atan2", None),
     "behind": (TokType.BEHIND, None, None),
     "below": (TokType.BELOW, None, None),
     "between": (TokType.BETWEEN, None, None),

@@ -438,6 +438,20 @@ class Parser:
             self.advance()
             return ast.ArrowDirection(_ARROW_KIND[tt])
 
+        # `start`/`end` begin no other attribute: a position that does
+        # (`end of L`) only follows `from`, `to`, `at` and the like, which
+        # read it themselves.
+        if tt in (TokType.START, TokType.END):
+            end = self.advance().edge
+            word = self.peek()
+            # diamond and oval lex as class names, none as a color word.
+            if word is None or _HANDLE_WORD.fullmatch(word.text) is None:
+                self._error(f"expected an arrowhead after '{end}': triangle, open, stealth, diamond, "
+                            "oval or none")
+            kind = self.advance().text
+            size = self.advance().text if self.at(TokType.SMALL, TokType.LARGE) else None
+            return ast.Arrowhead(end, kind, size)
+
         if tt == TokType.AT:
             self.advance()
             return ast.At(self.parse_position())

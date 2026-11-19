@@ -22,6 +22,17 @@ param(
 # `exit 1` below is what makes the exit code trustworthy.
 $ErrorActionPreference = "Stop"
 
+# Whether PowerPoint shows nothing on screen: hidden, with no windows.
+# What can't be read counts as shown, so in doubt PowerPoint is left
+# running.
+function Test-PowerPointHidden($app) {
+    try {
+        return ($app.Visible -eq 0) -and ($app.Windows.Count -eq 0)  # msoFalse
+    } catch {
+        return $false
+    }
+}
+
 # pikslide reads what this writes as UTF-8, but powershell.exe writes in
 # the console's code page (cp932 on a Japanese Windows), and PowerPoint's
 # own errors come in Windows' language (checked: Write-Error and
@@ -32,12 +43,20 @@ $consoleEncoding = [Console]::OutputEncoding
 
 $app = $null
 $pres = $null
+# PowerPoint opens a copy of the deck, under a name of its own, so that
+# the presentation this closes is never one the user has open: step 3 of
+# the README has them editing that very .pptx in PowerPoint, and
+# Presentations.Open() of a deck already open, even untitled, returns
+# that one, which Close() closes without asking (checked, issue #35).
+$tempPptx = Join-Path $env:TEMP ("pikslide_" + [System.Guid]::NewGuid().ToString("N") + ".pptx")
+$tempFiles = @($tempPptx)
 try {
     $ppSaveAsPDF = 32  # PpSaveAsFileType.ppSaveAsPDF
 
+    Copy-Item -LiteralPath $PptxPath -Destination $tempPptx
     $app = New-Object -ComObject PowerPoint.Application
     try {
-        $pres = $app.Presentations.Open($PptxPath, $true, $true, $false)
+        $pres = $app.Presentations.Open($tempPptx, $true, $true, $false)
     } catch {
         throw "PowerPoint could not open $(Split-Path -Leaf $PptxPath): $($_.Exception.Message)"
     }
@@ -60,11 +79,27 @@ try {
         $pres.Close()
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($pres) | Out-Null
     }
+    # New-Object -ComObject attaches to a PowerPoint that is already
+    # running, so it's quit only if it shows nothing, as one this run
+    # started does (COM starts it hidden, and the deck opens without a
+    # window). The user's own is shown, and quitting it would close what
+    # they're working on (issue #35): it's only let go of. One a run
+    # killed by render.py's timeout left behind is hidden too, but Quit()
+    # doesn't end it while the killed run's references last: it ends on
+    # its own, Quit() or not, once COM lets go of them, some six minutes
+    # later (checked).
     if ($app) {
-        $app.Quit()
+        if (Test-PowerPointHidden $app) {
+            $app.Quit()
+        }
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($app) | Out-Null
     }
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
+    # Once PowerPoint has let go of the copy. A file left in %TEMP% is no
+    # reason to fail a run that rendered.
+    foreach ($path in $tempFiles) {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
     [Console]::OutputEncoding = $consoleEncoding
 }

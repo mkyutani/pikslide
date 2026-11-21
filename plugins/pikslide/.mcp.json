@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pikslide": {
+      "command": "uvx",
+      "args": ["pikslide-mcp@0.5.0", "--root", "${CLAUDE_PROJECT_DIR}"]
+    }
+  }
+}

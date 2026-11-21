@@ -3,7 +3,8 @@ name: release
 # On a v* tag: test, build, publish to TestPyPI, then to PyPI, with
 # Trusted Publishing (OIDC; no API token is stored), and make the GitHub
 # release. pikslide and pikslide-mcp, which share a version, are
-# released together. Each index needs a publisher registered for each of
+# released together; the release also carries the plugin, zipped with
+# pikslide's wheel (scripts/plugin_zip.py). Each index needs a publisher registered for each of
 # them, for this repository, this workflow file (release.yml), and the
 # environment named below.
 
@@ -31,10 +32,16 @@ jobs:
       - run: uv run --locked pytest
       - run: uv run --locked --package pikslide-mcp --group dev pytest pikslide-mcp/tests
       - run: uv build --all-packages
+      # Not in dist/, which goes to PyPI.
+      - run: uv run --locked python scripts/plugin_zip.py dist plugin
       - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plugin
+          path: plugin/
 
   testpypi:
     needs: build
@@ -108,6 +115,10 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: dist
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
+          name: plugin
           path: dist/
       - name: Create the release, with the notes and the files
         env:

@@ -1,0 +1,12 @@
+{
+  "name": "pikslide",
+  "description": "pikslide: diagrams as native, editable PowerPoint slides",
+  "owner": { "name": "mkyutani", "url": "https://github.com/mkyutani" },
+  "plugins": [
+    {
+      "name": "pikslide",
+      "source": "./plugins/pikslide",
+      "description": "Draw diagrams as native, editable PowerPoint slides with pikslide"
+    }
+  ]
+}

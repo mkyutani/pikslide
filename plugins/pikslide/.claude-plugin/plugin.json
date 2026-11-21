@@ -1,0 +1,10 @@
+{
+  "name": "pikslide",
+  "version": "0.5.0",
+  "description": "Draw diagrams as native, editable PowerPoint slides with pikslide: a text language an LLM writes, checked and rendered to a picture to look at",
+  "author": { "name": "mkyutani", "url": "https://github.com/mkyutani" },
+  "homepage": "https://github.com/mkyutani/pikslide",
+  "repository": "https://github.com/mkyutani/pikslide",
+  "license": "0BSD",
+  "keywords": ["diagram", "powerpoint", "pptx", "slides"]
+}

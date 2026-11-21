@@ -124,11 +124,38 @@ repository:
 and
 [grammar.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/grammar.md).
 
+## In an LLM host: the plugin and the MCP server
+
+For hosts where an LLM doesn't run commands itself, pikslide comes as a
+plugin, with a skill that teaches the LLM to draw with it, and as an MCP
+server, [pikslide-mcp](https://github.com/mkyutani/pikslide/tree/main/pikslide-mcp).
+
+In Claude Code, install the plugin from this repository:
+
+```
+/plugin install pikslide --marketplace mkyutani/pikslide
+```
+
+(or, before Claude Code 2.1.275, `/plugin marketplace add mkyutani/pikslide`
+and then `/plugin install pikslide@pikslide`). It starts pikslide-mcp,
+which needs [uv](https://docs.astral.sh/uv/), in the project's
+directory: diagrams are read and written there.
+
+Each [GitHub release](https://github.com/mkyutani/pikslide/releases)
+carries `pikslide-plugin-X.Y.Z.zip`, the plugin with pikslide's wheel in
+its skill: in a host's sandbox, the skill installs pikslide from it,
+needing no network. Any other MCP host runs `uvx pikslide-mcp`.
+
 ## Development
 
 ```sh
 uv run pytest
+uv run --package pikslide-mcp --group dev pytest pikslide-mcp/tests
 ```
+
+pikslide, pikslide-mcp and the plugin share one version:
+`python scripts/bump_version.py X.Y.Z` sets it everywhere, then
+`uv lock`.
 
 The layout stage's simplifications are listed in the docstring of
 `src/pikslide/pik/layout.py`.

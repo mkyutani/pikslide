@@ -406,6 +406,35 @@ def test_arrowhead_errors(src, message):
         layout(src + "\n")
 
 
+def test_group_is_only_for_a_block():
+    with pytest.raises(LayoutError, match=re.escape("'group' is only valid on a block ([ ... ]), not a box")):
+        layout("box group\n")
+
+
+def test_vertical_text_fits_its_columns():
+    # Issue #36: a column a line wide, as long as its text is wide (the
+    # flat estimate's metrics measure no vertical advance of their own).
+    across = layout('box "店頭" "窓口" fit\n').shapes[0]
+    down = layout('box "店頭" "窓口" vertical fit\n').shapes[0]
+    margin, vmargin = 0.1, 0.05
+    assert down.w - 2 * margin == pytest.approx(across.h - 2 * vmargin)
+    assert down.h - 2 * vmargin == pytest.approx(across.w - 2 * margin)
+
+
+@pytest.mark.parametrize("src, message", [
+    ('line "a" vertical', "'vertical' is only valid on an object with text in it"),
+    ('box "a" above vertical', "'above' and 'below' don't apply to vertical text"),
+])
+def test_vertical_errors(src, message):
+    with pytest.raises(LayoutError, match=re.escape(message)):
+        layout(src + "\n")
+
+
+def test_vertical_text_longer_than_its_object_is_a_warning():
+    [warning] = layout('B: box "店頭の業務フロー" vertical wid 0.5 ht 0.3\n').warnings
+    assert warning.message.startswith("B: vertical text overflows the usable height")
+
+
 def test_expr_evaluates_functions_and_variables():
     result = layout("scale = 2\nbox width sqrt(4)*scale\n")
     box = result.shapes[0]

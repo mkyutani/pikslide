@@ -33,6 +33,8 @@ _NUMPROP_NAME = {
 _BOOLPROP_NAME = {
     TokType.CW: "cw",
     TokType.CCW: "ccw",
+    TokType.GROUP: "group",
+    TokType.VERTICAL: "vertical",
 }
 
 # The attributes only a `stroke` group can hold (docs/grammar.md, Objects).

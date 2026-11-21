@@ -44,7 +44,15 @@ from .pik.layout import (
 )
 from .pik.outline import outline
 from .pik.text_area import text_rect
-from .pptx_writer import _LINE_PITCH, FontRun, PilFontMetrics, _is_east_asian, _line_label_rects, slide_setup
+from .pptx_writer import (
+    _LINE_PITCH,
+    FontRun,
+    PilFontMetrics,
+    _is_east_asian,
+    _line_label_rects,
+    slide_setup,
+    vertical_advance,
+)
 
 DPI = 200
 """Pixels to the inch, as pptx_to_png.ps1 exports PowerPoint's."""
@@ -218,7 +226,43 @@ class _Painter:
         elif shape.text_dy < 0:
             top += -2 * shape.text_dy
         frame = (l + shape.text_margin, t + top, r - shape.text_margin, b - bottom)
+        if shape.vertical:
+            return self._layout_columns(shape, frame, wrap=not shape.fit)
         return self._layout_text(shape, frame, wrap=not shape.fit, split=shape.text_split)
+
+    def _layout_columns(self, shape: Shape, frame: tuple[float, float, float, float], wrap: bool) -> list[_TextColumn]:
+        """`shape`'s strings set vertically in `frame` (`vertical`, issue
+        #36), as PowerPoint sets East Asian vertical text: a column for each
+        (wrapped, at the frame's height, unless `fit`), a line wide, the
+        first on the right, centered as a whole across the frame; each
+        aligned along its length as its flags say, ljust to the top
+        (checked)."""
+        fl, ft, fr, fb = frame
+        center = ((fl + fr) / 2, (ft + fb) / 2)
+        columns: list[_TextColumn] = []
+        for i, (text, flags) in enumerate(shape.texts):
+            size_in = self.metrics.size_pt(flags, shape.text_sizes) / 72
+            size_px = max(1, round(size_in * self.scale))
+            color = self.rgb(string_color(shape, i) or Color(rgb=0))
+            runs = self.metrics.run_fonts(text, flags, shape.text_sizes, shape.typeface, size_px)
+            pieces = _wrap(runs, (fb - ft) * self.scale, _column_advance) if wrap and fb > ft else [runs]
+            for column_runs in pieces:
+                length = sum(_column_advance(run) for run in column_runs) / self.scale
+                if "ljust" in flags:
+                    top = ft
+                elif "rjust" in flags:
+                    top = fb - length
+                else:
+                    top = (ft + fb - length) / 2
+                faces = {run.face for run in column_runs if run.face is not None}
+                ratio = sum(self._ratio(face) for face in faces) / len(faces) if faces else 0.96
+                columns.append(_TextColumn(top, length, _LINE_PITCH * size_in, ratio * size_in, column_runs, color,
+                                           center))
+        x = center[0] + sum(column.pitch for column in columns) / 2
+        for column in columns:
+            x -= column.pitch
+            column.x = x
+        return columns
 
     def _layout_text(self, shape: Shape, frame: tuple[float, float, float, float], wrap: bool,
                      split: float = 0.0, anchor_top: bool = False) -> list[_TextLine]:
@@ -386,6 +430,59 @@ class _TextLine:
             x += run.font.getlength(run.text)
 
 
+class _TextColumn:
+    """A column of vertical text (Shape.vertical), in inches: its left
+    edge (`x`, set once all of a frame's columns are known), its top and
+    length, its width (a line's height) and where a turned run's baseline
+    is across it, from its right edge; its runs and color; and the middle
+    of the frame it's set in."""
+
+    def __init__(self, top: float, length: float, pitch: float, baseline: float, runs: list[FontRun],
+                 color: tuple[int, int, int], frame_center: Point):
+        self.x, self.top, self.length, self.pitch, self.baseline = 0.0, top, length, pitch, baseline
+        self.runs, self.color, self.frame_center = runs, color, frame_center
+
+    def corners(self) -> list[Point]:
+        return [(self.x, self.top), (self.x + self.pitch, self.top + self.length)]
+
+    def draw(self, draw: ImageDraw.ImageDraw, px) -> None:
+        image = draw._image
+        left, y = px((self.x, self.top))
+        right, _ = px((self.x + self.pitch, self.top))
+        middle = (left + right) / 2
+        for run in self.runs:
+            grow = round(run.font.size * _EMBOLDEN / 2) if run.embolden else 0
+            if _is_east_asian(run.text[0]):
+                # Upright, a character under the last, in their vertical forms.
+                try:
+                    draw.text((middle, y), run.text, font=run.font, fill=self.color, direction="ttb", anchor="mt",
+                              stroke_width=grow, stroke_fill=self.color)
+                except (KeyError, ValueError, OSError, TypeError):
+                    for k, ch in enumerate(run.text):  # no layout engine for vertical text
+                        draw.text((middle, y + k * run.font.size), ch, font=run.font, fill=self.color, anchor="mt",
+                                  stroke_width=grow, stroke_fill=self.color)
+            else:
+                # Turned a quarter clockwise: the line's top to the column's right.
+                width = run.font.getlength(run.text)
+                tile = Image.new("RGBA", (math.ceil(width) + 2 * grow + 2, max(1, round(right - left))), (0, 0, 0, 0))
+                baseline = self.baseline / self.pitch * tile.height
+                ImageDraw.Draw(tile).text((grow, baseline), run.text, font=run.font, fill=self.color + (255,),
+                                          anchor="ls", stroke_width=grow, stroke_fill=self.color + (255,))
+                turned = tile.rotate(-90, expand=True)
+                image.paste(turned, (round(left), round(y)), turned)
+            y += _column_advance(run)
+
+
+def _column_advance(run: FontRun, text: str | None = None) -> float:
+    """How far `text` (the run's own, unless given) advances down a column
+    of vertical text, in its font's pixels: upright if East Asian, turned
+    otherwise."""
+    text = run.text if text is None else text
+    if not text:
+        return 0.0
+    return vertical_advance(run.font, text) if _is_east_asian(text[0]) else run.font.getlength(text)
+
+
 def _pixels(inches: float, dpi: int) -> int:
     """A slide side in pixels as pptx_to_png.ps1 has PowerPoint export it:
     the side in whole EMU, as the deck has it, rounded to PowerPoint's own
@@ -394,11 +491,22 @@ def _pixels(inches: float, dpi: int) -> int:
     return max(1, round(round(int(inches * 914400) / 1587.5) * dpi / 576))
 
 
-def _wrap(runs: list[FontRun], width: float) -> list[list[FontRun]]:
+# Japanese line breaking (kinsoku, JIS X 4051), as PowerPoint does it:
+# what can't start a line takes the character before it along to the
+# next (checked: 「業務フロー」 breaks before ロ, not before ー), and what
+# can't end one goes on to the next.
+_NO_LINE_START = set("、。，．・：；？！ー‐－～〜」』）】〕〉》｝］’”ゝゞヽヾ々〻"
+                     "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ")
+_NO_LINE_END = set("「『（【〔〈《｛［‘“")
+
+
+def _wrap(runs: list[FontRun], width: float, measure=None) -> list[list[FontRun]]:
     """`runs` broken into lines no wider than `width` pixels where
     PowerPoint would break them: after a space, or between East Asian
-    characters, or else anywhere in a word too long for a line of its
-    own."""
+    characters but as Japanese line breaking allows (_NO_LINE_START,
+    _NO_LINE_END), or else anywhere in a word too long for a line of its
+    own. `measure(run, text)` gives a piece's length: its width, unless
+    given (a column's length, for vertical text)."""
     pieces: list[FontRun] = []
     for run in runs:
         word = ""
@@ -417,15 +525,21 @@ def _wrap(runs: list[FontRun], width: float) -> list[list[FontRun]]:
             pieces.append(run._replace(text=word))
 
     def length(piece: FontRun, text: str | None = None) -> float:
-        return piece.font.getlength(piece.text if text is None else text)
+        text = piece.text if text is None else text
+        return measure(piece, text) if measure else piece.font.getlength(text)
 
     lines: list[list[FontRun]] = [[]]
     used = 0.0
     for piece in pieces:
         w = length(piece, piece.text.rstrip(" "))
         if lines[-1] and used + w > width:
-            lines.append([])
-            used = 0.0
+            carried: list[FontRun] = []
+            if piece.text[:1] in _NO_LINE_START and len(lines[-1]) > 1:
+                carried.append(lines[-1].pop())
+            while len(lines[-1]) > 1 and lines[-1][-1].text[-1:] in _NO_LINE_END:
+                carried.insert(0, lines[-1].pop())
+            lines.append(carried)
+            used = sum(length(c) for c in carried)
         while not lines[-1] and w > width and len(piece.text) > 1:
             # A word too long for a line of its own: as much as fits.
             text = piece.text

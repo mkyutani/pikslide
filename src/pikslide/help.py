@@ -133,8 +133,8 @@ ENTRIES: tuple[Entry, ...] = (
     Entry(("shape",), "any PowerPoint preset shape, by name",
           synopsis=("[Label:] shape PRESET [attribute ...]",),
           body="One of PowerPoint's ~180 preset geometries (chevron, roundRect, "
-               "wedgeRectCallout, ...), matched case-insensitively. It behaves like a box: "
-               "same default size, attributes and edges (of its bounding rectangle). Its text "
+               "wedgeRectCallout, ...), matched case-insensitively. It behaves like a box "
+               "(default size, attributes, edges of its bounding rectangle). Its text "
                "goes in the preset's own text area, often less than the box (a diamond's "
                "middle half), and `fit` and the overflow warning follow it. `--help shapes` lists "
                "them all; `--help NAME` describes one and its handles.",
@@ -144,7 +144,7 @@ ENTRIES: tuple[Entry, ...] = (
     Entry(("image",), "a picture from a PNG, JPEG, GIF or SVG file",
           synopsis=('[Label:] image "PATH" [attribute ...]',),
           body="A picture; PATH is relative to the source file. Give width or height and "
-               "the other follows the aspect ratio; give neither and it fits inside "
+               "the other follows the aspect ratio; give neither, and it fits in "
                "boxwid × boxht. An SVG needs rsvg-convert on PATH for its PNG fallback.",
           sections=(("ATTRIBUTES", "size     width W  height H\n"
                                    "text     alt \"description\"  \"caption\" ...\n"
@@ -312,7 +312,7 @@ ENTRIES: tuple[Entry, ...] = (
     Entry(("attach", "path"), "attaches a line's ends to the objects they're on",
           synopsis=("attach [path straight|elbow|curved]",),
           body="Writes the line as a connector whose ends follow the objects they're on "
-               "when moved in PowerPoint. An end attaches at a site (a box's .n .e .s .w, a "
+               "when moved. An end attaches at a site (a box's .n .e .s .w, a "
                "circle's 8 compass points) of the object its from/to names, else of the one "
                "there; one that can't is a warning. `path elbow` routes it at right angles, "
                "as PowerPoint does; `path curved` curves along that route.",
@@ -321,21 +321,26 @@ ENTRIES: tuple[Entry, ...] = (
           synopsis=("start|end triangle|open|stealth|diamond|oval|none [small|large]",),
           body="Sets the head at that end, whatever ->, <- or <-> say. open is a V; "
                "diamond and oval are centered on the end. Each grows with the line's "
-               "thickness, and small or large makes it smaller or larger.",
+               "thickness; small and large shrink or enlarge it.",
           example="line from A to B start diamond end open large", group="attribute",
           see=("arrow",)),
     Entry(("cw", "ccw"), "an arc's direction: clockwise or counterclockwise",
           group="attribute", example="arc cw"),
+    Entry(("vertical",), "sets an object's text vertically (縦書き)",
+          body="Each string a column, the first on the right; East Asian characters upright, others turned.",
+          example='box "店頭" vertical fit', group="attribute"),
+    Entry(("group",), "writes a block as one PowerPoint group",
+          body="Its objects then move together in PowerPoint.",
+          example='[ G: diamond; text "?" at G ] group', group="attribute"),
     Entry(("same",), "copies size and style from another object",
           synopsis=("same", "same as OBJECT"),
           body="Copies size and style from the previous object of the same class, or "
                "from the one named.", example="box same as Web", group="attribute"),
     Entry(("fit",), "sizes the object to its text",
-          body="Makes the object just big enough for its text, measured in the fonts the "
-               "deck is drawn in, plus margin at each side and vmargin above and below. A "
-               "shape whose text goes in less "
-               "than its whole box is made bigger to match: a circle or a diamond, or a preset "
-               "shape such as flowChartInputOutput, whose text leaves out its slanted ends.",
+          body="Makes the object just big enough for its text, in the deck's fonts, plus margin "
+               "at the sides and vmargin above and below. A shape whose text area is less than "
+               "its box (a circle, a diamond, flowChartInputOutput's slanted ends) is made bigger "
+               "to match.",
           example='box "a longer label" fit', group="attribute", see=("margin", "vmargin")),
     Entry(("behind",), "draws the object just below another in z-order",
           synopsis=("behind OBJECT",), example="box fill bg2 behind Web", group="attribute"),
@@ -450,8 +455,8 @@ _VARIABLE_DOCS = {
     "medium": "the medium (default) text size",
     "large": "the large text size",
     "typeface": 'font family for all text; "" means the theme\'s',
-    "layout": 'the --template slide layout, by name or id; "" is Title and Content '
-              "(settings file only; --help template)",
+    "layout": 'the --template slide layout, by name or id ("": Title and Content); '
+              "settings file only",
     "primary": "a house color, for a template's settings file to repoint",
     "emphasis": "a house accent color, for a template's settings file to repoint",
 }

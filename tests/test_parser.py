@@ -93,6 +93,16 @@ def test_an_end_with_no_arrowhead_is_an_error():
         parse("line end\n")
 
 
+def test_group_is_a_block_attribute():
+    [stmt] = parse("[ box ] group\n").statements
+    assert stmt.attributes == [ast.BoolProperty("group")]
+
+
+def test_vertical_is_an_object_attribute():
+    [stmt] = parse('box "店頭" vertical\n').statements
+    assert stmt.attributes[-1] == ast.BoolProperty("vertical")
+
+
 def test_bare_string_is_a_text_object():
     doc = parse('"floating text" bold\n')
     stmt = doc.statements[0]

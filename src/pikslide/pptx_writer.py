@@ -42,6 +42,7 @@ from .pik.layout import (
     LayoutResult,
     LayoutWarning,
     Shape,
+    _text_area_height,
     _text_area_width,
     _text_size_name,
     arc_control_point,
@@ -345,6 +346,31 @@ class PilFontMetrics:
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
         return _LINE_PITCH * self._size_pt(flags, text_sizes) / 72.0
 
+    def column_length(
+        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
+    ) -> float:
+        """Length, in inches, of `text` set vertically (`vertical`, issue
+        #36): an East Asian character's vertical advance, as its font's
+        vertical metrics give it, and any other's width, turned a quarter."""
+        size_px = max(1, round(self._size_pt(flags, text_sizes) * _MEASURE_SCALE))
+        latin, ea = self._families(flags, typeface)
+        bold, italic = "bold" in flags, "italic" in flags
+        px = 0.0
+        for is_ea, run in _script_runs(text):
+            font = self._font(ea if is_ea else latin, bold, italic, size_px)
+            px += vertical_advance(font, run) if is_ea else font.getlength(run)
+        return px / _MEASURE_SCALE / 72.0
+
+
+def vertical_advance(font: ImageFont.FreeTypeFont, text: str) -> float:
+    """How far `text`, East Asian, advances set vertically, in `font`'s
+    pixels: its vertical metrics, through Pillow's layout engine (raqm),
+    or where that can't, a square to each character."""
+    try:
+        return font.getlength(text, direction="ttb")
+    except (KeyError, ValueError, OSError, TypeError):
+        return len(text) * font.size
+
 
 def resolve_for_pptx(
     doc: ast.Document,
@@ -641,6 +667,9 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
     # wrapping needed (docs/spec.md SS3.3, ext -- see Shape.fit); word-wrap
     # is for a fixed, author-chosen size instead, which this isn't.
     tf.word_wrap = not shape.fit
+    if shape.vertical:
+        # East Asian vertical text (issue #36): PowerPoint's 縦書き.
+        tf._bodyPr.set("vert", "eaVert")
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     # The insets are `margin` at the sides and `vmargin` at the top and
     # bottom (docs/spec.md SS3.3), which _autosize_text() already added to
@@ -1026,6 +1055,27 @@ def _text_rects(shape: Shape, metrics: PilFontMetrics) -> list[tuple[float, floa
     as one line the width of its frame."""
     if not shape.texts:
         return []
+    if shape.vertical:
+        # Columns, the first on the right, centered as a whole across the
+        # object; each as long as its text, set in the text area's height.
+        widths = [metrics.line_height(flags, shape.text_sizes) for _text, flags in shape.texts]
+        own_w, own_h = drawn_size(shape)
+        usable = None if shape.fit or shape.kind not in _FRAMED_TEXT_KINDS else _text_area_height(shape)
+        right = shape.cx + sum(widths) / 2
+        out = []
+        for (text, flags), w in zip(shape.texts, widths):
+            length = metrics.column_length(text, flags, shape.text_sizes, shape.typeface)
+            if usable is not None:
+                length = min(length, usable)
+            if "ljust" in flags:
+                top = shape.cy + own_h / 2 - shape.text_vmargin
+            elif "rjust" in flags:
+                top = shape.cy - own_h / 2 + shape.text_vmargin + length
+            else:
+                top = shape.cy + length / 2
+            out.append((right - w, top - length, right, top))
+            right -= w
+        return out
     if shape.kind in LINE_LIKE:
         out = []
         for (x0, y0, x1, y1), text, flags in _line_label_rects(shape):
@@ -1568,20 +1618,18 @@ def _add_all_shapes(container, shapes: list[Shape], tf: _Transform, suffix: str 
     `write_pptx()`, `write_pptx_from_template()` and `render_into()`
     alike), then attach the attached lines' ends (_connect_ends()).
 
-    pikslide never creates a PowerPoint group anywhere in its own output
-    (ext): PowerPoint's own group-resize math was found to silently
-    distort a group's *children*'s sizes. A "block" shape (docs/spec.md
-    SS3.1: "Blocks are groups" at the *pik* language level) is therefore
-    flattened here -- recursed straight into the same `container`/`tf`,
-    not nested inside a group of its own -- so its children land as
-    ordinary, individually-selectable top-level shapes, each still
-    keeping its own name (`_layout_statements()` has already given every
-    shape, block or not, one: its label, or a default "<class> <n>"); the
-    block shape itself has no PowerPoint shape representing it at all. No
-    local/nested transform is needed either: a block's children already
-    sit in the *same* global pik coordinate space as everything else
-    (`_translate()`, at layout time, already placed them there), so `tf`
-    -- the one already in effect for this whole call -- maps them
+    A "block" shape (docs/spec.md SS3.1) is flattened here -- recursed
+    straight into the same `container`/`tf` -- so its children land as
+    ordinary, individually-selectable shapes, each keeping its own name
+    (`_layout_statements()` has already given every shape, block or not,
+    one: its label, or a default "<class> <n>"); the block itself has no
+    shape of its own. With `group` (issue #36) it is a PowerPoint group
+    of them instead, named as a drawn object is, whose frame is its
+    children's, so that nothing in it is moved or scaled (_draw_shapes()).
+    No local/nested transform is needed either way: a block's children
+    already sit in the *same* global pik coordinate space as everything
+    else (`_translate()`, at layout time, already placed them there), so
+    `tf` -- the one already in effect for this whole call -- maps them
     correctly without adjustment.
 
     Each shape's name is its own, with `suffix` after it if given, unless
@@ -1589,11 +1637,24 @@ def _add_all_shapes(container, shapes: list[Shape], tf: _Transform, suffix: str 
     (_slide_names()). Returns each drawn shape's own name (Shape.name, as
     object_list() gives it) mapped to the one it got."""
     flat = flatten_shapes(shapes)
-    names = _slide_names(flat, _names_on(container.shapes), suffix)
+    named = flat + _grouped_blocks(shapes)
+    names = _slide_names(named, _names_on(container.shapes), suffix)
     drawn: dict[int, object] = {}
     _draw_shapes(container, shapes, tf, drawn, names)
     _connect_ends(flat, drawn)
-    return {shape.name or "": names[id(shape)] for shape in flat}
+    return {shape.name or "": names[id(shape)] for shape in named}
+
+
+def _grouped_blocks(shapes: list[Shape]) -> list[Shape]:
+    """The blocks among `shapes`, at any depth, written as a group
+    (`group`, issue #36), each of which is named like a drawn object."""
+    out = []
+    for shape in shapes:
+        if shape.kind == "block":
+            if shape.group:
+                out.append(shape)
+            out += _grouped_blocks(shape.sublist)
+    return out
 
 
 def _names_on(shapes) -> set[str]:
@@ -1651,7 +1712,17 @@ def _draw_shapes(
     (by id()) to the PowerPoint shape drawn for it, and `names` to the
     name it gets."""
     for shape in shapes:
-        if shape.kind == "block":
+        if shape.kind == "block" and shape.group:
+            # A PowerPoint group of its objects (issue #36), whose own frame is
+            # its children's (chOff and chExt as off and ext), so that nothing
+            # in it is moved or scaled. Worked out again once they're all
+            # drawn: a connector's and an arc's geometry is rewritten after
+            # they're added.
+            group = container.shapes.add_group_shape()
+            group.name = names[id(shape)]
+            _draw_shapes(group, shape.sublist, tf, drawn, names)
+            group._element.recalculate_extents()
+        elif shape.kind == "block":
             _draw_shapes(container, shape.sublist, tf, drawn, names)
         elif not is_drawn(shape):
             continue

@@ -255,6 +255,7 @@ attribute       ::= numprop relexpr
                    | "adjust" handle-name relexpr    (* preset shapes only *)
                    | "tip" "at" position             (* callouts only *)
                    | "rotate" expr                   (* preset shapes only *)
+                   | "vertical"                      (* objects with text *)
                    | "flipH" | "flipV"               (* preset shapes only *)
                    | "attach"                        (* lines and arrows only *)
                    | "path" connector-path           (* with attach only *)
@@ -263,6 +264,7 @@ attribute       ::= numprop relexpr
 numprop         ::= "width" | "height" | "radius" | "diameter"
 handle-name     ::= word { "." word }                (* head.length, adj1 *)
 boolprop        ::= "cw" | "ccw"
+                   | "group"                          (* blocks only *)
 connector-path  ::= "straight" | "elbow" | "curved"
 
 stroke-attrs    ::= [ color-value ] { stroke-attr }  (* at least one of the two *)

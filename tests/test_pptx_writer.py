@@ -554,6 +554,51 @@ def test_a_text_with_no_strings_draws_nothing(tmp_path: pathlib.Path):
     assert result.shapes[1].cy + result.shapes[1].h / 2 == pytest.approx(0)
 
 
+def _tree(shapes) -> list:
+    return [(s.name, _tree(s.shapes)) if s.shape_type == MSO_SHAPE_TYPE.GROUP else s.name for s in shapes]
+
+
+def test_a_grouped_block_is_a_powerpoint_group_that_moves_and_scales_nothing(tmp_path: pathlib.Path):
+    # Issue #36: a block written as a group, named as a drawn object is;
+    # its frame is its children's, so they stay where they were drawn.
+    src = 'Gw: [ A: box "a"; arrow; [ box "x"; box "y" ] group ] group\nbox "b"\n[ box "c" ] group\n'
+    prs = render(src, tmp_path)
+    assert _tree(prs.slides[0].shapes) == [
+        # the second block in its scope, Gw being the first, as `2nd block` is
+        ("Gw", ["A", "arrow 1", ("block 1", ["box 1", "box 2"])]), "box 1-2", ("block 2", ["box 1-3"])]
+    for group in (s for s in prs.slides[0].shapes if s.shape_type == MSO_SHAPE_TYPE.GROUP):
+        xfrm = group._element.grpSpPr.find(qn("a:xfrm"))
+        off, ext = xfrm.find(qn("a:off")), xfrm.find(qn("a:ext"))
+        ch_off, ch_ext = xfrm.find(qn("a:chOff")), xfrm.find(qn("a:chExt"))
+        assert (off.get("x"), off.get("y"), ext.get("cx"), ext.get("cy")) == (
+            ch_off.get("x"), ch_off.get("y"), ch_ext.get("cx"), ch_ext.get("cy"))
+    # the same places as with no groups at all
+    flat = render(src.replace(" group", ""), tmp_path, "flat.pptx")
+
+    def places(shapes) -> list:
+        out = []
+        for s in shapes:
+            out += places(s.shapes) if s.shape_type == MSO_SHAPE_TYPE.GROUP else [(s.left, s.top, s.width, s.height)]
+        return out
+
+    assert places(prs.slides[0].shapes) == places(flat.slides[0].shapes)
+
+
+def test_a_line_attaches_to_an_object_in_a_group(tmp_path: pathlib.Path):
+    prs = render("G: [ A: box ] group\nB: box at (2, 0)\narrow from G.A.e to B.w attach\n", tmp_path)
+    group, b, arrow = prs.slides[0].shapes
+    [a] = group.shapes
+    cxn = arrow._element.find(qn("p:nvCxnSpPr")).find(qn("p:cNvCxnSpPr"))
+    assert cxn.find(qn("a:stCxn")).get("id") == str(a.shape_id)
+    assert cxn.find(qn("a:endCxn")).get("id") == str(b.shape_id)
+
+
+def test_vertical_text_is_powerpoints_east_asian_vertical(tmp_path: pathlib.Path):
+    prs = render('box "店頭" vertical fit\ntext "窓口" vertical\nbox "横"\n', tmp_path)
+    verts = [s.text_frame._bodyPr.get("vert") for s in prs.slides[0].shapes]
+    assert verts == ["eaVert", "eaVert", None]
+
+
 def _listed_extent(objects: list[dict]) -> tuple[float, float, float, float]:
     """The box round all that object_list() gives: what a caller of
     render_into() measures a diagram by (issue #21)."""

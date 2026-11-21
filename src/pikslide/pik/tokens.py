@@ -66,6 +66,8 @@ class TokType(Enum):
     COLOR = auto()
     STROKE = auto()
     CW = auto()
+    GROUP = auto()
+    VERTICAL = auto()
     DASHED = auto()
     DEFINE = auto()
     DIAMETER = auto()
@@ -187,6 +189,7 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "fit": (TokType.FIT, None, None),
     "from": (TokType.FROM, None, None),
     "go": (TokType.GO, None, None),
+    "group": (TokType.GROUP, None, None),
     "heading": (TokType.HEADING, None, None),
     "height": (TokType.HEIGHT, None, None),
     "ht": (TokType.HEIGHT, None, None),
@@ -235,6 +238,7 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "until": (TokType.UNTIL, None, None),
     "up": (TokType.UP, DIR_UP, None),
     "vertex": (TokType.VERTEX, None, None),
+    "vertical": (TokType.VERTICAL, None, None),
     "w": (TokType.EDGEPT, None, "w"),
     "way": (TokType.WAY, None, None),
     "west": (TokType.EDGEPT, None, "w"),

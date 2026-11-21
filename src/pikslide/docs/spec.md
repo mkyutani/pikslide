@@ -75,13 +75,22 @@ Goal: the Selection Pane in PowerPoint reads like the source.
   `Start-2` stays that when its `Start` moves on to `Start-3`.
 - **Z-order** follows source order. `behind X` is honoured: the object is
   placed immediately below `X`.
-- **Blocks are flattened, not grouped.** A `[ ... ]` block is a grouping
-  construct in the *source* only: pikslide never emits a PowerPoint group for
-  it (or anywhere else). Its children become ordinary, individually-
-  selectable top-level shapes, each keeping its own name; the block's own
-  label has no shape of its own. (PowerPoint's own group-resize math was
-  found to silently distort a group's *children*'s sizes, so pikslide's
-  output never contains a group at all.)
+- **Blocks are flattened, unless grouped.** A `[ ... ]` block is a grouping
+  construct in the *source*: its objects become ordinary, individually
+  selectable shapes, each keeping its own name, and the block's own label
+  has no shape of its own. With **`group`**, the block is written as a
+  PowerPoint group of them instead, so that a person moves them together
+  (a BPMN gateway's diamond, marker and label, say). The group is named as
+  a drawn object is: its label, or `block <n>`. Its frame is its objects'
+  own (`chOff` and `chExt` as its `off` and `ext`), so nothing in it is
+  moved or scaled: the slide is the same, pixel for pixel, with or without
+  it (checked). A person resizing the group in PowerPoint scales what is
+  in it, as PowerPoint does any group's. A line attaches to an object in
+  a group as to any other. `group` on anything but a block is an error.
+
+  ```pikslide
+  Gw: [ G: diamond wid 0.5 ht 0.5; shape mathMultiply wid 0.2 ht 0.2 fill black stroke invis at G ] group
+  ```
 - **Line labels.** A PowerPoint line cannot hold text, so a line's strings
   become text boxes named `<line name> text <k>`, after the name the line
   has on the slide.
@@ -330,6 +339,24 @@ Japanese (`Jpan`) choice. `bold` and `italic` use those faces.
   as PowerPoint marks Japanese input. Unmarked, PowerPoint draws it in its
   own default Japanese font instead of the theme's, which is not the font
   `fit` measured with.
+
+**Vertical text.** `vertical` sets an object's text vertically, as
+PowerPoint's East Asian vertical text (縦書き, `eaVert`): each string is a
+column, the first on the right, and the columns are centered across the
+object as a whole. East Asian characters stand upright, in their vertical
+forms (、。ー), and others are turned a quarter clockwise. A string is
+centered along its column, `ljust` to the top and `rjust` to the bottom.
+A column is a line wide, 1.2 times the size, and as long as its
+characters' vertical advances; `fit` sizes an object to that, and in a
+fixed-size object a column longer than the text area's height (less
+`vmargin` at the top and bottom) wraps to the next, with a warning, as
+Japanese line breaking allows (a 、 or a ー never starts a column). It is
+valid on an object with text in it (not a line or an image), and `above`
+and `below` don't apply to it.
+
+```pikslide
+Lane: box "店頭" bold vertical wid 0.4 ht 2
+```
 
 **Space around the text.** `margin` (prelude: `0.1`, inches) is the
 space between an object's text and its left and right sides: the text

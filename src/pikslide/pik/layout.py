@@ -451,6 +451,15 @@ class Shape:
     attach: bool = False
     """`attach` (issue #18): a line's ends attach to the objects they lie
     on, and it is written as a connector."""
+    group: bool = False
+    """`group` (issue #36): a block written as a PowerPoint group of its
+    objects, so that they move together; otherwise its objects are
+    written one by one (docs/spec.md SS3.1)."""
+    vertical: bool = False
+    """`vertical` (issue #36): its text set vertically, as PowerPoint's
+    East Asian vertical text (`eaVert`): each string a column, the first
+    on the right; East Asian characters upright, others turned a quarter
+    clockwise."""
     connector_path: str = "straight"
     """`path NAME`: the form of an attached line's connector."""
     ends_named: tuple["Shape | None", "Shape | None"] = field(default=(None, None), compare=False, repr=False)
@@ -495,9 +504,8 @@ class LayoutResult:
     spec.md SS3.1, ext) is *not* flattened into this list -- its own
     children stay nested under its `.sublist`, recursively, mirroring the
     source's own nesting, even though a renderer flattens it right back
-    out when drawing (pikslide never emits a PowerPoint group, docs/
-    spec.md SS3.1). Use `flatten_shapes()` for a flat view (bounding-box
-    math, mainly)."""
+    out when drawing, unless it is a `group` (docs/spec.md SS3.1). Use
+    `flatten_shapes()` for a flat view (bounding-box math, mainly)."""
     bbox: tuple[float, float, float, float]
     text_sizes: dict[str, float] = field(default_factory=dict)
     """The resolved `small`/`medium`/`large` text sizes (ext, inches), so a
@@ -1377,6 +1385,25 @@ def _text_area_width(shape: Shape) -> float:
     return right - left - 2 * shape.text_margin
 
 
+def _text_area_height(shape: Shape) -> float:
+    """The height PowerPoint sets `shape`'s vertical text in: its preset's
+    text rectangle, less `vmargin` at the top and bottom."""
+    preset = preset_of(shape)
+    w, h = drawn_size(shape)
+    adjust = {}
+    if preset == "roundRect" and shape.rad > 0 and min(w, h) > 0:
+        adjust = {"adj": min(0.5, shape.rad / min(w, h)) * 100000}
+    _left, top, _right, bottom = text_rect(preset, w, h, {**adjust, **shape.adjust})
+    return bottom - top - 2 * shape.text_vmargin
+
+
+def _column_length(metrics, text: str, flags: list[str], sizes: dict[str, float] | None, typeface: str) -> float:
+    """How long `text` is set vertically (`vertical`): its FontMetrics'
+    `column_length()`, or, for one with none, as long as it is wide."""
+    length = getattr(metrics, "column_length", None)
+    return length(text, flags, sizes, typeface) if length else metrics.text_width(text, flags, sizes, typeface)
+
+
 def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
     """Warn when a fixed-size object's widest string is wider than its text
     area -- its preset's text rectangle less `margin` on each side (issues
@@ -1384,6 +1411,21 @@ def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
     otherwise go unnoticed. A one-character string can't wrap, so it never
     counts."""
     if shape.fit or shape.kind not in _FRAMED_TEXT_KINDS:
+        return
+    if shape.vertical:
+        longest = max(
+            (_column_length(ctx.metrics, text, flags, shape.text_sizes, shape.typeface)
+             for text, flags in shape.texts if len(text) > 1),
+            default=0.0,
+        )
+        usable = _text_area_height(shape)
+        if longest > usable + 1e-6:
+            what = label if label is not None else f'{shape.kind} "{shape.texts[0][0]}"'
+            ctx.warnings.append(LayoutWarning(
+                f"{what}: vertical text overflows the usable height ({longest:.2f} in > {usable:.2f} in) and "
+                "will wrap; heighten it, reduce vmargin, or use fit",
+                (shape.name,) if shape.name else (),
+            ))
         return
     widest = max(
         (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface)
@@ -1665,9 +1707,16 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
         return
     m = ctx.metrics
     sizes = shape.text_sizes
-    widest = max((m.text_width(text, flags, sizes, shape.typeface) for text, flags in shape.texts), default=0.0)
-    shape.w = widest + 2 * shape.text_margin
-    shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 2 * shape.text_vmargin
+    if shape.vertical:
+        # Columns side by side, each a line high (wide), as long as its text.
+        longest = max((_column_length(m, text, flags, sizes, shape.typeface) for text, flags in shape.texts),
+                      default=0.0)
+        shape.w = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 2 * shape.text_margin
+        shape.h = longest + 2 * shape.text_vmargin
+    else:
+        widest = max((m.text_width(text, flags, sizes, shape.typeface) for text, flags in shape.texts), default=0.0)
+        shape.w = widest + 2 * shape.text_margin
+        shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 2 * shape.text_vmargin
     # The object stays centered on its own position with the text shifted
     # off that center, so it grows by the shift on both sides (as pikchr's
     # own size-to-fit does), keeping .n/.s clear of the text.
@@ -1876,6 +1925,15 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
             shape.cw = True
         elif attr.name == "ccw":
             shape.cw = False
+        elif attr.name == "group":
+            if shape.kind != "block":
+                raise LayoutError(f"'group' is only valid on a block ([ ... ]), not {_a(shape.kind)}")
+            shape.group = True
+        elif attr.name == "vertical":
+            if shape.kind not in _FRAMED_TEXT_KINDS and shape.kind != "text":
+                raise LayoutError(f"'vertical' is only valid on an object with text in it (a box, a shape, a text, "
+                                  f"...), not {_a(shape.kind)}")
+            shape.vertical = True
         elif attr.name == "thick":
             shape.sw *= 1.5
         elif attr.name == "thin":
@@ -2168,6 +2226,9 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
     elif build.with_pos is not None:
         with_pos, with_edge = build.with_pos, build.with_edge
 
+    if shape.vertical and any(flag in ("above", "below") for _text, flags in shape.texts for flag in flags):
+        raise LayoutError("'above' and 'below' don't apply to vertical text: each string is a column of its own")
+
     if build.fit:
         _autosize_text(shape, ctx)
 
@@ -2295,7 +2356,7 @@ def _layout_statements(
                 ctx.scope_stack[-1][stmt.label] = shape
             else:
                 shape.name = f"{shape.kind} {class_counts[shape.kind]}"
-            if is_drawn(shape):
+            if is_drawn(shape) or shape.group:
                 shape.name = _unique_name(shape.name, ctx)
             shape.behind = behind_target
             _resolve_handles(shape, ctx)
@@ -2353,9 +2414,10 @@ def flatten_shapes(shapes: list[Shape]) -> list[Shape]:
     dropped. `LayoutResult.shapes` keeps
     the *tree* (a block shape and its `sublist` intact), mirroring the
     source's own nesting even though a renderer flattens it back out when
-    drawing (SS3.1: blocks are a source-level grouping construct, never a
-    PowerPoint group); this is for callers that just need every eventual
-    on-slide shape regardless of nesting -- bounding-box math, mainly."""
+    drawing (SS3.1: a block is a source-level grouping construct, and a
+    PowerPoint group only with `group`); this is for callers that just
+    need every eventual drawn shape regardless of nesting -- bounding-box
+    math, mainly."""
     out: list[Shape] = []
     for shape in shapes:
         if shape.kind == "block":

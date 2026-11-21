@@ -137,6 +137,13 @@ def test_a_bold_with_no_bold_face_is_emboldened_as_powerpoint_does_it(monkeypatc
     assert bold_right - right == pytest.approx(40 / 72 * 200 / 55, abs=1.5)
 
 
+def test_vertical_text_is_drawn_in_a_column():
+    image = _draw('box "店頭業務" vertical fit stroke invis\n').convert("L")
+    dark = [(x, y) for x in range(image.width) for y in range(image.height) if image.getpixel((x, y)) < 128]
+    xs, ys = [x for x, _ in dark], [y for _, y in dark]
+    assert max(ys) - min(ys) > 2.5 * (max(xs) - min(xs))
+
+
 class _Font:
     """Ten pixels to a character."""
 
@@ -153,6 +160,10 @@ def test_text_wraps_after_a_space_between_east_asian_characters_or_in_a_word_too
     assert _lines("one two three", 75) == ["one two", "three"]
     assert _lines("日本語の文", 30) == ["日本語", "の文"]
     assert _lines("abcdefgh", 30) == ["abc", "def", "gh"]
+    # Japanese line breaking: ー never starts a line, so ロ goes along with it;
+    # 「 never ends one
+    assert _lines("業務フロー", 40) == ["業務フ", "ロー"]
+    assert _lines("abc「de", 40) == ["abc", "「de"]
 
 
 def test_dashes():

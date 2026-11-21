@@ -2,8 +2,10 @@ name: release
 
 # On a v* tag: test, build, publish to TestPyPI, then to PyPI, with
 # Trusted Publishing (OIDC; no API token is stored), and make the GitHub
-# release. Each index needs a publisher registered for this repository,
-# this workflow file (release.yml), and the environment named below.
+# release. pikslide and pikslide-mcp, which share a version, are
+# released together. Each index needs a publisher registered for each of
+# them, for this repository, this workflow file (release.yml), and the
+# environment named below.
 
 on:
   push:
@@ -20,12 +22,15 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"
-      - name: Check the tag matches the version in pyproject.toml
-        run: test "v$(uv version --short)" = "$GITHUB_REF_NAME"
+      - name: Check the tag matches pikslide's and pikslide-mcp's versions
+        run: |
+          test "v$(uv version --short)" = "$GITHUB_REF_NAME"
+          test "v$(uv version --short --package pikslide-mcp)" = "$GITHUB_REF_NAME"
       - name: Install rsvg-convert, for the SVG image tests
         run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
       - run: uv run --locked pytest
-      - run: uv build
+      - run: uv run --locked --package pikslide-mcp --group dev pytest pikslide-mcp/tests
+      - run: uv build --all-packages
       - uses: actions/upload-artifact@v7
         with:
           name: dist
@@ -57,6 +62,13 @@ jobs:
               --index-strategy unsafe-best-match "pikslide==${GITHUB_REF_NAME#v}" && break
             sleep 20
           done
+          for i in 1 2 3 4 5 6; do
+            uv pip install --python "$RUNNER_TEMP/smoke" --no-cache \
+              --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ \
+              --index-strategy unsafe-best-match "pikslide-mcp==${GITHUB_REF_NAME#v}" && break
+            sleep 20
+          done
+          "$RUNNER_TEMP/smoke/bin/pikslide-mcp" --version
           pikslide="$RUNNER_TEMP/smoke/bin/pikslide"
           "$pikslide" --version
           "$pikslide" --help llm > /dev/null

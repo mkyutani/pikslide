@@ -4,19 +4,14 @@ import os
 import sys
 from importlib.metadata import version
 
-from .api import Layout, layout, render_into
+from .api import BuildError, Layout, build, layout, render_into
 from .fonts import FontInstallError, install_fonts, on_windows
-from .pik import PikSyntaxError, dump, format_syntax_error, parse
-from .pik.layout import LayoutError, LayoutWarning, flatten_shapes
-from .pik.tokens import column_at
-from .pptx_writer import (
-    find_settings_file, object_list, resolve_for_pptx, slide_frame, write_pptx, write_pptx_from_template,
-)
+from .pik import PikSyntaxError, parse
+from .pik.layout import LayoutError, LayoutWarning
 from .help import hint as help_hint
-from .help import layout_error_topics, syntax_error_topics
 from .help import show as show_help
 from .help import topics_text as help_topics_text
-from .render import DRAWN_BY, FORMATS, RENDERERS, RenderError, render_deck
+from .render import FORMATS, RENDERERS
 
 # The library (src/pikslide/api.py, docs/spec.md SS6), and the command.
 __all__ = ["parse", "layout", "render_into", "Layout", "PikSyntaxError", "LayoutError", "main"]
@@ -195,67 +190,19 @@ def _with_extension(path: str, ext: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _syntax_error_detail(err: PikSyntaxError, main_path: str, main_text: str) -> dict:
-    file = err.file or main_path
-    text = main_text if err.file is None else _try_read(err.file)
-    column = column_at(text, err.pos) if text else None
-    return {"file": file, "line": err.line, "column": column, "message": err.message}
 
 
-def _try_read(path: str) -> str | None:
-    try:
-        with open(path, encoding="utf-8") as f:
-            return f.read()
-    except OSError:
-        return None
 
 
-def _fail(args: argparse.Namespace, message: str) -> None:
-    """A plain diagnostic with no file position (an unsupported output
-    format, an unreadable settings file, and the like)."""
-    if args.check:
-        print(json.dumps({"ok": False, "errors": [{"file": None, "line": None, "column": None, "message": message}]}))
-    else:
-        print(f"error: {message}", file=sys.stderr)
-    raise SystemExit(1)
 
 
-def _fail_syntax(args: argparse.Namespace, err: PikSyntaxError, main_path: str, main_text: str) -> None:
-    """With the help topics for the statement it's in (help.py), so a
-    person or an LLM stuck on the syntax knows where to look it up."""
-    text = main_text if err.file is None else (_try_read(err.file) or "")
-    lines = text.splitlines()
-    source_line = lines[err.line - 1] if 0 < err.line <= len(lines) else ""
-    topics = syntax_error_topics(source_line, err.text)
-    if args.check:
-        detail = _syntax_error_detail(err, main_path, main_text)
-        print(json.dumps({"ok": False, "errors": [{**detail, "help": _help_commands(topics)}]}))
-    else:
-        print(f"error: {format_syntax_error(err, main_path, main_text)}", file=sys.stderr)
-        print(help_hint(topics), file=sys.stderr)
-    raise SystemExit(1)
 
 
-def _help_commands(topics: list[str]) -> list[str]:
-    return [f"pikslide --help {t}" for t in topics]
 
 
-def _fail_layout(args: argparse.Namespace, err: LayoutError) -> None:
-    """A LayoutError (docs/spec.md SS5: undefined names and the like)
-    carries no file position -- unlike a
-    PikSyntaxError, it isn't tied to one token."""
-    topics = layout_error_topics(str(err))
-    if args.check:
-        error = {"file": None, "line": None, "column": None, "message": str(err), "help": _help_commands(topics)}
-        print(json.dumps({"ok": False, "errors": [error]}))
-    else:
-        print(f"error: {err}", file=sys.stderr)
-        if topics:
-            print(help_hint(topics), file=sys.stderr)
-    raise SystemExit(1)
 
 
-def _succeed(args: argparse.Namespace, message: str, warnings: list[LayoutWarning] = (), notes: list[str] = ()) -> None:
+def _succeed(message: str, warnings: list[LayoutWarning] = (), notes: list[str] = ()) -> None:
     """`notes` are informational only -- unlike `warnings`, --strict never
     makes them fatal (e.g. --png drawn without PowerPoint: a fact about
     how the image was made, not a problem with the diagram)."""
@@ -266,111 +213,41 @@ def _succeed(args: argparse.Namespace, message: str, warnings: list[LayoutWarnin
     print(message)
 
 
-def _succeed_check(warnings: list[LayoutWarning], slide: dict, shapes: list) -> None:
+def _succeed_check(warnings: list[LayoutWarning], slide: dict, objects: list[dict]) -> None:
     """--check's JSON: the warnings, each with the names of the objects it
     is about, the slide (slide_frame()), and where each object went, one
     to a line so that it reads (and greps) as a list."""
     slide = {k: round(v, 2) if isinstance(v, float) else v for k, v in slide.items()}
     warnings = [{"message": w.message, "objects": list(w.objects)} for w in warnings]
     head = json.dumps({"ok": True, "errors": [], "warnings": warnings, "slide": slide}, ensure_ascii=False)
-    objects = ",\n".join(f"  {json.dumps(o, ensure_ascii=False)}" for o in object_list(shapes))
-    print(f'{head[:-1]}, "objects": [\n{objects}\n]}}')
+    listed = ",\n".join(f"  {json.dumps(o, ensure_ascii=False)}" for o in objects)
+    print(f'{head[:-1]}, "objects": [\n{listed}\n]}}')
 
 
 # ---------------------------------------------------------------------------
 
 
 def _run(args: argparse.Namespace, text: str, base_dir: str) -> None:
-    out_path = args.output
+    """The command: build(), its result or its error printed, plain or
+    as --check's JSON."""
     try:
-        doc = parse(text, base_dir=base_dir, include_paths=args.include_paths)
-    except PikSyntaxError as e:
-        _fail_syntax(args, e, args.input, text)
-        return
-
-    if out_path is None and not args.check:
-        print(dump(doc))
-        return
-
-    settings_text = None
-    settings_base_dir = "."
-    try:
-        if args.template is not None or args.settings is not None:
-            settings_path = find_settings_file(args.template or args.input, explicit=args.settings)
-            if settings_path is not None:
-                settings_text = _try_read(settings_path)
-                if settings_text is None:
-                    _fail(args, f"could not read settings file: {settings_path}")
-                settings_base_dir = os.path.dirname(os.path.abspath(settings_path))
-        result = resolve_for_pptx(
-            doc,
-            base_dir=base_dir,
-            settings_text=settings_text,
-            settings_base_dir=settings_base_dir,
-            template_path=args.template,
-            layout_name=args.layout,
+        built = build(
+            text, args.input, base_dir=base_dir, output=args.output, template=args.template,
+            settings=args.settings, layout_name=args.layout, include_paths=args.include_paths, png=args.png,
+            pdf=args.pdf, renderer=args.renderer, strict=args.strict, check=args.check,
         )
-    except LayoutError as e:
-        _fail_layout(args, e)
-        return
-
-    # --strict (docs/spec.md SS5): a stand-in for what the deck will really
-    # have is an error; a problem with the diagram itself stays a warning.
-    if args.strict and result.stand_ins:
-        _fail(args, "; ".join(result.stand_ins))
-        return
-    warnings = [LayoutWarning(s) for s in result.stand_ins] + result.warnings
-
-    if args.check:
-        layout_name = args.layout if args.layout is not None else result.layout_name
-        try:
-            slide = slide_frame(result, args.template, layout_name)
-        except LayoutError as e:
-            _fail_layout(args, e)
-            return
-        _succeed_check(warnings, slide, flatten_shapes(result.shapes))
-        return
-
-    if not out_path.endswith(".pptx"):
-        _fail(args, f"unsupported output format: {out_path}")
-        return
-
-    if args.template is not None:
-        try:
-            layout_name = args.layout if args.layout is not None else result.layout_name
-            write_pptx_from_template(result, args.template, out_path, layout_name=layout_name)
-        except LayoutError as e:
-            _fail_layout(args, e)
-            return
+    except BuildError as e:
+        if args.check:
+            print(json.dumps({"ok": False, "errors": [e.to_dict()]}))
+        else:
+            print(f"error: {e.shown}", file=sys.stderr)
+            if e.help:
+                print(help_hint(e.help), file=sys.stderr)
+        raise SystemExit(1)
+    if built.tree is not None:
+        print(built.tree)
+    elif built.check is not None:
+        _succeed_check(built.warnings, built.check["slide"], built.check["objects"])
     else:
-        # No --template (docs/spec.md SS3.3 rule 2): the built-in Office
-        # theme stands in for a real one, which --strict makes fatal
-        # rather than just noted.
-        warning = "no --template given: colors and fonts are stand-ins from the built-in Office theme (pikslide --help template)"
-        if args.strict:
-            _fail(args, warning)
-            return
-        warnings.append(LayoutWarning(warning))
-        write_pptx(result, out_path)
-
-    written = [f"wrote {out_path}"]
-    notes = []
-    template_layout = "" if args.template is None else args.layout if args.layout is not None else result.layout_name
-
-    def draw_direct(path: str, fmt: str) -> None:
-        from . import draw
-
-        draw.save(draw.draw(result, args.template, template_layout), path, fmt)
-
-    for fmt in FORMATS:
-        path = getattr(args, fmt)
-        if path is None:
-            continue
-        try:
-            renderer, more = render_deck(out_path, path, fmt, renderer=args.renderer, draw=draw_direct)
-        except RenderError as e:
-            _fail(args, f"could not render {path}: {e}")
-            return
-        notes += more
-        written.append(f"wrote {path} (drawn by {DRAWN_BY[renderer]})")
-    _succeed(args, "\n".join(written), warnings=warnings, notes=notes)
+        written = [f"wrote {path}" + (f" (drawn by {drawn_by})" if drawn_by else "") for path, drawn_by in built.written]
+        _succeed("\n".join(written), warnings=built.warnings, notes=built.notes)

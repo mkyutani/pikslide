@@ -143,3 +143,46 @@ def test_errors_are_the_packages_own():
         pikslide.parse('"unterminated\n')
     with pytest.raises(pikslide.LayoutError):
         pikslide.layout(pikslide.parse("box fill nosuchcolor\n"))
+
+
+# ---------------------------------------------------------------------------
+# build(): the command's run, returned rather than printed (issue #33)
+# ---------------------------------------------------------------------------
+
+
+def test_build_writes_the_deck_and_its_picture_and_says_what_drew_it(tmp_path):
+    from pikslide.api import build
+
+    out, png = str(tmp_path / "d.pptx"), str(tmp_path / "d.png")
+    built = build('box "Web"\n', "d.pik", output=out, png=png, renderer="direct")
+    assert built.written == [(out, None), (png, "pikslide")]
+    assert any("no --template" in w.message for w in built.warnings)
+    assert (tmp_path / "d.png").read_bytes().startswith(b"\x89PNG")
+
+
+def test_build_checks_without_writing(tmp_path):
+    from pikslide.api import build
+
+    built = build('A: box "Web"\n', "d.pik", check=True)
+    assert built.written == [] and built.check is not None
+    assert [o["name"] for o in built.check["objects"]] == ["A"]
+    assert set(built.check["slide"]) >= {"left", "top", "wid", "ht"}
+
+
+def test_build_with_no_output_gives_the_tree():
+    from pikslide.api import build
+
+    assert build("box\n", "d.pik").tree.startswith("Document")
+
+
+def test_build_raises_what_the_command_reports():
+    from pikslide.api import BuildError, build
+
+    with pytest.raises(BuildError) as exc:
+        build("box\nbox wid\n", "d.pik", check=True)
+    error = exc.value
+    assert (error.file, error.line) == ("d.pik", 2) and error.help
+    assert error.to_dict()["help"][0].startswith("pikslide --help ")
+    assert "^" in error.shown  # the line, and a caret under where it is
+    with pytest.raises(BuildError, match="unsupported output format"):
+        build("box\n", "d.pik", output="d.svg")

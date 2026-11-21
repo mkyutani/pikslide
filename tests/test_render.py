@@ -153,7 +153,7 @@ def rendered(monkeypatch):
         calls.append((pptx_path, out_path, fmt, renderer))
         return "powerpoint", []
 
-    monkeypatch.setattr("pikslide.render_deck", fake_render)
+    monkeypatch.setattr("pikslide.api.render_deck", fake_render)
     return calls
 
 
@@ -198,7 +198,7 @@ def test_renderer_flag_is_passed_through(monkeypatch, tmp_path, rendered):
 def test_a_fallback_is_a_note_not_a_warning_so_strict_allows_it(monkeypatch, capsys, tmp_path):
     from pptx import Presentation
 
-    monkeypatch.setattr("pikslide.render_deck", lambda *a, **k: ("direct", ["drawn without PowerPoint"]))
+    monkeypatch.setattr("pikslide.api.render_deck", lambda *a, **k: ("direct", ["drawn without PowerPoint"]))
     tmpl = tmp_path / "tmpl.pptx"
     Presentation().save(str(tmpl))
     _run_cli(monkeypatch, [str(_src(tmp_path)), str(tmp_path / "o.pptx"), "--template", str(tmpl), "--png", "--strict"])
@@ -228,7 +228,7 @@ def test_render_failure_is_a_clean_error(monkeypatch, capsys, tmp_path):
     def failing(*args, **kwargs):
         raise RenderError("nothing to render with")
 
-    monkeypatch.setattr("pikslide.render_deck", failing)
+    monkeypatch.setattr("pikslide.api.render_deck", failing)
     with pytest.raises(SystemExit) as exc:
         _run_cli(monkeypatch, [str(_src(tmp_path)), str(tmp_path / "d.pptx"), "--pdf"])
     assert exc.value.code == 1

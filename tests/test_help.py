@@ -138,6 +138,16 @@ def test_llm_holds_every_entry_and_shape_once():
     assert "GOING FURTHER" not in text
 
 
+def test_every_description_has_a_terse_one_for_an_llm():
+    # --help llm has descriptions of its own, for an LLM (_LLM_BODIES): one
+    # for each entry that has one, and none for an entry that doesn't.
+    from pikslide.help import _LLM_BODIES
+
+    assert set(_LLM_BODIES) == {e.names[0] for e in ENTRIES if e.body}
+    text = render("llm", PLAIN)
+    assert all(f"\n{body}\n" in text for body in _LLM_BODIES.values())
+
+
 def test_llm_fits_in_one_command_output():
     # Claude Code returns up to about 30,000 characters of a command's
     # output as it is; past that, it saves it to a file for the LLM to read

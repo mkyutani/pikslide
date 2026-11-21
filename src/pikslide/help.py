@@ -1012,6 +1012,117 @@ SEE ALSO
 # llm: the whole reference in one text, to read once
 # ---------------------------------------------------------------------------
 
+# The entries' descriptions as --help llm gives them: terse, for an LLM
+# rather than a person, each saying all its entry's does (a test holds
+# every entry with a description to one here).
+_LLM_BODIES = {
+    "box": "Rectangle; radius rounds corners.",
+    "circle": "Circle; width, height, radius, diameter D all keep it round.",
+    "ellipse": "Ellipse.",
+    "oval": "Box with half-circle ends.",
+    "diamond": "Square on its point.",
+    "cylinder": "Cylinder; radius = end depth.",
+    "file": "Page, top-right corner folded down; radius = fold size.",
+    "dot": "Small filled circle, e.g. to mark a point.",
+    "text": "No fill, no outline, sized by its strings. A statement starting with a string is a text too: "
+            '`"hello" at (1, 1)`.',
+    "shape": "One of PowerPoint's ~180 presets (chevron, roundRect, wedgeRectCallout, ...), case-insensitive. "
+             "Like a box (default size, attributes, edges of its bounding box). Text goes in the preset's text "
+             "area, often < box (diamond: middle half); fit and the overflow warning follow it. --help shapes "
+             "lists all; --help NAME: one, and its handles.",
+    "image": "Picture; PATH relative to the source file. Width or height given → other follows aspect ratio; "
+             "neither → fits in boxwid × boxht. SVG needs rsvg-convert on PATH (PNG fallback).",
+    "block": "Statements inside laid out on their own; block placed as one object, their bounding box. Inner "
+             "names via its label (Outer.Inner). Draws nothing itself.",
+    "line": "From the previous object's exit, in the current direction, unless its path says otherwise.",
+    "arrow": "Line, head at end (->); <- / <-> move heads; start/end set their kinds.",
+    "spline": "Curve through its path's points; drawn as straight segments in v1.",
+    "arc": "Turns left, right with cw; next object goes the way it turned.",
+    "move": "Invisible line: moves where the next object goes.",
+    "connector": "Reserved: names no variable or macro; no statement uses it. A line as a connector: attach.",
+    "width": "Width in inches; N% = percent of current.",
+    "height": "Height in inches; N% = percent of current.",
+    "radius": "Circle's/arc's radius; box's (file's) corner radius; cylinder's end depth.",
+    "stroke": "Line/outline look: color first (optional), then thickness, thick, thin, dashed, dotted, solid, "
+              "invis, these only after stroke. Error on an object drawing no line (text, image, move, block). "
+              "As a variable: default line color.",
+    "thickness": "Stroke width, inches (a stroke attribute). As a variable: default.",
+    "invis": "Hides line/outline (text still shows).",
+    "dashed": "Dashes of given length (default dashwid).",
+    "dotted": "Dots spaced by given length (default dashwid).",
+    "fill": "Fills interior. As a variable: default.",
+    "color": "String attribute: colors only the string before it. As a variable: default text color. "
+             "Line/outline color: stroke.",
+    "theme": "Deck's theme color, kept linked: recolors with the template. SLOT = OOXML scheme color (accent1-6, "
+             "tx1, tx2, bg1, bg2, hlink, folHlink, ...); usual ones are also variables (accent1, text1, ...).",
+    "lighter": "Tint (lighter) / shade (darker), as PowerPoint's theme color variants.",
+    "none": "No color: no fill, or no stroke.",
+    "above": "String attribute: string above (below) object's center or the line, stacking with others there. "
+             "In a position: that far above (below) a point.",
+    "ljust": "Object attribute, all strings: aligned on left (right) edges, margin in from a closed shape's "
+             "left (right) side or a line's left (right) end. On a text, at P = its left (right) edge at P. Not "
+             "both.",
+    "center": "String attribute: centered, on the center line. As an edge: object's center (.c).",
+    "small": "The three text sizes (big = large); last on a string wins. As variables: the sizes, in points.",
+    "from": "Where a line starts and (another segment) ends. An object (to B) = its center; with chop, its "
+            "outline.",
+    "up": "Alone: changes current direction (objects chain edge to edge). On a line: moves its path that way. "
+          "In a position: N left of P = N inches left of P.",
+    "chop": "Ends a line at its from/to object's outline, not center.",
+    "attach": "Line → connector; ends follow objects when moved. End attaches at a site (box .n .e .s .w; "
+              "circle's 8 compass points) of its from/to object, else the one there; can't → warning. path "
+              "elbow: right angles, as PowerPoint; path curved: curves along that route.",
+    "arrowheads": "Head at that end, whatever ->, <-, <-> say. open = V; diamond, oval centered on the end. "
+                  "Grows with line thickness; small/large shrink/enlarge.",
+    "vertical": "Each string a column, first on the right; East Asian characters upright, others turned.",
+    "group": "Its objects move together in PowerPoint.",
+    "same": "Copies size and style from the previous object of the same class, or the one named.",
+    "fit": "Size to text (deck's fonts) + margin each side, vmargin top/bottom. Text area < box (circle, "
+           "diamond, flowChartInputOutput's slanted ends) → made bigger to match.",
+    "adjust": "shaft.width, head.length (block arrows, homePlate, chevron): length or % of their side. Or the "
+              "preset's own names (adj1, ...): 100000 = 1. tip points a callout. --help NAME lists a preset's "
+              "handles.",
+    "rotate": "Clockwise about center, or mirrored in its box, as PowerPoint. wid, ht size it unturned; edges "
+              "and A.wid, A.ht as drawn.",
+    "edges": "Bounding-box compass points: n ne e se s sw w nw (north, east, ...; top = t = n, bottom = bot = "
+             "s), c (center). A line also: start, end.",
+    "of": "Point fraction F of the way from P to Q (0.5 = middle).",
+    "first": "Nth (1st, 2nd, ...; first) object of a class, from the start, or from the end with last. "
+             "previous = object just before.",
+    "functions": "cos, sin take degrees; atan2 gives them: angle from (0, 0) to (X, Y), -180 to 180, "
+                 "counterclockwise from right. A line's: atan2(B.y - A.y, B.x - A.x).",
+    "define": "Macro; $1..$9 in BODY = arguments. Name: lowercase first, not an existing variable. Arguments "
+              "pasted as text: `5 - $1` with `1 + 1` → `5 - 1 + 1`; write ($1).",
+    "include": "Reads variables and macros from PATH (relative to the file, or an --include-path directory). "
+               "An included file can't draw.",
+}
+
+# The intro and the opening as --help llm gives them: a line a paragraph,
+# terse; the intro saying all INTRO says, but GOING FURTHER.
+_LLM_OPENING = (
+    "Write the diagram from this text alone; check it with `pikslide FILE --check`, not by unzipping the "
+    ".pptx. It prints JSON: errors, most naming a `pikslide --help TOPIC`; warnings, each with the objects "
+    "named (overlapping objects, text, lines among them); the slide: left and top edges, wid, ht, "
+    "placeholders (none without --template), nothing else on it; where each object went: x, y, wid, ht as "
+    "A.x, A.y, A.wid, A.ht (and a callout's tip and leader line), or a line's points and labels."
+)
+_LLM_INTRO = f"""\
+INTRO — pikslide in one page
+pikslide draws a diagram written as text into a one-slide PowerPoint deck of native, editable shapes, colored by the deck's theme: pikslide diagram.pik diagram.pptx [--template corp.potx] [--png diagram.png]
+Program = statements, one per line (or ;):
+CLASS [attribute ...]  object: box circle ellipse oval diamond cylinder file dot text line arrow spline arc move, shape NAME, image "PATH", [ ... ] (block)
+Name: CLASS ...  labeled object: refer as Name, Name.e, ...
+right | down | left | up  direction objects chain in
+name = value  variable: boxwid = 1, fill = accent2
+Names: label starts uppercase (Web: box → Web.e); variable lowercase (gap = 0.3 → Web.e + (gap, 0)).
+Placement: each object follows the previous, edge to edge, in the current direction (initially right); a line starts where the previous object ends. at P / with .EDGE at P place explicitly; from P to Q and then shape a line; chop ends a line at the joined objects' outlines. P: edge A.n .ne .e .se .s .sw .w .nw .c, (1, 2), A.e + (0.5, 0), 0.5 below A.s, 1/2<A, B>, a line's A.start, A.end. Sizes, coordinates: A.wid, A.ht, A.rad, P.x, P.y.
+Text: strings = lines of text, in order: box "Title" bold "note" small; "say \\"hi\\"" = a quote, "\\\\" = a backslash. A string attribute (bold, small, above, color C, ...) applies to the string just before it; object attributes (ljust, at, fill, ...) go before, between or after strings. fit sizes the object to its text. A line's strings sit at its middle: above/below a level line; beside an upright one, right with ljust, left with rjust.
+Lines: stroke sets line/outline: box stroke accent2 thick dashed.
+Colors: theme colors follow the deck: accent1..accent6, text1, text2, bg1, bg2, with lighter N% / darker N%; CSS names (steelblue, ...) fixed.
+EXAMPLE
+{INTRO_EXAMPLE}"""
+
+
 
 def llm_text() -> str:
     """What it takes to write a diagram, in one plain text for an LLM to
@@ -1036,14 +1147,9 @@ def llm_text() -> str:
     shown: dict[str, str] = {}
     return "\n".join([
         f"PIKSLIDE {version('pikslide')} — the language reference in one text (pikslide --help llm)",
-        "Write the diagram from this text alone, and check it with `pikslide FILE --check`, not by unzipping "
-        "the .pptx. It prints JSON: the errors, most with the `pikslide --help TOPIC` to read; the warnings, "
-        "each with the objects it names, among them objects, text and lines that overlap; the slide, its left "
-        "and top edges, wid and ht, and placeholders (none without --template), nothing else being on it; and "
-        "where each object went, x, y, wid and ht as A.x, A.y, A.wid and A.ht give them (and a callout's tip "
-        "and leader line), or a line's points and labels.",
+        _LLM_OPENING,
         "",
-        _llm_page(_INTRO_BODY),
+        _LLM_INTRO,
         "",
         "KEYWORDS",
         *(_llm_entry(e, shown) for e in ENTRIES),
@@ -1071,7 +1177,8 @@ def llm_text() -> str:
 def _llm_entry(entry: Entry, shown: dict[str, str]) -> str:
     """An entry as `--help llm` has it: its heading, then a line each,
     labeled, for its other names, its synopsis, its description, its
-    sections and its example. `shown` is the sections given so far, by
+    sections and its example, its description its terse one
+    (_LLM_BODIES). `shown` is the sections given so far, by
     their text, each to the entry it was given under: one given before
     (the classes share their ATTRIBUTES) is just `as BOX`. No DEFAULTS
     (VARIABLES lists them all), no color list (COLORS) and no SEE ALSO."""
@@ -1081,7 +1188,7 @@ def _llm_entry(entry: Entry, shown: dict[str, str]) -> str:
     if entry.synopsis:
         out.append(f"syntax: {' | '.join(entry.synopsis)}")
     if entry.body:
-        out.append(entry.body)
+        out.append(_LLM_BODIES[entry.names[0]])
     for heading, text in entry.sections:
         if text == "{colors}":
             continue
@@ -1111,20 +1218,6 @@ def _llm_rows(text: str) -> list[str]:
             out.append(row)
     return out
 
-
-def _llm_page(text: str) -> str:
-    """A page written for a person (the intro), as `--help llm` has it:
-    each paragraph on one line, a table's or an example's rows without
-    their indentation (_llm_rows())."""
-    out = []
-    for block in text.strip().split("\n\n"):
-        lines = block.splitlines()
-        if all(not line.startswith(" ") for line in lines):
-            out.append(" ".join(lines))
-        else:
-            heading = [line for line in lines if not line.startswith(" ")]
-            out += heading + _llm_rows("\n".join(line for line in lines if line.startswith(" ")))
-    return "\n".join(out)
 
 
 # ---------------------------------------------------------------------------

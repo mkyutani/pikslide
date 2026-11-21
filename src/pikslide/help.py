@@ -57,8 +57,8 @@ class Entry:
 
 
 _CLOSED_ATTRIBUTES = """\
-text     "string" [flag ...] ...  lines of text, among the rest (--help flags)
-         ljust  rjust
+text     "string" [flag ...] ...  ljust  rjust
+         (lines of text, among the rest: --help flags)
 size     width W (wid)  height H (ht)  radius R (rad)  fit
 style    fill C  stroke [C] [thickness T] [thick] [thin] [dashed [L]]
          [dotted [L]] [solid] [invis]
@@ -66,8 +66,8 @@ place    at P  with .EDGE at P  same [as X]  behind X
 edges    .n .ne .e .se .s .sw .w .nw .c  (.top .bottom .left .right .center)"""
 
 _LINE_ATTRIBUTES = """\
-text     "string" [flag ...] ...  labels, among the rest (--help flags)
-         ljust  rjust
+text     "string" [flag ...] ...  ljust  rjust
+         (labels, among the rest: --help flags)
 path     [N]  up|down|left|right [N]  go N heading A  from P  to P  then
          right until even with P  close  chop
 heads    ->  <-  <->  start|end KIND [small|large] (--help arrowheads)
@@ -767,14 +767,8 @@ def _color_list(style: _Style) -> str:
     return "\n".join(lines)
 
 
-def _format_entry(entry: Entry, style: _Style, shown: dict[str, str] | None = None) -> str:
-    """An entry's page. `shown` is for `--help llm`: the sections printed
-    so far, by their text, each to the entry it was printed under. With
-    it, a section printed before (the classes share their ATTRIBUTES) is
-    just `as BOX`, and the entry has no DEFAULTS (VARIABLES lists them
-    all there), no color list (COLORS has its own section there) and no
-    SEE ALSO."""
-    bundled = shown is not None
+def _format_entry(entry: Entry, style: _Style) -> str:
+    """An entry's page, for a person (`--help llm` has its own: _llm_entry())."""
     values = prelude_values()
     out = [style.bold(" ".join(n.upper() for n in entry.names[:1])) + " — " + entry.summary]
     if len(entry.names) > 1:
@@ -784,22 +778,15 @@ def _format_entry(entry: Entry, style: _Style, shown: dict[str, str] | None = No
     if entry.body:
         body = _INLINE_CODE.sub(lambda m: style.bold(m.group(1)) if style.tty else m.group(0), entry.body)
         out += ["", style.bold("DESCRIPTION"), _wrap(body, style.width)]
-    if entry.defaults and not bundled:
+    if entry.defaults:
         out += ["", style.bold("DEFAULTS"),
                 _indent("\n".join(f"{name} = {values.get(name, '?')}" for name in entry.defaults))]
     for heading, text in entry.sections:
-        if bundled and text == "{colors}":
-            continue
-        if bundled and text in shown:
-            out += ["", style.bold(heading), f"    as {shown[text]}"]
-            continue
-        if bundled:
-            shown[text] = entry.names[0].upper()
         text = text.replace("{colors}", _color_list(style))
         out += ["", style.bold(heading), _indent(text)]
     if entry.example:
         out += ["", style.bold("EXAMPLE"), _indent(entry.example)]
-    if entry.see and not bundled:
+    if entry.see:
         out += ["", style.bold("SEE ALSO"), _indent(", ".join(f"--help {s}" for s in entry.see))]
     return "\n".join(out) + "\n"
 
@@ -1029,9 +1016,12 @@ SEE ALSO
 def llm_text() -> str:
     """What it takes to write a diagram, in one plain text for an LLM to
     read once: the intro, every keyword entry, the variables, the theme
-    colors and the preset shapes' names. It's fixed at 80 columns, whatever
-    the terminal, so a version always prints the same bytes and a prompt
-    holding it can be cached.
+    colors and the preset shapes' names. Laid out for an LLM, not a
+    person: no indentation, no wrapping, no padding, no blank lines but
+    between parts, and a section labeled in a word on its own line
+    (_llm_entry()), so that it is as short as it says what it says. The
+    same whatever the terminal, so a version always prints the same bytes
+    and a prompt holding it can be cached.
 
     It's kept short, since an LLM's every turn after reading it reads it
     again, and under 30,000 characters, which Claude Code returns from a
@@ -1040,48 +1030,101 @@ def llm_text() -> str:
     out, with a line pointing to each: the CSS color names (an LLM knows
     them), the template page and the shapes' descriptions. And the
     prelude's source and the lists (summaries of the entries)."""
-    import textwrap
-
-    style = _Style(tty=False)
     values = prelude_values()
-    variables = [(n, f"{values[n]:<10} {d}") for n, d in _VARIABLE_DOCS.items() if n in values]
     shapes = sorted(PRESET_NAMES.values(), key=str.lower)
+    builtin = _builtin_theme_colors()
     shown: dict[str, str] = {}
     return "\n".join([
         f"PIKSLIDE {version('pikslide')} — the language reference in one text (pikslide --help llm)",
+        "Write the diagram from this text alone, and check it with `pikslide FILE --check`, not by unzipping "
+        "the .pptx. It prints JSON: the errors, most with the `pikslide --help TOPIC` to read; the warnings, "
+        "each with the objects it names, among them objects, text and lines that overlap; the slide, its left "
+        "and top edges, wid and ht, and placeholders (none without --template), nothing else being on it; and "
+        "where each object went, x, y, wid and ht as A.x, A.y, A.wid and A.ht give them (and a callout's tip "
+        "and leader line), or a line's points and labels.",
         "",
-        "Write the diagram from this text alone, and check it with",
-        "`pikslide FILE --check`, not by unzipping the .pptx. It prints JSON: the",
-        "errors, most with the `pikslide --help TOPIC` to read; the warnings, each",
-        "with the objects it names, among them objects, text and lines that overlap;",
-        "the slide, its left and top edges, wid and ht, and placeholders (none",
-        "without --template), nothing else being on it; and where each object went,",
-        "x, y, wid and ht as A.x, A.y, A.wid and A.ht give them (and a callout's",
-        "tip and leader line), or a line's points and labels.",
+        _llm_page(_INTRO_BODY),
         "",
-        _INTRO_BODY,
         "KEYWORDS",
+        *(_llm_entry(e, shown) for e in ENTRIES),
         "",
-        *(_format_entry(e, style, shown) for e in ENTRIES),
-        _format_list("VARIABLES  (NAME = VALUE to change)", variables, style),
-        "COLORS  (fill C, stroke C, \"string\" color C)",
+        "VARIABLES (NAME = VALUE to change)",
+        *(f"{n} = {values[n]} — {d}" for n, d in _VARIABLE_DOCS.items() if n in values),
         "",
-        *_theme_color_lines(style),
-        "",
+        'COLORS (fill C, stroke C, "string" color C)',
+        "Theme colors (follow the deck's theme; RGB as in the built-in Office theme):",
+        *(f"{name} = {value} (0x{builtin[value.split(chr(34))[1]]:06x})" for name, value in _theme_colors().items()),
+        'theme "SLOT": any OOXML scheme color; COLOR lighter N% / darker N% for tints. none, off: no color.',
         f"Named colors: all {len(_css_colors())} CSS color names (steelblue, tomato, ...); "
         "pikslide --help colors lists them",
         "",
-        f"PRESET SHAPES ({len(shapes)})  (shape NAME; pikslide --help NAME describes one)",
-        "",
-        _wrap(_SHAPES_NOTE, style.width, 2),
-        "",
-        textwrap.fill(" ".join(shapes), width=style.width, initial_indent="  ", subsequent_indent="  "),
+        f"PRESET SHAPES ({len(shapes)}) (shape NAME; pikslide --help NAME describes one)",
+        _SHAPES_NOTE,
+        " ".join(shapes),
         "",
         "TEMPLATE",
-        "",
         "Drawing on a --template's slide (layout, content area, settings file): pikslide --help template",
         "",
     ])
+
+
+def _llm_entry(entry: Entry, shown: dict[str, str]) -> str:
+    """An entry as `--help llm` has it: its heading, then a line each,
+    labeled, for its other names, its synopsis, its description, its
+    sections and its example. `shown` is the sections given so far, by
+    their text, each to the entry it was given under: one given before
+    (the classes share their ATTRIBUTES) is just `as BOX`. No DEFAULTS
+    (VARIABLES lists them all), no color list (COLORS) and no SEE ALSO."""
+    out = [f"{entry.names[0].upper()} — {entry.summary}"]
+    if len(entry.names) > 1:
+        out.append(f"also: {', '.join(entry.names[1:])}")
+    if entry.synopsis:
+        out.append(f"syntax: {' | '.join(entry.synopsis)}")
+    if entry.body:
+        out.append(entry.body)
+    for heading, text in entry.sections:
+        if text == "{colors}":
+            continue
+        if text in shown:
+            out.append(f"{heading.lower()}: as {shown[text]}")
+            continue
+        shown[text] = entry.names[0].upper()
+        out += [f"{heading.lower()}:", *_llm_rows(text)]
+    if entry.example:
+        first, *rest = entry.example.splitlines()
+        out += [f"e.g. {first}", *rest]
+    return "\n".join(out)
+
+
+def _llm_rows(text: str) -> list[str]:
+    """A table, or a block of code, without its indentation: a row that
+    goes on, indented further, on the next line is one line, and its
+    columns are two spaces apart."""
+    rows = [line for line in text.splitlines() if line.strip()]
+    base = min(len(line) - len(line.lstrip()) for line in rows)
+    out: list[str] = []
+    for line in rows:
+        row = re.sub(r" {3,}", "  ", line.strip())
+        if out and len(line) - len(line.lstrip()) > base:
+            out[-1] += " " + row
+        else:
+            out.append(row)
+    return out
+
+
+def _llm_page(text: str) -> str:
+    """A page written for a person (the intro), as `--help llm` has it:
+    each paragraph on one line, a table's or an example's rows without
+    their indentation (_llm_rows())."""
+    out = []
+    for block in text.strip().split("\n\n"):
+        lines = block.splitlines()
+        if all(not line.startswith(" ") for line in lines):
+            out.append(" ".join(lines))
+        else:
+            heading = [line for line in lines if not line.startswith(" ")]
+            out += heading + _llm_rows("\n".join(line for line in lines if line.startswith(" ")))
+    return "\n".join(out)
 
 
 # ---------------------------------------------------------------------------

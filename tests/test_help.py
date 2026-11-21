@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from pikslide import main
-from pikslide.help import (_CLOSED_ATTRIBUTES, _LINE_ATTRIBUTES, _SHAPE_DOCS, _VARIABLE_DOCS, ENTRIES, _css_colors,
+from pikslide.help import (_SHAPE_DOCS, _VARIABLE_DOCS, ENTRIES, _css_colors,
                            _Style, prelude_values, render)
 from pikslide.pik import parse
 from pikslide.pik.layout import PRESET_NAMES, THEME_SLOTS, resolve_layout
@@ -129,8 +129,9 @@ def test_llm_holds_every_entry_and_shape_once():
         assert f"\n{entry.names[0].upper()} — {entry.summary}\n" in text
     assert all(name in text for name in PRESET_NAMES.values())
     # the classes' shared ATTRIBUTES once, the rest pointing to them
-    assert text.count(_CLOSED_ATTRIBUTES.splitlines()[0]) == 1 and "    as BOX" in text
-    assert text.count(_LINE_ATTRIBUTES.splitlines()[0]) == 1 and "    as LINE" in text
+    assert text.count('text  "string" [flag ...] ...  ljust  rjust (lines of text') == 1
+    assert text.count('text  "string" [flag ...] ...  ljust  rjust (labels') == 1
+    assert "\nattributes: as BOX\n" in text and "\nattributes: as LINE\n" in text
     # the CSS names and the template page are one line each, pointing to their help
     assert text.count("Named colors") == 1 and f"all {len(_css_colors())} CSS color names" in text
     assert "aliceblue" not in text and "pikslide --help template" in text

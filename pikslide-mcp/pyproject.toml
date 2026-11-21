@@ -2,7 +2,7 @@
 name = "pikslide-mcp"
 # pikslide's own version: the two are released together, from one tag,
 # and this pins pikslide to it.
-version = "0.5.0"
+version = "0.6.0"
 description = "An MCP server for pikslide: an LLM host draws diagrams as editable PowerPoint slides"
 readme = "README.md"
 license = "0BSD"
@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: Multimedia :: Graphics :: Presentation",
 ]
 dependencies = [
-    "pikslide==0.5.0",
+    "pikslide==0.6.0",
     "mcp>=2.3,<3",
 ]
 

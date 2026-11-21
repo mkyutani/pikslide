@@ -4,7 +4,7 @@
     "pikslide": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["pikslide-mcp@0.5.0"]
+      "args": ["pikslide-mcp@0.6.0"]
     }
   }
 }

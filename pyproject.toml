@@ -43,3 +43,13 @@ build-backend = "uv_build"
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.uv.workspace]
+# pikslide-mcp (issue #33), released with pikslide from one tag, so that
+# `pip install pikslide` brings neither the MCP SDK nor its command.
+members = ["pikslide-mcp"]
+
+[tool.pytest.ini_options]
+# pikslide's own; pikslide-mcp's are in pikslide-mcp/tests, run in its
+# environment (uv run --package pikslide-mcp pytest pikslide-mcp/tests).
+testpaths = ["tests"]

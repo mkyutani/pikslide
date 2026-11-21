@@ -1,0 +1,43 @@
+[project]
+name = "pikslide-mcp"
+# pikslide's own version: the two are released together, from one tag,
+# and this pins pikslide to it.
+version = "0.5.0"
+description = "An MCP server for pikslide: an LLM host draws diagrams as editable PowerPoint slides"
+readme = "README.md"
+license = "0BSD"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Miki Yutani", email = "mkyutani@gmail.com" }
+]
+requires-python = ">=3.12"
+keywords = ["diagram", "powerpoint", "pptx", "mcp", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Multimedia :: Graphics :: Presentation",
+]
+dependencies = [
+    "pikslide==0.5.0",
+    "mcp>=2.3,<3",
+]
+
+[project.urls]
+Repository = "https://github.com/mkyutani/pikslide"
+Issues = "https://github.com/mkyutani/pikslide/issues"
+
+[project.scripts]
+pikslide-mcp = "pikslide_mcp:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.uv.sources]
+pikslide = { workspace = true }

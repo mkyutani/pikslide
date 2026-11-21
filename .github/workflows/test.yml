@@ -23,3 +23,5 @@ jobs:
       - name: Install rsvg-convert, for the SVG image tests
         run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
       - run: uv run --locked pytest
+      - name: Test pikslide-mcp, in its own environment
+        run: uv run --locked --package pikslide-mcp --group dev pytest pikslide-mcp/tests

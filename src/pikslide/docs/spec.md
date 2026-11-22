@@ -46,8 +46,13 @@ written in a `.pik`; see §4.
   `theme`, `major`, `medium`, `large`, `lighter`, `darker`, `none` and
   `off` are ordinary reserved words: they cannot be used as variable or
   macro names. Names such as `accent1` are not among them; the prelude
-  defines those as ordinary variables (§3.7). See [grammar.md](grammar.md),
-  *Reserved words*.
+  defines those as ordinary variables (§3.7). Nor are the names of points
+  (`n`, `ne`, `c`, …) and `x` and `y`: each is a point or a coordinate
+  only where one can stand (`A.ne`, `ne of A`, `A.x`), and an ordinary
+  name elsewhere (`w = 0.5`). A later version may reserve more words. A
+  word it reserves may be one a diagram named a variable or a macro, but
+  never a label: a label starts with a capital letter, and a reserved
+  word never does. See [grammar.md](grammar.md), *Reserved words*.
 - **Text size** is in points, not a percentage (§3.3).
 - **File extension.** Source files use `.pik`, for the syntax-highlighting
   and editor support that extension already carries in the wild.
@@ -887,6 +892,9 @@ Humans and LLMs both need errors they can act on.
   a fixed-size object stays a warning: it is a fact about the diagram,
   visible in the output itself.
 - A `define` naming an already-defined variable is an **error** (§3.6).
+- A reserved word written as a variable's or a macro's name is an
+  **error** that says so (`'path' is a reserved word: a variable needs
+  another name`), not a bare "unexpected token".
 - A reserved word that isn't supported, `aligned`, `mono` or
   `monospace`, is an **error** that says so, not a word accepted and
   ignored: a diagram written with one would look as if it worked. Each

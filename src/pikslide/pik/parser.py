@@ -15,7 +15,8 @@ import re
 
 from . import ast
 from .macros import expand_macros
-from .tokens import PikSyntaxError, Token, TokType, is_hex_number, nth_value, numeric_value, unescape_string
+from .tokens import (EDGE_NAMES, PikSyntaxError, Token, TokType, is_hex_number, is_reserved, nth_value,
+                     numeric_value, reserved_name_message, unescape_string)
 
 _DIR_NAME = {
     TokType.UP: "up",
@@ -102,6 +103,13 @@ _PSEUDOVAR_NAME = {
     TokType.THICKNESS: "thickness",
 }
 
+# The reserved words a variable statement can assign (docs/grammar.md,
+# `lvalue`).
+_LVALUE_KEYWORDS = {
+    TokType.FILL, TokType.COLOR, TokType.STROKE, TokType.THICKNESS,
+    TokType.SMALL, TokType.MEDIUM, TokType.LARGE,
+}
+
 _ASSIGN_OP = {
     TokType.ASSIGN: "=",
     TokType.PLUS: "+=",
@@ -110,9 +118,9 @@ _ASSIGN_OP = {
     TokType.SLASH: "/=",
 }
 
+# The edge keywords. The other names of points (EDGE_NAMES) are IDs.
 _EDGE_TOKENS = {
     TokType.CENTER,
-    TokType.EDGEPT,
     TokType.TOP,
     TokType.BOTTOM,
     TokType.START,
@@ -184,8 +192,19 @@ class Parser:
     def _starts_expr(self) -> bool:
         return self.at(*_EXPR_START)
 
-    def _at_edge_token(self) -> bool:
-        return self.at(*_EDGE_TOKENS)
+    def _at_edge_name(self, offset: int = 0) -> bool:
+        """At an edge name (`ne`, `c`, ...: EDGE_NAMES): an ID, a point
+        only where one can stand, an ordinary name elsewhere."""
+        t = self.peek(offset)
+        return t is not None and t.type == TokType.ID and t.edge is not None
+
+    def _at_edge_of(self) -> bool:
+        """At an edge before `of` (`ne of A`, `1 ne of A`): an edge
+        keyword, or an edge name, which is a point there only."""
+        if self.at(*_EDGE_TOKENS):
+            return True
+        nxt = self.peek(1)
+        return self._at_edge_name() and nxt is not None and nxt.type == TokType.OF
 
     # -- top level ------------------------------------------------------
 
@@ -212,12 +231,15 @@ class Parser:
         if t is None or t.type in (TokType.EOL, TokType.RB):
             return None
 
+        nxt = self.peek(1)
+        if is_reserved(t) and t.type not in _LVALUE_KEYWORDS and nxt is not None and nxt.type == TokType.ASSIGN:
+            self._error(reserved_name_message(t.text, "a variable"))
+
         if t.type in (TokType.UP, TokType.DOWN, TokType.LEFT, TokType.RIGHT):
             self.advance()
             return ast.DirectionStatement(_DIR_NAME[t.type])
 
-        if t.type in (TokType.ID, TokType.FILL, TokType.COLOR, TokType.STROKE, TokType.THICKNESS,
-                      TokType.SMALL, TokType.MEDIUM, TokType.LARGE):
+        if t.type == TokType.ID or t.type in _LVALUE_KEYWORDS:
             name_tok = self.advance()
             op_tok = self.expect(TokType.ASSIGN)
             value = self.parse_value()
@@ -423,7 +445,7 @@ class Parser:
 
         if tt == TokType.THEN:
             self.advance()
-            if self.at(TokType.HEADING) or self.at(TokType.EDGEPT) or self._starts_expr():
+            if self.at(TokType.HEADING) or self._starts_expr():
                 return self._parse_move_heading("then", consumed_keyword=True)
             return ast.Then()
 
@@ -561,9 +583,12 @@ class Parser:
             self.advance()
             angle = self.parse_expr()
             return ast.MoveHeading(keyword, amount, angle=angle)
-        if self.at(TokType.EDGEPT):
-            edge_tok = self.advance()
-            return ast.MoveHeading(keyword, amount, edge=edge_tok.edge)
+        if self._at_edge_name():
+            return ast.MoveHeading(keyword, amount, edge=self.advance().edge)
+        # `go ne`: a point right after `go` or `then`, with no amount,
+        # was read as the amount, a variable of that name.
+        if amount.percent is None and isinstance(amount.abs, ast.Var) and amount.abs.name in EDGE_NAMES:
+            return ast.MoveHeading(keyword, ast.RelExpr(), edge=EDGE_NAMES[amount.abs.name])
         self._error(f"expected 'heading' or a compass point after '{keyword}'")
 
     # -- expressions --------------------------------------------------------
@@ -652,12 +677,10 @@ class Parser:
             place = self.parse_place2()
             if self.at(TokType.DOT_XY):
                 self.advance()
-                if self.at(TokType.X):
+                coord = self.peek()
+                if coord is not None and coord.type == TokType.ID and coord.text in ("x", "y"):
                     self.advance()
-                    return ast.PlaceCoord(place, "x")
-                if self.at(TokType.Y):
-                    self.advance()
-                    return ast.PlaceCoord(place, "y")
+                    return ast.PlaceCoord(place, coord.text)
                 self._error("expected 'x' or 'y' after '.'")
             if self.at(TokType.DOT_L):
                 if isinstance(place, ast.ObjectEdge) and place.edge is None:
@@ -773,7 +796,7 @@ class Parser:
         # a keyword.
         if self.at(TokType.HEADING):
             self.advance()
-            if self._at_edge_token():
+            if self._at_edge_of():
                 edge = self.parse_edge()
                 self.expect(TokType.OF)
                 return ast.HeadingOffset(x, edge=edge, angle=None, base=self.parse_position())
@@ -781,7 +804,7 @@ class Parser:
             self.expect(TokType.FROM)
             return ast.HeadingOffset(x, edge=None, angle=angle, base=self.parse_position())
 
-        if self._at_edge_token():
+        if self._at_edge_of():
             edge = self.parse_edge()
             self.expect(TokType.OF)
             return ast.HeadingOffset(x, edge=edge, angle=None, base=self.parse_position())
@@ -837,7 +860,7 @@ class Parser:
         return ast.PlacePosition(place)
 
     def parse_place(self) -> ast.Place:
-        if self._at_edge_token():
+        if self._at_edge_of():
             mark = self.i
             edge = self.parse_edge()
             if self.at(TokType.OF):
@@ -863,7 +886,7 @@ class Parser:
 
     def parse_edge(self) -> str:
         t = self.peek()
-        if t is None or t.type not in _EDGE_TOKENS:
+        if t is None or (t.type not in _EDGE_TOKENS and not self._at_edge_name()):
             self._error("expected an edge name (n, s, e, w, top, bottom, start, end, center, ...)")
         self.advance()
         return t.edge

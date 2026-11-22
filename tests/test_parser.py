@@ -322,9 +322,6 @@ def test_leading_bare_percentage_is_current_direction():
 
 
 def test_expr_precedence():
-    # NOTE: 'x' and 'y' are reserved keywords (used in "place.x"/"place.y"),
-    # so they cannot be used as plain
-    # variable names; hence "foo"/"bar" here instead.
     doc = parse("foo = 1 + 2 * 3\n")
     value = doc.statements[0].value
     assert value == ast.BinOp("+", ast.Num(1.0), ast.BinOp("*", ast.Num(2.0), ast.Num(3.0)))
@@ -479,7 +476,7 @@ def test_what_is_not_an_expression_is_pasted_in_as_text(text: str, meaning: str)
 
 # ---------------------------------------------------------------------------
 # A macro cannot shadow a variable (docs/spec.md SS3.6): the two directions
-# of the guard, plus reserved words (which can never collide either way).
+# of the guard, plus reserved words, and the names of points.
 # ---------------------------------------------------------------------------
 
 
@@ -498,12 +495,21 @@ def test_assigning_to_an_existing_macro_name_is_an_error():
         parse("define legend { fill }\nlegend = 5\nbox\n")
 
 
-def test_reserved_word_cannot_be_a_macro_name():
-    # "small" lexes as a keyword, never an ID, so it can't even reach the
-    # macro-definition rule -- this is a plain syntax error, not the
-    # variable-shadow guard above.
-    with pytest.raises(PikSyntaxError):
-        parse("define small { 99 }\nbox\n")
+@pytest.mark.parametrize("word", ["small", "path", "box", "max", "first"])
+def test_reserved_word_cannot_be_a_macro_name(word: str):
+    # issue #47: an error that says why, at the name
+    src = f"define {word} {{ 99 }}\nbox\n"
+    with pytest.raises(PikSyntaxError, match=re.escape(f"'{word}' is a reserved word: a macro needs another name")) as exc:
+        parse(src)
+    assert exc.value.pos == src.index(word)
+
+
+@pytest.mark.parametrize(("word", "kind"), [("n", "a point"), ("c", "a point"), ("north", "a point"),
+                                            ("x", "a coordinate")])
+def test_the_name_of_a_point_cannot_be_a_macro_name(word: str, kind: str):
+    # It would replace the point in `A.n` too.
+    with pytest.raises(PikSyntaxError, match=re.escape(f"'{word}' names {kind} (A.{word}): a macro needs another name")):
+        parse(f"define {word} {{ 99 }}\nbox\n")
 
 
 def test_macro_unrelated_to_any_variable_still_works():
@@ -858,3 +864,92 @@ def test_an_unsupported_word_is_an_error_that_says_so(src: str, word: str):
 def test_connector_is_not_reserved():
     doc = parse("connector = 2\nbox width connector\n")
     assert doc.statements[0] == ast.AssignStatement("connector", "=", ast.Num(2.0))
+
+
+# ---------------------------------------------------------------------------
+# The names of points and coordinates are names elsewhere (issue #47)
+# ---------------------------------------------------------------------------
+
+
+def test_x_y_and_the_names_of_points_are_variables_elsewhere():
+    doc = parse("x = 1\ny = 2\nw = 0.5\nc = 3\nt = 4\nnorth = 5\nbox at (x, y) wid w + c + t + north\n")
+    assert [s.name for s in doc.statements[:6]] == ["x", "y", "w", "c", "t", "north"]
+    box = doc.statements[6]
+    assert box.attributes[0] == ast.At(ast.Coord(ast.Var("x"), ast.Var("y")))
+
+
+def _position(src: str) -> ast.Position:
+    return parse(f"A: box\nX: {src}\n").statements[1].position
+
+
+@pytest.mark.parametrize(("src", "edge"), [
+    ("A.ne", "ne"), ("A.c", "c"), ("A.t", "n"), ("A.bot", "s"), ("A.north", "n"), ("A.top", "n"),
+])
+def test_a_point_after_a_dot(src: str, edge: str):
+    assert _position(src) == ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["A"]), edge))
+
+
+@pytest.mark.parametrize(("src", "edge"), [("ne of A", "ne"), ("c of A", "c"), ("west of A", "w")])
+def test_a_point_before_of(src: str, edge: str):
+    assert _position(src) == ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["A"]), edge))
+
+
+def test_a_distance_toward_a_point_before_of():
+    w = ast.HeadingOffset(ast.Num(1.0), edge="sw", angle=None, base=ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["A"]), None)))
+    assert _position("1 sw of A") == w
+    assert _position("1 heading sw of A") == w
+    # a variable named like a point, beside a point
+    assert _position("w sw of A") == ast.HeadingOffset(
+        ast.Var("w"), edge="sw", angle=None, base=ast.PlacePosition(ast.ObjectEdge(ast.NameRef(["A"]), None)))
+
+
+def test_a_variable_named_like_a_point_beside_one():
+    pos = _position("A.w + (w, 0)")
+    assert pos == ast.OffsetPosition(ast.ObjectEdge(ast.NameRef(["A"]), "w"), "+", ast.Var("w"), ast.Num(0.0))
+
+
+@pytest.mark.parametrize("src", ["box with ne at (0, 0)\n", "box with .ne at (0, 0)\n"])
+def test_a_point_after_with(src: str):
+    assert parse(src).statements[0].attributes[0].edge == "ne"
+
+
+@pytest.mark.parametrize(("src", "amount", "edge"), [
+    ("line go 1 ne\n", ast.RelExpr(abs=ast.Num(1.0)), "ne"),
+    ("line go ne\n", ast.RelExpr(), "ne"),
+    ("line then 1 north\n", ast.RelExpr(abs=ast.Num(1.0)), "n"),
+    ("line then se\n", ast.RelExpr(), "se"),
+    ("n = 2\nline go n e\n", ast.RelExpr(abs=ast.Var("n")), "e"),
+])
+def test_a_point_after_a_go_or_then_amount(src: str, amount: ast.RelExpr, edge: str):
+    move = parse(src).statements[-1].attributes[0]
+    assert move == ast.MoveHeading(move.keyword, amount, edge=edge)
+
+
+def test_a_variable_named_like_a_point_as_a_heading():
+    move = parse("n = 30\nline go 1 heading n\n").statements[1].attributes[0]
+    assert move == ast.MoveHeading("go", ast.RelExpr(abs=ast.Num(1.0)), angle=ast.Var("n"))
+
+
+def test_x_and_y_are_coordinates_after_a_dot():
+    doc = parse("A: box\nx = A.x\ny = A.y\n")
+    assert doc.statements[1].value == ast.PlaceCoord(ast.ObjectEdge(ast.NameRef(["A"]), None), "x")
+    assert doc.statements[2].value == ast.PlaceCoord(ast.ObjectEdge(ast.NameRef(["A"]), None), "y")
+
+
+@pytest.mark.parametrize("word", ["path", "box", "max", "first", "left", "start", "center", "top"])
+def test_a_reserved_word_as_a_variable_is_an_error_that_says_so(word: str):
+    src = f"box\n{word} = 1\n"
+    with pytest.raises(PikSyntaxError, match=re.escape(f"'{word}' is a reserved word: a variable needs another name")) as exc:
+        parse(src)
+    assert exc.value.pos == src.index(f"{word} =")
+
+
+def test_a_reserved_word_as_a_variable_in_an_included_file(tmp_path):
+    (tmp_path / "defs.pik").write_text("path = 1\n", encoding="utf-8")
+    with pytest.raises(PikSyntaxError, match=re.escape("'path' is a reserved word: a variable needs another name")):
+        parse('include "defs.pik"\nbox\n', base_dir=str(tmp_path))
+
+
+def test_an_included_file_can_set_stroke(tmp_path):
+    (tmp_path / "defs.pik").write_text("stroke = red\n", encoding="utf-8")
+    parse('include "defs.pik"\nbox\n', base_dir=str(tmp_path))

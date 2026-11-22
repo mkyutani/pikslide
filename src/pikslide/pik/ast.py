@@ -246,7 +246,7 @@ class DirectionOffset(Position):
 
 @dataclass
 class HeadingOffset(Position):
-    """``expr HEADING EDGEPT OF position`` or ``expr HEADING expr FROM position``."""
+    """``expr HEADING edge OF position`` or ``expr HEADING expr FROM position``."""
 
     distance: Expr
     edge: str | None  # compass edge point name, or None if angle is given

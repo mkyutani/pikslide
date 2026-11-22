@@ -57,7 +57,6 @@ class TokType(Enum):
     BETWEEN = auto()
     BIG = auto()
     BOLD = auto()
-    EDGEPT = auto()
     BOTTOM = auto()
     CCW = auto()
     CENTER = auto()
@@ -112,8 +111,6 @@ class TokType(Enum):
     WAY = auto()
     WIDTH = auto()
     WITH = auto()
-    X = auto()
-    Y = auto()
 
     # Extensions -- see docs/grammar.md, "Reserved words"
     SHAPE = auto()
@@ -163,9 +160,7 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "between": (TokType.BETWEEN, None, None),
     "big": (TokType.BIG, None, None),
     "bold": (TokType.BOLD, None, None),
-    "bot": (TokType.EDGEPT, None, "s"),
     "bottom": (TokType.BOTTOM, None, "s"),
-    "c": (TokType.EDGEPT, None, "c"),
     "ccw": (TokType.CCW, None, None),
     "center": (TokType.CENTER, None, "c"),
     "chop": (TokType.CHOP, None, None),
@@ -179,8 +174,6 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "dist": (TokType.DIST, None, None),
     "dotted": (TokType.DOTTED, None, None),
     "down": (TokType.DOWN, DIR_DOWN, None),
-    "e": (TokType.EDGEPT, None, "e"),
-    "east": (TokType.EDGEPT, None, "e"),
     "end": (TokType.END, None, "end"),
     "even": (TokType.EVEN, None, None),
     "fill": (TokType.FILL, None, None),
@@ -204,28 +197,19 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "min": (TokType.FUNC2, "min", None),
     "mono": (TokType.MONO, None, None),
     "monospace": (TokType.MONO, None, None),
-    "n": (TokType.EDGEPT, None, "n"),
-    "ne": (TokType.EDGEPT, None, "ne"),
-    "north": (TokType.EDGEPT, None, "n"),
-    "nw": (TokType.EDGEPT, None, "nw"),
     "of": (TokType.OF, None, None),
     "previous": (TokType.LAST, None, None),
     "rad": (TokType.RADIUS, None, None),
     "radius": (TokType.RADIUS, None, None),
     "right": (TokType.RIGHT, DIR_RIGHT, "e"),
     "rjust": (TokType.RJUST, None, None),
-    "s": (TokType.EDGEPT, None, "s"),
     "same": (TokType.SAME, None, None),
-    "se": (TokType.EDGEPT, None, "se"),
     "sin": (TokType.FUNC1, "sin", None),
     "small": (TokType.SMALL, None, None),
     "solid": (TokType.SOLID, None, None),
-    "south": (TokType.EDGEPT, None, "s"),
     "sqrt": (TokType.FUNC1, "sqrt", None),
     "start": (TokType.START, None, "start"),
     "stroke": (TokType.STROKE, None, None),
-    "sw": (TokType.EDGEPT, None, "sw"),
-    "t": (TokType.TOP, None, "n"),
     "the": (TokType.THE, None, None),
     "then": (TokType.THEN, None, None),
     "thick": (TokType.THICK, None, None),
@@ -238,14 +222,10 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "up": (TokType.UP, DIR_UP, None),
     "vertex": (TokType.VERTEX, None, None),
     "vertical": (TokType.VERTICAL, None, None),
-    "w": (TokType.EDGEPT, None, "w"),
     "way": (TokType.WAY, None, None),
-    "west": (TokType.EDGEPT, None, "w"),
     "wid": (TokType.WIDTH, None, None),
     "width": (TokType.WIDTH, None, None),
     "with": (TokType.WITH, None, None),
-    "x": (TokType.X, None, None),
-    "y": (TokType.Y, None, None),
 
     # Extensions -- reserved words the language adds; see docs/grammar.md, "Reserved words".
     "shape": (TokType.SHAPE, None, None),
@@ -277,6 +257,20 @@ ENTITIES = [
     ("&leftrightarrow;", TokType.LRARROW),
 ]
 
+# The names of an object's points that are no keyword, each with the
+# point it names (docs/grammar.md, Positions): each lexes as an ID, with
+# its point in Token.edge, and is a point only where one can stand (the
+# parser); elsewhere it is an ordinary name.
+EDGE_NAMES = {
+    "n": "n", "ne": "ne", "e": "e", "se": "se", "s": "s", "sw": "sw", "w": "w", "nw": "nw",
+    "north": "n", "east": "e", "south": "s", "west": "w",
+    "c": "c", "t": "n", "bot": "s",
+}
+
+# A point's coordinates: each lexes as an ID, a coordinate only after a
+# "." (`A.x`), an ordinary name elsewhere.
+COORD_NAMES = {"x", "y"}
+
 _UNIT_DIVISORS = {"cm": 2.54, "mm": 25.4, "px": 96, "pt": 72, "pc": 6, "in": 1}
 
 
@@ -291,7 +285,7 @@ class Token:
     pos: int
     line: int
     code: object = None   # eCode: sub-operator for ASSIGN, direction id, fn name, ordinal...
-    edge: str | None = None  # eEdge: compass/edge tag for EDGEPT-like tokens
+    edge: str | None = None  # eEdge: the point an edge keyword or an edge name (EDGE_NAMES) names
     file: str | None = None
     """Which file this token came from (docs/spec.md SS5: an error names
     the file it's actually in) -- `None` for the main source text, an
@@ -308,6 +302,17 @@ def column_at(text: str, pos: int) -> int:
     file's -- see `Token.file`."""
     line_start = text.rfind("\n", 0, pos) + 1  # 0 if no earlier newline (rfind -1, +1)
     return pos - line_start + 1
+
+
+def is_reserved(tok: Token) -> bool:
+    """Whether `tok` is a reserved word: a keyword or a class name."""
+    return tok.type is not TokType.ID and (tok.text in KEYWORDS or tok.text in CLASS_NAMES)
+
+
+def reserved_name_message(word: str, what: str) -> str:
+    """The error for a reserved word written as a variable's or a macro's
+    name (`what`)."""
+    return f"'{word}' is a reserved word: {what} needs another name"
 
 
 class PikSyntaxError(Exception):
@@ -577,9 +582,9 @@ class Lexer:
                     j += 1
                 word = z[i + 1 : j]
                 found = KEYWORDS.get(word)
-                if found and (found[2] is not None or found[0] in (TokType.EDGEPT, TokType.START, TokType.END)):
+                if word in EDGE_NAMES or (found and found[2] is not None):
                     return Token(TokType.DOT_E, z[i:i+1], i, line), 1, line
-                if found and found[0] in (TokType.X, TokType.Y):
+                if word in COORD_NAMES:
                     return Token(TokType.DOT_XY, z[i:i+1], i, line), 1, line
                 return Token(TokType.DOT_L, z[i:i+1], i, line), 1, line
             if c1.isdigit():
@@ -603,7 +608,7 @@ class Lexer:
                 return Token(ttype, word, i, line, code=code, edge=edge), j - i, line
             if word in CLASS_NAMES:
                 return Token(TokType.CLASSNAME, word, i, line), j - i, line
-            return Token(TokType.ID, word, i, line), j - i, line
+            return Token(TokType.ID, word, i, line, edge=EDGE_NAMES.get(word)), j - i, line
 
         if "A" <= c <= "Z":
             j = i + 1

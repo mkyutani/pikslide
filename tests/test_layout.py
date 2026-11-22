@@ -539,8 +539,6 @@ def test_unknown_theme_slot_is_an_error():
 
 
 def test_arithmetic_on_a_color_is_an_error():
-    # "x"/"y" are reserved (.x/.y coordinate access), so this
-    # uses an ordinary name instead.
     with pytest.raises(LayoutError):
         layout('myvar = red + 1\nbox\n')
 
@@ -1036,3 +1034,10 @@ def test_dot_is_filled_with_the_default_stroke_color_unless_filled():
     assert plain.fill == plain.color
     assert stroked.fill == plain.color and stroked.color != plain.color
     assert filled.fill != plain.color
+
+
+def test_a_variable_named_like_a_point_lays_out_beside_the_point():
+    # issue #47: `w` is a variable, `A.w` a point
+    result = layout("w = 0.5\nA: box at (0, 0)\nB: box with .e at A.w - (w, 0)\n")
+    a, b = result.shapes[0], result.shapes[1]
+    assert b.cx + b.w / 2 == pytest.approx(a.cx - a.w / 2 - 0.5)

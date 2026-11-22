@@ -12,16 +12,17 @@ from dataclasses import dataclass, field
 from importlib import resources
 
 from .ast import MacroDefinition
-from .tokens import Lexer, PikSyntaxError, Token, TokType, unescape_string
+from .tokens import (COORD_NAMES, EDGE_NAMES, Lexer, PikSyntaxError, Token, TokType, is_reserved,
+                     reserved_name_message, unescape_string)
 
 MAX_MACRO_DEPTH = 50
 TOKEN_LIMIT = 100_000
 MAX_MACRO_ARGS = 9
 
 # lvalue keyword tokens (docs/grammar.md: `lvalue`) besides a plain ID --
-# fill/color/thickness, and the small/medium/large ext.
+# fill/color/stroke/thickness, and the small/medium/large ext.
 _LVALUE_KEYWORD_TYPES = {
-    TokType.FILL, TokType.COLOR, TokType.THICKNESS,
+    TokType.FILL, TokType.COLOR, TokType.STROKE, TokType.THICKNESS,
     TokType.SMALL, TokType.MEDIUM, TokType.LARGE,
 }
 
@@ -107,6 +108,11 @@ def _validate_definitions_only(tokens: list[Token]) -> None:
             while i < n and tokens[i].type != TokType.EOL:
                 i += 1
             continue
+        if is_reserved(tokens[i]) and i + 1 < n and tokens[i + 1].type == TokType.ASSIGN:
+            raise PikSyntaxError(
+                reserved_name_message(tokens[i].text, "a variable"),
+                tokens[i].line, tokens[i].text, pos=tokens[i].pos, file=tokens[i].file,
+            )
         raise PikSyntaxError(
             "only definitions are allowed in an included file "
             "(an assignment, or define) -- not an object, a label, or anything else",
@@ -233,10 +239,29 @@ def _expand(
         if (
             tok.type == TokType.DEFINE
             and i + 2 < end
+            and is_reserved(tokens[i + 1])
+            and tokens[i + 2].type == TokType.CODEBLOCK
+        ):
+            name_tok = tokens[i + 1]
+            raise PikSyntaxError(reserved_name_message(name_tok.text, "a macro"), name_tok.line, name_tok.text,
+                                 pos=name_tok.pos, file=name_tok.file)
+
+        if (
+            tok.type == TokType.DEFINE
+            and i + 2 < end
             and tokens[i + 1].type == TokType.ID
             and tokens[i + 2].type == TokType.CODEBLOCK
         ):
             name = tokens[i + 1].text
+            # The name of a point or a coordinate is a point only where
+            # one can stand (`A.n`), and a variable's name elsewhere; a
+            # macro would replace it everywhere, `A.n` too.
+            if name in EDGE_NAMES or name in COORD_NAMES:
+                kind, example = ("a coordinate", f"A.{name}") if name in COORD_NAMES else ("a point", f"A.{name}")
+                raise PikSyntaxError(
+                    f"'{name}' names {kind} ({example}): a macro needs another name", tokens[i + 1].line, name,
+                    pos=tokens[i + 1].pos, file=tokens[i + 1].file,
+                )
             # A macro name must not already be a variable (docs/spec.md
             # SS3.6, docs/grammar.md Macros): otherwise it would silently
             # shadow every later use of that name, including as an

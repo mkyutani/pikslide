@@ -20,7 +20,7 @@ used by no rule (see [Reserved words](#reserved-words)).
 - `UPPERCASE` names are terminals produced by the lexer (see
   [Lexical grammar](#lexical-grammar)); e.g. `NUMBER`, `STRING`, `PLACENAME`
   (an identifier starting with an uppercase letter), `ID` (starting
-  lowercase), `EDGEPT` (a compass abbreviation like `ne`, `sw`).
+  lowercase).
 - Other terminals are keywords, written as their lowercase spelling in
   quotes.
 
@@ -79,14 +79,19 @@ Notes:
   `ID` otherwise. An identifier starting with an uppercase letter is always a
   `PLACENAME`: an object label.
 - **The `.` token.** The lexer looks at what follows a `.` and yields one of
-  four tokens, all written `"."` in the grammar below: before a lowercase
-  edge/`start`/`end` keyword (`.e`, `.start`), before `x`/`y` (`.x`), before
+  four tokens, all written `"."` in the grammar below: before the name of
+  a point (`.e`, `.start`), before `x`/`y` (`.x`), before
   any other lowercase word (a property such as `.width`), and before an
   uppercase letter (a sub-object: `Outer.Inner`).
 - **Keyword aliases.** `wid`=`width`, `ht`=`height`, `rad`=`radius`,
   `invis`=`invisible`, `previous`=`last`; compass words
   `north`/`south`/`east`/`west` = `n`/`s`/`e`/`w`; `bot` = `bottom`; `t` =
   `top`; `c` = `center`.
+- **Names of points and coordinates.** `n`, `ne`, `e`, `se`, `s`, `sw`,
+  `w`, `nw`, `north`, `east`, `south`, `west`, `c`, `t` and `bot` (an
+  `edge-name`), and `x` and `y`, aren't keywords: each is an `ID`, and a
+  point or a coordinate only where one can stand (see
+  [Positions](#positions-places-and-object-references)).
 
 ## Macros
 
@@ -101,7 +106,10 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
 ```
 
 - The macro name is an `ID`, so it starts with a **lowercase** letter
-  (`define box2 { … }`).
+  (`define box2 { … }`). A reserved word written as one is an error that
+  says so (`'path' is a reserved word: a macro needs another name`), and so
+  is an `edge-name`, `x` or `y`: a macro would replace it wherever it's
+  written, `A.n` too.
 - The `(` of an invocation must touch the name. `pair (a)` invokes `pair`
   with no arguments, then continues with `(a)`.
 - Inside the body, `$1`…`$9` are the arguments; up to nine are allowed.
@@ -132,8 +140,8 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
   in the file the `define` is in.
 - Recursion is an error; nesting is limited to 50 levels.
 - **A macro name must not already be a variable.** A reserved word can
-  never collide, since only an `ID` can start a `macro-definition`, and no
-  reserved word lexes as one. An ordinary `ID` can: without this check,
+  never collide, since it can't name a macro (above). An ordinary `ID`
+  can: without this check,
   `define boxwid { 99 }` would fail only downstream and confusingly
   (`boxwid = 2` expands to `99 = 2`, a syntax error at `99`, not at the
   real cause), and `define legend { fill }` then `legend = 5` would not
@@ -246,8 +254,8 @@ attribute       ::= numprop relexpr
                    | "stroke" stroke-attrs
                    | [ "go" ] direction optrelexpr
                    | [ "go" ] direction ( "until" "even" | "even" ) "with" position
-                   | "go" optrelexpr ( "heading" expr | EDGEPT )
-                   | "then" [ optrelexpr ( "heading" expr | EDGEPT ) ]
+                   | "go" optrelexpr ( "heading" expr | edge-name )
+                   | "then" [ optrelexpr ( "heading" expr | edge-name ) ]
                    | "close"
                    | "chop"
                    | "from" position
@@ -384,8 +392,12 @@ place           ::= edge "of" object
 place2          ::= NTH "vertex" "of" object
                    | object [ "." edge ]
 
-edge            ::= "center" | EDGEPT | "top" | "bottom" | "start" | "end"
+edge            ::= edge-name | "center" | "top" | "bottom" | "start" | "end"
                    | "right" | "left"
+
+edge-name       ::= "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw"
+                   | "north" | "east" | "south" | "west" | "c" | "t" | "bot"
+                                                     (* each an ID; see below *)
 
 object          ::= nth [ ( "of" | "in" ) object ]
                    | objectname
@@ -403,10 +415,18 @@ when the position starts with `(`, and `place [(+|-) (dx,dy)]` otherwise
 (`Parser.parse_position()`). So a leading `(` can open an expression:
 `((1 + 1) / 2, 0)` is the point (1, 0).
 
+An `edge-name` is an `ID`, and a point only where an edge can stand:
+after `.` (`A.ne`), before `of` (`ne of A`, `1 ne of A`), after `with`
+(`with ne at P`), and after a `go` or `then` amount (`go 1 ne`, or
+`go ne` with none). Elsewhere it is an ordinary name: after `w = 0.5`,
+`A.w + (w, 0)` is the point half an inch right of `A`'s west edge. `x`
+and `y` are coordinates only after `.` (`A.x`), and names elsewhere.
+
 ## Reserved words
 
 The words below are reserved: they cannot be used as variable or macro
-names.
+names. Written as one, a reserved word is an error that says so:
+`'path' is a reserved word: a variable needs another name`.
 
 | Word | Used for |
 |---|---|
@@ -541,7 +561,10 @@ whether its *value* also comes from the prelude or a settings file.
 `small`/`medium`/`large` are reserved because they are string attributes
 (`"Label" large`), not because their values are prelude-supplied; the
 same is true of `fill`/`color`/`stroke`/`thickness`, which are attribute
-keywords and lvalues both. `margin`, by contrast, is an ordinary variable. Names that are never used as syntax —
+keywords and lvalues both. `margin`, by contrast, is an ordinary variable. An `edge-name`, `x`
+and `y` are syntax only after a `.`, before `of`, after `with` or after
+a `go` or `then` amount, so they aren't reserved either: the parser
+reads them as points or coordinates there, and as names elsewhere. Names that are never used as syntax —
 `vmargin`, `layout`, `typeface`, `lang`, `primary`, `accent1`, the CSS color
 names, … — are ordinary `ID`s and are never reserved, however important
 their value is.

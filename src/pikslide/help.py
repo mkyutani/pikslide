@@ -367,7 +367,10 @@ ENTRIES: tuple[Entry, ...] = (
           synopsis=("OBJECT.EDGE", "EDGE of OBJECT"),
           body="Compass points of an object's bounding box: n, ne, e, se, s, sw, w, nw "
                "(north, east, ... ; top = t = n, bottom = bot = s), and c (center). A "
-               "line also has start and end.", example="arrow from A.e to B.nw",
+               "line also has start and end. n ... nw, north ... west, c, t and bot are points "
+               "only after a dot, before `of`, after `with` and after a go or then amount; "
+               "elsewhere they are ordinary names: `w = 0.5`, then `A.w + (w, 0)`.",
+          example="arrow from A.e to B.nw",
           see=("with", "vertex")),
     Entry(("of", "the", "way", "between", "and"), "positions between two points",
           synopsis=("F of the way between P and Q", "F between P and Q", "F <P, Q>",
@@ -385,6 +388,7 @@ ENTRIES: tuple[Entry, ...] = (
     Entry(("vertex",), "a point of a line's path", synopsis=("Nth vertex of OBJECT",),
           example="dot at 2nd vertex of last line"),
     Entry(("x", "y"), "a point's coordinates", synopsis=("POSITION.x", "POSITION.y"),
+          body="Coordinates only after a dot; elsewhere x and y are ordinary names: `x = A.x`.",
           example="box at (A.x, B.y)"),
     Entry(("dist",), "the distance between two points", synopsis=("dist(P, Q)",),
           example="line right dist(A, B)"),
@@ -1090,7 +1094,9 @@ _LLM_BODIES = {
     "rotate": "Clockwise about center, or mirrored in its box, as PowerPoint. wid, ht size it unturned; edges "
               "and A.wid, A.ht as drawn.",
     "edges": "Bounding-box compass points: n ne e se s sw w nw (north, east, ...; top = t = n, bottom = bot = "
-             "s), c (center). A line also: start, end.",
+             "s), c (center). A line also: start, end. n..nw, north..west, c, t, bot: points only after a dot, "
+             "before of, after with, after a go/then amount; else ordinary names (w = 0.5; A.w + (w, 0)).",
+    "x": "Coordinates only after a dot; else ordinary names: x = A.x.",
     "of": "Point fraction F of the way from P to Q (0.5 = middle).",
     "first": "Nth (1st, 2nd, ...; first) object of a class, from the start, or from the end with last. "
              "previous = object just before.",

@@ -9,12 +9,15 @@ docstring in layout.py for what is deliberately left out.
 from __future__ import annotations
 
 import math
+import ntpath
+import os
 import re
 import pathlib
 
 import pytest
 
 from pikslide.pik import parse
+from pikslide.pik.paths import within
 from pikslide.pik.layout import (
     Color,
     LayoutError,
@@ -935,9 +938,21 @@ def test_image_path_resolves_relative_to_base_dir(tmp_path: pathlib.Path):
     assert result.shapes[0].image_path == str((tmp_path / "icons" / "db.png").resolve())
 
 
-def test_absolute_image_path_is_an_error(tmp_path: pathlib.Path):
-    with pytest.raises(LayoutError):
-        resolve_layout(parse('image "/etc/hostname"\n'), base_dir=str(tmp_path))
+@pytest.mark.parametrize("path", [
+    # As include's (test_parser.py, ABSOLUTE_PATHS; issue #50).
+    "/etc/hostname", "~/x.png", "D:x.png", "C:\\\\x.png", "\\\\x.png", "\\\\\\\\server\\\\share\\\\x.png",
+])
+def test_absolute_image_path_is_an_error(tmp_path: pathlib.Path, path: str):
+    with pytest.raises(LayoutError, match="image path must be relative"):
+        resolve_layout(parse(f'image "{path}"\n'), base_dir=str(tmp_path))
+
+
+def test_a_path_on_another_drive_is_not_within(monkeypatch):
+    # As on Windows (issue #50), where os.path.commonpath() raises for two
+    # paths on different drives: one isn't within the other.
+    monkeypatch.setattr(os.path, "commonpath", ntpath.commonpath)
+    assert not within("C:\\work", "D:\\work\\x.png")
+    assert within("C:\\work", "C:\\work\\x.png")
 
 
 def test_image_path_escaping_base_dir_is_an_error(tmp_path: pathlib.Path):

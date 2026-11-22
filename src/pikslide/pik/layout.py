@@ -36,6 +36,7 @@ from typing import Protocol
 
 from . import ast
 from .parser import parse
+from .paths import is_absolute, within
 from .preset_text_rects import ADJUST_VALUES
 from .elbow import route as _elbow_route
 from .text_area import connection_sites as _connection_sites
@@ -1185,11 +1186,11 @@ def _resolve_image_path(raw_path: str, base_dir: str) -> str:
     containment `include` applies (docs/spec.md SS3.6) and for the same
     reason: a diagram may be written by an LLM, and must not be able to
     reach, or reveal the existence of, arbitrary local files."""
-    if os.path.isabs(raw_path) or raw_path.startswith(("~",)):
+    if is_absolute(raw_path):
         raise LayoutError(f"image path must be relative, not {raw_path!r}")
     base = os.path.realpath(base_dir)
     resolved = os.path.realpath(os.path.join(base, raw_path))
-    if os.path.commonpath([base, resolved]) != base:
+    if not within(base, resolved):
         raise LayoutError(f"image path escapes its source directory: {raw_path!r}")
     if not os.path.isfile(resolved):
         try:

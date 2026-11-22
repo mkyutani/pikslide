@@ -75,6 +75,15 @@ def test_render_refuses_what_it_cant_do_and_says_why(tmp_path, arguments, messag
     assert not list(tmp_path.parent.glob("d.pptx"))
 
 
+@pytest.mark.skipif(os.name != "nt", reason="drives are Windows'")
+@pytest.mark.parametrize("form", ["{drive}:d.pik", "{drive}:\\d.pik"])
+def test_a_path_on_another_drive_is_outside_the_workspace(tmp_path, form):
+    # Issue #50: os.path.commonpath() raised ValueError for it, a traceback.
+    drive = "D" if os.path.splitdrive(str(tmp_path))[0].upper() != "D:" else "C"
+    result = call(tmp_path, "render", {"out": "d.pptx", "path": form.format(drive=drive)})
+    assert result.is_error and "outside the workspace" in result.content[0].text
+
+
 def test_it_speaks_over_stdio_with_nothing_else_on_stdout(tmp_path):
     # As a host starts it: its stdout is the protocol's alone.
     import sys

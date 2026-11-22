@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from importlib import resources
 
 from .ast import MacroDefinition
+from .paths import is_absolute, within
 from .tokens import (COORD_NAMES, EDGE_NAMES, Lexer, PikSyntaxError, Token, TokType, is_reserved,
                      reserved_name_message, unescape_string)
 
@@ -73,13 +74,13 @@ def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[s
     the outermost source (`path_tok` already carries the right one, set
     when *its own* file was lexed)."""
     line, pos, file = path_tok.line, path_tok.pos, path_tok.file
-    if os.path.isabs(raw_path) or raw_path.startswith("~"):
+    if is_absolute(raw_path):
         raise PikSyntaxError(f"include path must be relative, not {raw_path!r}", line, raw_path, pos=pos, file=file)
     tried = []
     for base_dir in (current_dir, *include_paths, BUNDLED_INCLUDES):
         base = os.path.realpath(base_dir)
         resolved = os.path.realpath(os.path.join(base, raw_path))
-        if os.path.commonpath([base, resolved]) != base:
+        if not within(base, resolved):
             tried.append(f"{base_dir} (escapes it)")
             continue
         if os.path.isfile(resolved):

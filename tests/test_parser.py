@@ -623,9 +623,17 @@ def test_nested_include_resolves_relative_to_its_own_file(tmp_path: Path):
     assert ast.AssignStatement("boxwid", "=", ast.Num(2)) in doc.statements
 
 
-def test_absolute_include_path_is_an_error(tmp_path: Path):
-    with pytest.raises(PikSyntaxError):
-        parse('include "/etc/hostname"\nbox\n', base_dir=str(tmp_path))
+# A drive, a slash or a backslash makes a path absolute on every platform
+# (issue #50): on Windows, os.path.isabs() calls none of `D:x`, `/x` or
+# `\x` absolute, though each leads out of the directory. As written in a
+# string in a diagram, each backslash doubled.
+ABSOLUTE_PATHS =["/etc/hostname", "~/x.pik", "D:x.pik", "C:\\\\x.pik", "\\\\x.pik", "\\\\\\\\server\\\\share\\\\x.pik"]
+
+
+@pytest.mark.parametrize("path", ABSOLUTE_PATHS)
+def test_absolute_include_path_is_an_error(tmp_path: Path, path: str):
+    with pytest.raises(PikSyntaxError, match="include path must be relative"):
+        parse(f'include "{path}"\nbox\n', base_dir=str(tmp_path))
 
 
 def test_include_path_escaping_base_dir_is_an_error(tmp_path: Path):

@@ -37,6 +37,7 @@ from pikslide.api import BuildError, build
 from pikslide.fonts import FontInstallError, install_fonts
 from pikslide.help import _Style
 from pikslide.help import render as render_help
+from pikslide.pik.paths import within
 
 INSTRUCTIONS = (
     "pikslide draws a diagram, written as text in its language, into a PowerPoint slide of native, editable "
@@ -59,7 +60,7 @@ class Workspace:
         """`relative` as an absolute path in the workspace; a ToolError if it
         leads out of it."""
         path = os.path.realpath(os.path.join(self.root, relative))
-        if os.path.commonpath([path, self.root]) != self.root:
+        if not within(self.root, path):
             raise ToolError(f"{relative} is outside the workspace, {self.root}")
         return path
 

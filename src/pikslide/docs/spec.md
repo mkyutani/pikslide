@@ -522,7 +522,8 @@ Logo: image "logo.png" width 0.6in
 ```
 
 - A new class. The string is a **path relative to the
-  source file**.
+  source file**, and kept in its directory as an `include`'s is (§3.6):
+  an absolute path, or one that escapes, is an error.
 - Size: `width` and/or `height` given → the missing one follows the aspect
   ratio; both given → stretched; neither → fit inside `boxwid × boxht`,
   aspect preserved.
@@ -588,6 +589,10 @@ define card { rad 8px stroke text1 }
 - **Local and contained.** Only local files are read, never URLs. The
   resolved path must lie under the including file's directory or under an
   `--include-path` directory: absolute paths and `..` escapes are rejected.
+  A path is absolute on every platform with a drive (`C:\x`, or `D:x`,
+  from D:'s own current directory), from a root (`/x`, `\x`, a UNC path)
+  or from a home directory (`~`), though Windows' `os.path.isabs()` calls
+  some of these relative; one that resolves onto another drive escapes.
   Diagnostics never quote the source line of an included file that failed
   the definitions-only check beyond the offending token. This matters
   because a diagram may be written by an LLM.

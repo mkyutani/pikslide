@@ -1934,6 +1934,8 @@ class _Build:
     connector_path: str | None = None
     from_obj: Shape | None = None
     chop: bool = False
+    fill: ast.ColorProperty | None = None
+    """A line's `fill`, as written: an error unless the line is closed (issue #53)."""
     fit: bool = False
     then_flag: bool = False
     behind: Shape | None = None
@@ -2051,6 +2053,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         value = _as_color(eval_expr(attr.value, ctx))
         if attr.name == "fill":
             shape.fill = value
+            build.fill = attr
         else:
             shape.color = value
     elif isinstance(attr, ast.Stroke):
@@ -2422,6 +2425,11 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
                 build.path[-1] = chop_point(build.seg_objs[-1], build.path[-2])
             if build.from_obj is not None:
                 build.path[0] = chop_point(build.from_obj, build.path[1])
+        if build.fill is not None and not shape.closed:
+            # Issue #53: written and ignored, it would look as if it worked.
+            hint = ("an arc can't be closed: leave `fill` out" if shape.kind == "arc"
+                    else f"write `close` on this {shape.kind}, or leave `fill` out")
+            raise LayoutError(f"'fill' fills a closed line: {hint}", build.fill.where)
         if shape.closed and build.path[0] != build.path[-1]:
             build.path.append(build.path[0])
         if shape.connector_path in ("elbow", "curved"):

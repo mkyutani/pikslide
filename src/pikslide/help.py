@@ -219,8 +219,9 @@ ENTRIES: tuple[Entry, ...] = (
           defaults=("dashwid",), see=("stroke",)),
     Entry(("fill",), "the fill color; as a variable, the default",
           synopsis=("fill COLOR", "fill = COLOR"),
-          body="Fills the object's interior. Assigned as a variable, it sets the default "
-               "for later objects.", example="box fill accent1 lighter 60%",
+          body="Fills the object's interior: on a line, only a closed one (`close`), and "
+               "on one that isn't, it's an error. Assigned as a variable, it sets the default "
+               "for later objects, closed lines too.", example="box fill accent1 lighter 60%",
           sections=(("COLORS", "{colors}"),), see=("colors", "theme"), group="attribute",
           defaults=("fill",)),
     Entry(("color",), "a string's color; as a variable, the default text color",
@@ -1107,7 +1108,7 @@ _LLM_BODIES = {
     "invis": "Hides line/outline (text still shows).",
     "dashed": "Dashes of given length (default dashwid).",
     "dotted": "Dots spaced by given length (default dashwid).",
-    "fill": "Fills interior. As a variable: default.",
+    "fill": "Fills interior; a line only with close, else error. As a variable: default.",
     "color": "String attribute: colors only the string before it. As a variable: default text color. "
              "Line/outline color: stroke.",
     "theme": "Deck's theme color, kept linked: recolors with the template. SLOT = OOXML scheme color (accent1-6, "

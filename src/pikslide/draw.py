@@ -313,6 +313,11 @@ class _Painter:
     def line(self, shape: Shape) -> None:
         """A line, an arrow, a spline or an arc, with its arrowheads, and
         its labels."""
+        if shape.closed and shape.fill is not None and shape.path is not None:
+            # As pptx_writer fills it (issue #53): under the line.
+            polygon = [self._px(self.tf.point(p)) for p in line_points(shape)]
+            if len(polygon) > 2:
+                ImageDraw.Draw(self.canvas).polygon(polygon, fill=self.rgb(shape.fill))
         if shape.sw >= 0 and shape.path is not None:
             points = [self._px(self.tf.point(p)) for p in line_points(shape)]
             points = [p for i, p in enumerate(points) if i == 0 or p != points[i - 1]]

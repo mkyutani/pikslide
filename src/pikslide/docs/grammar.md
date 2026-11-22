@@ -519,7 +519,8 @@ attached to the objects they lie on (see [spec.md](spec.md) §3.2).
 
 **Attributes.** `width`/`height`/`radius`/`diameter` set a size (a
 `relexpr` with `%` is a percentage of the current value); `fill` sets the
-interior color; `stroke` sets the line or outline: its color, `thickness`,
+interior color, on a line only a closed one (`close`: on one that isn't,
+it's an error); `stroke` sets the line or outline: its color, `thickness`,
 `thick`/`thin` (scale it by 1.5/0.67), `solid` (reset thickness and
 dashing), `invis` (hide it) and `dashed`/`dotted` with an optional length
 (default `dashwid`); `ljust`/`rjust` align all of the object's strings

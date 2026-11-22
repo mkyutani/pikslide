@@ -30,6 +30,7 @@ def where(src: str) -> tuple[int, int, str]:
     ("P: B.e\n", 1, 4, "undefined object: B"),                           # a label's position
     ("A: box\narrow from A.e to C.w\n", 2, 19, "undefined object: C"),   # the second of two
     ("box start triangle\n", 1, 5, "'start triangle' is only valid"),    # an attribute
+    ("line right then up fill red\n", 1, 20, "'fill' fills a closed line"),  # an attribute, after the layout
     ("[\n  box at B.e\n]\n", 2, 10, "undefined object: B"),              # inside a block
     ('image "../x.png"\n', 1, 1, "image path escapes"),                  # a statement
     ("A: box\narrow attach from (3,3) to (4,3)\n", 2, 1, "'attach' on arrow 1: neither"),  # after the layout

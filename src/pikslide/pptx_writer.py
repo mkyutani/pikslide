@@ -931,7 +931,12 @@ def _add_line_shape(container, shape: Shape, tf: _Transform, name: str):
             freeform = builder.convert_to_shape()
         _no_theme_effects(freeform)
         freeform.name = name
-        freeform.fill.background()
+        if shape.closed and shape.fill is not None:
+            # Filled as any closed shape is (issue #53): an open line, never.
+            freeform.fill.solid()
+            _apply_color(freeform.fill.fore_color, shape.fill)
+        else:
+            freeform.fill.background()
         _apply_line_style(freeform.line, shape)
         _set_arrowheads(freeform.line, shape)
         drawn = freeform
@@ -1554,7 +1559,8 @@ def _on_kept_placeholders(
     for shape in flatten_shapes(result.shapes):
         if shape.kind in LINE_LIKE:
             x0, y0, x1, y1 = shape.bbox
-            outline = [(x0 - TOLERANCE, y0 - TOLERANCE, x1 + TOLERANCE, y1 + TOLERANCE)] if shape.sw >= 0 else []
+            seen = shape.sw >= 0 or (shape.closed and shape.fill is not None)
+            outline = [(x0 - TOLERANCE, y0 - TOLERANCE, x1 + TOLERANCE, y1 + TOLERANCE)] if seen else []
         elif shape.kind == "text" or (shape.kind != "image" and shape.sw < 0 and shape.fill is None):
             outline = []
         else:

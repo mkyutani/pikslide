@@ -201,6 +201,20 @@ def test_spline_becomes_a_freeform_of_curves_through_its_points(tmp_path: pathli
     assert shape.line._get_or_add_ln().find(qn("a:tailEnd")).get("type") == "triangle"
 
 
+@pytest.mark.parametrize("src, filled", [
+    ("line right 1 then up 1 then left 1 close fill red", True),
+    ("spline right 1 then up 1 then left 1 close fill red", True),
+    ("line right 1 then up 1 then left 1 close", False),
+])
+def test_a_closed_line_is_filled(tmp_path: pathlib.Path, src: str, filled: bool):
+    # Issue #53: as any closed shape is.
+    [shape] = render(src + "\n", tmp_path).slides[0].shapes
+    sp_pr = shape._element.spPr
+    assert (sp_pr.find(qn("a:solidFill")) is not None, sp_pr.find(qn("a:noFill")) is not None) == (filled, not filled)
+    if filled:
+        assert shape.fill.fore_color.rgb == RGBColor(0xFF, 0, 0)
+
+
 def test_arrowheads_are_written_as_powerpoints_line_ends(tmp_path: pathlib.Path):
     # issue #36: open is OOXML's arrow; a size is both the width and the length
     src = "line right start diamond end open large\narrow right then down start oval small\narc end stealth\n"

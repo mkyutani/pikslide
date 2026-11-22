@@ -159,6 +159,12 @@ name, `A.ne`, though not always where the line crosses the outline. A
 line that should end on such an outline attaches to it (`attach`,
 below), at a connection site its preset puts there.
 
+**A closed line is filled** (`close`), as any closed shape is: by its
+`fill`, or the `fill` variable's color, a spline along its curve. An
+open line never is, and `fill` written on one, or on an arc, which
+can't be closed, is an error, not a word accepted and ignored: a diagram
+written with one would look as if it worked.
+
 **Arrowheads.** `->`, `<-` and `<->` put a filled triangle at a line's
 end, its start, or both. `start KIND` and `end KIND` set the one at that
 end, whatever the arrows say and wherever they're written: `triangle`,

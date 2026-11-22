@@ -240,6 +240,22 @@ def test_an_arc_is_one_curve(src: str):
         layout(src + "\n")
 
 
+@pytest.mark.parametrize("src, hint", [
+    ("line right 1 then up 1 fill red", "write `close` on this line"),
+    ("spline fill red right 1 then up 1", "write `close` on this spline"),
+    ("arc fill red", "an arc can't be closed"),
+])
+def test_fill_on_a_line_that_isnt_closed_is_an_error(src: str, hint: str):
+    # Issue #53: it fills only a closed line, and ignored it would look as if it worked.
+    with pytest.raises(LayoutError, match=f"'fill' fills a closed line: {hint}"):
+        layout(src + "\n")
+
+
+def test_fill_before_close_is_as_good_as_after():
+    [line] = layout("line fill red right 1 then up 1 close\n").shapes
+    assert line.closed and line.fill is not None
+
+
 def _powerpoint_curves():
     path = pathlib.Path(__file__).parent / "fixtures" / "powerpoint_curves.txt"
     for line in path.read_text(encoding="utf-8").splitlines():

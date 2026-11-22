@@ -70,6 +70,14 @@ def test_theme_colors_are_the_templates_lighter_and_darker_as_powerpoint_has_the
     assert image.getpixel((int(1.0 * 200), int(3.0 * 200))) == (0, 120, 60)
 
 
+@pytest.mark.parametrize("cls", ["line", "spline"])
+def test_a_closed_line_is_filled(cls: str):
+    # Issue #53: under its line, as PowerPoint fills the freeform; the
+    # picture's middle is the square's.
+    image = _draw(f"{cls} from (0, 0) right 1 then up 1 then left 1 close fill 0x808080\n")
+    assert image.getpixel((image.width // 2, image.height // 2)) == (128, 128, 128)
+
+
 def test_an_arrowhead_is_sized_as_powerpoint_sizes_it():
     # A 0.015in line's medium head: three times 0.7mm wide and long.
     image = _draw("line right 1 ->\n").convert("L")

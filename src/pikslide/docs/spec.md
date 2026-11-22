@@ -261,9 +261,9 @@ box "Outline"  fill bg1 stroke text1
   the deck's theme decides the CJK face.
 - **Size.** PowerPoint needs points, not a percentage of the viewer's own
   font. pikslide has three sizes: `small` = 9 pt, `medium` = 10.5 pt (the
-  default, so no flag is needed), and `large` or `big` = 12 pt (`big` is a
-  synonym for `large`). Like `fill`, `color`, `stroke` and `thickness`, the words
-  themselves can be assigned to set their values; the prelude (§3.7) has
+  default, so no flag is needed), and `large` = 12 pt. Like `fill`,
+  `color`, `stroke` and `thickness`, the words themselves can be assigned
+  to set their values; the prelude (§3.7) has
   `small = 9pt`, `medium = 10.5pt`, `large = 12pt`. Assign to them to
   change the sizes, or set them in the template's settings file (§3.8). If
   a string carries more than one size attribute, the last one wins. `fit` sizing
@@ -852,6 +852,12 @@ Humans and LLMs both need errors they can act on.
   a fixed-size object stays a warning: it is a fact about the diagram,
   visible in the output itself.
 - A `define` naming an already-defined variable is an **error** (§3.6).
+- A word written in a rarer spelling, such as `previous` for `last`,
+  `north` for `n`, `F of the way between P and Q` or `F <P, Q>` for `F
+  between P and Q`, or `→` for `->`, is an **error** that names the one
+  to write: each thing has one way to be written, so that there is one
+  word for a person or an LLM to read in `--help`
+  ([grammar.md](grammar.md), *Lexical grammar*).
 - A reserved word that isn't supported, `aligned`, `mono` or
   `monospace`, is an **error** that says so, not a word accepted and
   ignored: a diagram written with one would look as if it worked. Each

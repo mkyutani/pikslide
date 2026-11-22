@@ -43,8 +43,9 @@ class FontMetrics(Protocol):
     """Real text measurement for _autosize_text(), pluggable per renderer
     so a fitted object's size tracks the font that will actually draw it
     rather than a flat per-character estimate. `flags` are a text item's
-    position/style flags (see ast.TextAttribute) -- only "big"/"small"
-    matter here, for the font-size step they apply.
+    position/style flags (see ast.TextAttribute) -- only the sizes
+    ("small", "medium", "large") matter here, for the font size they
+    select.
 
     `text_sizes`, if given, is the small/medium/large (inches) to measure
     with -- the *object's own* `Shape.text_sizes` (docs/spec.md SS3.3,
@@ -812,14 +813,12 @@ class _ApproxMetrics:
 
 def _text_size_name(flags: list[str]) -> str:
     """Which of small/medium/large a text item's flags select (ext);
-    pikslide's own three fixed sizes -- see docs/spec.md SS3.3. `big` is a synonym for `large`; the
+    pikslide's own three fixed sizes -- see docs/spec.md SS3.3. The
     *last* size flag on the string wins."""
     name = "medium"
     for f in flags:
         if f in ("small", "medium", "large"):
             name = f
-        elif f == "big":
-            name = "large"
     return name
 
 

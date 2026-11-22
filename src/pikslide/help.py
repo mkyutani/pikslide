@@ -63,7 +63,7 @@ size     width W (wid)  height H (ht)  radius R (rad)  fit
 style    fill C  stroke [C] [thickness T] [thick] [thin] [dashed [L]]
          [dotted [L]] [solid] [invis]
 place    at P  with .EDGE at P  same [as X]  behind X
-edges    .n .ne .e .se .s .sw .w .nw .c  (.top .bottom .left .right .center)"""
+edges    .n .ne .e .se .s .sw .w .nw .center  (.top .bottom .left .right)"""
 
 _LINE_ATTRIBUTES = """\
 text     "string" [flag ...] ...  ljust  rjust
@@ -207,7 +207,7 @@ ENTRIES: tuple[Entry, ...] = (
     Entry(("thin",), "0.67 times as thick", group="attribute", example="line stroke thin", see=("stroke",)),
     Entry(("solid",), "solid, default-thickness stroke (undoes dashed/dotted)", group="attribute",
           synopsis=("stroke solid",), see=("stroke",)),
-    Entry(("invis", "invisible"), "no outline", group="attribute",
+    Entry(("invis",), "no outline", group="attribute",
           body="Hides the line or outline (text still shows).", example='box "label only" stroke invis',
           see=("stroke",)),
     Entry(("dashed",), "a dashed stroke", synopsis=("stroke dashed [EXPR]",),
@@ -222,7 +222,7 @@ ENTRIES: tuple[Entry, ...] = (
                "for later objects.", example="box fill accent1 lighter 60%",
           sections=(("COLORS", "{colors}"),), see=("colors", "theme"), group="attribute",
           defaults=("fill",)),
-    Entry(("color", "colour"), "a string's color; as a variable, the default text color",
+    Entry(("color",), "a string's color; as a variable, the default text color",
           synopsis=('"string" color COLOR', "color = COLOR"),
           body="A string attribute: colors the string right before it, and no other. "
                "Assigned as a variable, it sets the default text color for later objects. "
@@ -259,15 +259,14 @@ ENTRIES: tuple[Entry, ...] = (
           example='box "one" "three" ljust width 2', group="attribute", see=("flags", "margin")),
     Entry(("center",), "centered text; the center edge point", synopsis=('"string" center', "X.center"),
           body="As a string attribute: centered, on the center line. As an edge: the object's "
-               "center (also `.c`).", group="flag", see=("flags", "edges")),
+               "center.", group="flag", see=("flags", "edges")),
     Entry(("bold", "italic"), "bold or italic text", synopsis=('"string" bold', '"string" italic'),
           group="flag", example='box "Title" bold "subtitle" italic', see=("flags",)),
     Entry(("mono", "monospace"), "reserved, not supported: an error (there's no monospace text)"),
     Entry(("aligned",), "reserved, not supported: an error (text isn't turned to a line's direction)"),
-    Entry(("small", "medium", "large", "big"), "text size; as variables, the three sizes",
+    Entry(("small", "medium", "large"), "text size; as variables, the three sizes",
           synopsis=('"string" small', '"string" large', "small = 9pt"),
-          body="Text flags for the three sizes (`big` is `large`); the last one on a "
-               "string wins. Assigned as variables, they set the sizes, in points.",
+          body="Text flags for the three sizes; the last one on a string wins. Assigned as variables, they set the sizes, in points.",
           example='box "Title" large "detail" small', group="flag",
           defaults=("small", "medium", "large"), see=("flags",)),
     Entry(("major",), "text in the theme's heading font", group="flag", see=("flags", "typeface")),
@@ -356,23 +355,21 @@ ENTRIES: tuple[Entry, ...] = (
           example="shape triangle wid 0.3 ht 0.22 rotate -90", group="attribute", see=("shape",)),
 
     # --- positions and references ------------------------------------------
-    Entry(("edges", "n", "north", "ne", "e", "east", "se", "s", "south", "sw", "w", "west", "nw",
-           "c", "t", "top", "bot", "bottom", "start", "end"),
-          "points on an object: .n .ne .e ... .c, start/end of a line",
+    Entry(("edges", "n", "ne", "e", "se", "s", "sw", "w", "nw", "top", "bottom", "start", "end"),
+          "points on an object: .n .ne .e ... .center, start/end of a line",
           synopsis=("OBJECT.EDGE", "EDGE of OBJECT"),
           body="Compass points of an object's bounding box: n, ne, e, se, s, sw, w, nw "
-               "(north, east, ... ; top = t = n, bottom = bot = s), and c (center). A "
-               "line also has start and end.", example="arrow from A.e to B.nw",
+               "(top = n, bottom = s), and center. A line also has start and end.",
+          example="arrow from A.e to B.nw",
           see=("with", "vertex")),
-    Entry(("of", "the", "way", "between", "and"), "positions between two points",
-          synopsis=("F of the way between P and Q", "F between P and Q", "F <P, Q>",
-                    "EDGE of OBJECT"),
+    Entry(("between", "and", "of"), "positions between two points",
+          synopsis=("F between P and Q", "EDGE of OBJECT"),
           body="A point a fraction F of the way from P to Q (0.5 is the middle).",
-          example="dot at 1/3 of the way between A and B"),
-    Entry(("first", "last", "previous", "nth"), "objects by order: 2nd box, last arrow",
-          synopsis=("Nth [last] CLASS", "last [CLASS]", "previous"),
+          example="dot at 1/3 between A and B"),
+    Entry(("first", "last", "nth"), "objects by order: 2nd box, last arrow",
+          synopsis=("Nth [last] CLASS", "last [CLASS]"),
           body="The Nth (1st, 2nd, 3rd, ...; first) object of a class, counting from the "
-               "start, or from the end with last. `previous` is the object just before.",
+               "start, or from the end with last. `last` alone is the object just before.",
           example="arrow from 1st box to last box", see=("this", "in")),
     Entry(("in",), "narrows a reference to a block", synopsis=("Nth CLASS in BLOCK",),
           example="arrow from 2nd box in Row to Web"),
@@ -917,8 +914,9 @@ Placement. Each object goes after the previous one, edge to edge, in the
 current direction (right, to start with); a line starts where the previous
 object ends. `at P` or `with .EDGE at P` place an object explicitly;
 `from P to Q` and `then` shape a line; `chop` ends a line at the outlines of
-the objects it joins. P is a point: an edge A.n .ne .e .se .s .sw .w .nw .c,
-(1, 2), A.e + (0.5, 0), 0.5 below A.s, 1/2<A, B>, a line's A.start, A.end.
+the objects it joins. P is a point: an edge A.n .ne .e .se .s .sw .w .nw
+.center, (1, 2), A.e + (0.5, 0), 0.5 below A.s, 1/2 between A and B, a line's
+A.start, A.end.
 Sizes and coordinates: A.wid, A.ht, A.rad, P.x, P.y.
 
 Text. Strings are lines of text, in order: box "Title" bold "note" small;
@@ -1060,8 +1058,8 @@ _LLM_BODIES = {
     "ljust": "Object attribute, all strings: aligned on left (right) edges, margin in from a closed shape's "
              "left (right) side or a line's left (right) end. On a text, at P = its left (right) edge at P. Not "
              "both.",
-    "center": "String attribute: centered, on the center line. As an edge: object's center (.c).",
-    "small": "The three text sizes (big = large); last on a string wins. As variables: the sizes, in points.",
+    "center": "String attribute: centered, on the center line. As an edge: object's center.",
+    "small": "The three text sizes; last on a string wins. As variables: the sizes, in points.",
     "from": "Where a line starts and (another segment) ends. An object (to B) = its center; with chop, its "
             "outline.",
     "up": "Alone: changes current direction (objects chain edge to edge). On a line: moves its path that way. "
@@ -1082,11 +1080,11 @@ _LLM_BODIES = {
               "handles.",
     "rotate": "Clockwise about center, or mirrored in its box, as PowerPoint. wid, ht size it unturned; edges "
               "and A.wid, A.ht as drawn.",
-    "edges": "Bounding-box compass points: n ne e se s sw w nw (north, east, ...; top = t = n, bottom = bot = "
-             "s), c (center). A line also: start, end.",
-    "of": "Point fraction F of the way from P to Q (0.5 = middle).",
+    "edges": "Bounding-box compass points: n ne e se s sw w nw (top = n, bottom = s), center. A line also: "
+             "start, end.",
+    "between": "Point fraction F of the way from P to Q (0.5 = middle).",
     "first": "Nth (1st, 2nd, ...; first) object of a class, from the start, or from the end with last. "
-             "previous = object just before.",
+             "last alone = object just before.",
     "functions": "cos, sin take degrees; atan2 gives them: angle from (0, 0) to (X, Y), -180 to 180, "
                  "counterclockwise from right. A line's: atan2(B.y - A.y, B.x - A.x).",
     "define": "Macro; $1..$9 in BODY = arguments. Name: lowercase first, not an existing variable. An "
@@ -1114,7 +1112,7 @@ Name: CLASS ...  labeled object: refer as Name, Name.e, ...
 right | down | left | up  direction objects chain in
 name = value  variable: boxwid = 1, fill = accent2
 Names: label starts uppercase (Web: box → Web.e); variable lowercase (gap = 0.3 → Web.e + (gap, 0)).
-Placement: each object follows the previous, edge to edge, in the current direction (initially right); a line starts where the previous object ends. at P / with .EDGE at P place explicitly; from P to Q and then shape a line; chop ends a line at the joined objects' outlines. P: edge A.n .ne .e .se .s .sw .w .nw .c, (1, 2), A.e + (0.5, 0), 0.5 below A.s, 1/2<A, B>, a line's A.start, A.end. Sizes, coordinates: A.wid, A.ht, A.rad, P.x, P.y.
+Placement: each object follows the previous, edge to edge, in the current direction (initially right); a line starts where the previous object ends. at P / with .EDGE at P place explicitly; from P to Q and then shape a line; chop ends a line at the joined objects' outlines. P: edge A.n .ne .e .se .s .sw .w .nw .center, (1, 2), A.e + (0.5, 0), 0.5 below A.s, 1/2 between A and B, a line's A.start, A.end. Sizes, coordinates: A.wid, A.ht, A.rad, P.x, P.y.
 Text: strings = lines of text, in order: box "Title" bold "note" small; "say \\"hi\\"" = a quote, "\\\\" = a backslash. A string attribute (bold, small, above, color C, ...) applies to the string just before it; object attributes (ljust, at, fill, ...) go before, between or after strings. fit sizes the object to its text. A line's strings sit at its middle: above/below a level line; beside an upright one, right with ljust, left with rjust.
 Lines: stroke sets line/outline: box stroke accent2 thick dashed.
 Colors: theme colors follow the deck: accent1..accent6, text1, text2, bg1, bg2, with lighter N% / darker N%; CSS names (steelblue, ...) fixed.

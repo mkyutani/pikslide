@@ -51,7 +51,8 @@ unit            ::= "in" | "cm" | "mm" | "pt" | "px" | "pc"
 NTH             ::= digit { digit } ( "st" | "nd" | "rd" | "th" )
                    | "first"
 
-ID              ::= lower { alnum | "_" }                   (* not a keyword or CLASSNAME *)
+ID              ::= lower { alnum | "_" }                   (* not a keyword, a rarer
+                                                               spelling of one, or a CLASSNAME *)
                    | ( "_" | "$" | "@" ) { alnum | "_" }
 PLACENAME       ::= upper { alnum | "_" }
 PARAMETER       ::= "$" ( "1" | … | "9" )                   (* only inside macro bodies *)
@@ -62,8 +63,7 @@ CLASSNAME       ::= "arc" | "arrow" | "box" | "circle" | "cylinder" | "diamond"
 
 ASSIGN          ::= "=" | "+=" | "-=" | "*=" | "/="
 LARROW/RARROW/LRARROW
-                ::= "<-" | "->" | "<->"                     (* also "←" "→" "↔" and
-                                                               "&larr;" "&rarr;" "&leftrightarrow;" … *)
+                ::= "<-" | "->" | "<->"
 punctuation     ::= "(" | ")" | "[" | "]" | "," | ":" | "+" | "-" | "*" | "/"
                    | "%" | "<" | ">" | "=="
 CODEBLOCK       ::= "{" { any-balanced } "}"                (* only after "define" ID *)
@@ -83,10 +83,14 @@ Notes:
   edge/`start`/`end` keyword (`.e`, `.start`), before `x`/`y` (`.x`), before
   any other lowercase word (a property such as `.width`), and before an
   uppercase letter (a sub-object: `Outer.Inner`).
-- **Keyword aliases.** `wid`=`width`, `ht`=`height`, `rad`=`radius`,
-  `invis`=`invisible`, `previous`=`last`; compass words
-  `north`/`south`/`east`/`west` = `n`/`s`/`e`/`w`; `bot` = `bottom`; `t` =
-  `top`; `c` = `center`.
+- **One spelling for each word**, but `wid`=`width`, `ht`=`height` and
+  `rad`=`radius`, which diagrams write both ways. A rarer spelling is an
+  error that names the one to write: `previous` (write `last`), `north`,
+  `south`, `east`, `west` (`n`, `s`, `e`, `w`), `bot`, `t`, `c` (`bottom`,
+  `top`, `center`), `invisible` (`invis`), `big` (`large`), `colour`
+  (`color`), and the arrows `→`, `←`, `↔`, `&rarr;`, `&rightarrow;`,
+  `&larr;`, `&leftarrow;`, `&leftrightarrow;` (`->`, `<-`, `<->`). Each is
+  lexed as the word it spells, so it can't name a variable either.
 
 ## Macros
 
@@ -217,7 +221,7 @@ preset-name     ::= ID | CLASSNAME                   (* an OOXML preset geometry
 
 string-attr     ::= "center" | "above" | "below"
                    | "italic" | "bold"
-                   | "big" | "small" | "major" | "medium" | "large"
+                   | "small" | "major" | "medium" | "large"
                    | "color" color-value
 ```
 
@@ -373,9 +377,7 @@ position        ::= "(" position [ "," position ] ")"
                    | expr ( "left" | "right" ) "of" position
                    | expr "heading" ( edge "of" | expr "from" ) position
                    | expr edge "of" position
-                   | expr ( "way" "between" | "between" | "of" "the" "way" "between" )
-                       position "and" position
-                   | expr "<" position "," position ">"
+                   | expr "between" position "and" position
                    | place [ ( "+" | "-" ) [ "(" ] expr "," expr [ ")" ] ]
 
 place           ::= edge "of" object
@@ -402,6 +404,10 @@ of them match, the parser backtracks and tries `"(" position ... ")"`
 when the position starts with `(`, and `place [(+|-) (dx,dy)]` otherwise
 (`Parser.parse_position()`). So a leading `(` can open an expression:
 `((1 + 1) / 2, 0)` is the point (1, 0).
+
+`F between P and Q` has one spelling: `F way between P and Q`, `F of the
+way between P and Q` and `F <P, Q>` are errors that name it. `way` and
+`the` are ordinary names.
 
 ## Reserved words
 
@@ -513,7 +519,7 @@ the object immediately below `X` in z-order.
 **Text.** Each `STRING` is a line of text on the object. Its string
 attributes place it (`center`, `above`, `below`), style it (`bold`,
 `italic`), size it and color it. Size attributes select one of
-three sizes: `small`, `medium` (the default), and `large` or `big`. Their
+three sizes: `small`, `medium` (the default), and `large`. Their
 values are set by assigning to the words themselves, as `fill`, `color`
 and `thickness` set theirs; the prelude gives `small = 9pt`,
 `medium = 10.5pt` and `large = 12pt`. The last size on a string wins.

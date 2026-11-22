@@ -240,9 +240,41 @@ def test_same_as():
     assert doc.statements[0].attributes[0] == ast.Same(ast.NameRef(["A"]))
 
 
-def test_between_two_syntaxes_are_equivalent():
-    doc = parse("X: 0.5 between A.n and B.s\nY: 0.5 <A.n, B.s>\n")
-    assert doc.statements[0].position == doc.statements[1].position
+@pytest.mark.parametrize(("src", "near", "word", "instead"), [
+    ("X: 0.5 way between A.n and B.s\n", "way", "way between", "between"),
+    ("X: 0.5 of the way between A.n and B.s\n", "of", "of the way between", "between"),
+    ("X: 0.5 <A.n, B.s>\n", "<", "F <P, Q>", "F between P and Q"),
+    ("box at (0.5 <A.n, B.s>, 1)\n", "<", "F <P, Q>", "F between P and Q"),
+    ("arrow \u2192\n", "\u2192", "\u2192", "->"),
+    ("arrow \u2194\n", "\u2194", "\u2194", "<->"),
+    ("arrow &larr;\n", "&larr;", "&larr;", "<-"),
+    ("box at previous.e\n", "previous", "previous", "last"),
+    ("circlerad = previous.radius\n", "previous", "previous", "last"),
+    ("box at 1 north of A\n", "north", "north", "n"),
+    ("box with .west at A.e\n", "west", "west", "w"),
+    ("line go 1 east\n", "east", "east", "e"),
+    ("arrow from A.south\n", "south", "south", "s"),
+    ("box at A.c\n", "c", "c", "center"),
+    ("box with .t at A.n\n", "t", "t", "top"),
+    ("arrow to A.bot\n", "bot", "bot", "bottom"),
+    ('box "a" big\n', "big", "big", "large"),
+    ("box stroke invisible\n", "invisible", "invisible", "invis"),
+    ("box invisible\n", "invisible", "invisible", "invis"),
+    ('box "a" colour red\n', "colour", "colour", "color"),
+    ("colour = red\n", "colour", "colour", "color"),
+])
+def test_a_rarer_spelling_is_an_error_naming_the_one_to_write(src: str, near: str, word: str, instead: str):
+    # issue #48: one way to write each thing. The error is at the word,
+    # however the parser backtracked to reach it.
+    with pytest.raises(PikSyntaxError, match=re.escape(f"'{word}' is written '{instead}'")) as exc:
+        parse(src)
+    assert exc.value.text == near and src[exc.value.pos:].startswith(near)
+
+
+def test_way_and_the_are_ordinary_names():
+    doc = parse("way = 1\nthe = 2\nbox width way + the\n")
+    assert doc.statements[2].attributes[0] == ast.NumProperty(
+        "width", ast.RelExpr(abs=ast.BinOp("+", ast.Var("way"), ast.Var("the"))))
 
 
 def test_heading_with_angle_and_with_edge():

@@ -205,7 +205,7 @@ CP:   dot;
                then to DQ6 then to DR6 stroke thin;
 
 BODY: ellipse width 0.3cm height 0.4cm fill black at 2cm heading 340 from CP;
-RDT:  ellipse width 0.2cm height 0.2cm fill red at last ellipse.c;
+RDT:  ellipse width 0.2cm height 0.2cm fill red at last ellipse.center;
       ellipse width 0.2cm height 0.1cm fill black at RDT.n;
       ellipse width 0.2cm height 0.1cm fill black at RDT.s;
 HEAD: ellipse with .s at BODY.n width 0.14cm height 0.12cm;

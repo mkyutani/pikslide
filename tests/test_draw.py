@@ -111,6 +111,24 @@ def test_text_is_drawn_with_no_font_file_at_all(monkeypatch):
     assert sum(1 for v in image.get_flattened_data() if v < 128) > 100
 
 
+def test_east_asian_text_is_drawn_in_the_theme_font_for_its_language(monkeypatch):
+    # issue #44: an object's text, and a line's label, in the `lang` it was
+    # written with -- here simplified Chinese, the theme's 宋体.
+    import pikslide.pptx_writer
+
+    result = resolve_for_pptx(parse('lang = "zh-CN"\nbox "北京"\narrow "臺北"\n'))
+    asked = []
+
+    class Recording:
+        def find(self, family, bold=False, italic=False):
+            asked.append(family)
+            return None
+
+    monkeypatch.setattr(pikslide.pptx_writer, "installed_fonts", Recording)
+    draw(result)
+    assert "宋体" in asked and "ＭＳ Ｐゴシック" not in asked
+
+
 def test_a_bold_with_no_bold_face_is_emboldened_as_powerpoint_does_it(monkeypatch, tmp_path):
     # BIZ UD明朝 Medium has no bold: PowerPoint draws its strokes thicker,
     # to the right, as wide as before. DejaVu Sans with its bold face left

@@ -456,6 +456,8 @@ _VARIABLE_DOCS = {
     "medium": "the medium (default) text size",
     "large": "the large text size",
     "typeface": 'font family for all text; "" means the theme\'s',
+    "lang": 'language of East Asian text with no kana or Hangul ("zh-CN", "zh-TW", "ko-KR"); '
+            "picks the theme's East Asian font",
     "layout": 'the --template slide layout, by name or id ("": Title and Content); '
               "settings file only",
     "primary": "a house color, for a template's settings file to repoint",

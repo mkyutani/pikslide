@@ -59,12 +59,15 @@ class FontMetrics(Protocol):
     metrics implementation would otherwise use."""
 
     def text_width(
-        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
+        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = "",
+        lang: str = "ja-JP",
     ) -> float:
         """Width, in inches, of one line of `text` itself, at this flags'
         size -- no margin (that's `margin`, added by _autosize_text()).
         `typeface` is the object's own `Shape.typeface`: a literal family
-        to measure with, or empty for the theme's font."""
+        to measure with, or empty for the theme's font; `lang` its
+        `Shape.lang`, which picks the theme's East Asian font for East
+        Asian text with no kana or Hangul."""
         ...
 
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
@@ -225,6 +228,16 @@ def _as_string(value: PikValue, what: str = "a string value") -> str:
         return value
     kind = "a color" if isinstance(value, Color) else "a number"
     raise LayoutError(f"expected {what}, got {kind}")
+
+
+def _as_lang(value: PikValue) -> str:
+    """The `lang` variable (docs/spec.md SS3.3): the language of East Asian
+    text with no kana or Hangul, a Chinese, Japanese or Korean language
+    tag such as "zh-CN"."""
+    lang = _as_string(value, "lang")
+    if lang.split("-")[0].lower() not in ("ja", "zh", "ko"):
+        raise LayoutError(f'lang is a Chinese, Japanese or Korean language tag, such as "zh-CN", not {lang!r}')
+    return lang
 
 
 def _as_color(value: PikValue | None) -> Color | None:
@@ -460,6 +473,10 @@ class Shape:
     """Like `text_sizes`, but for the `typeface` variable (docs/spec.md
     SS3.3): this object's own text renders in the family that was in
     effect when it was written, not the document's final one."""
+    lang: str = "ja-JP"
+    """Like `typeface`, but for the `lang` variable (docs/spec.md SS3.3):
+    the language of this object's East Asian text with no kana or Hangul,
+    which the renderer marks it with, picking the theme's East Asian font."""
     text_margin: float = 0.0
     """Like `text_sizes`, but for `margin` (docs/spec.md SS3.3): the
     space between the text and the object's left and right sides."""
@@ -855,12 +872,14 @@ class _ApproxMetrics:
         self._ctx = ctx
 
     def text_width(
-        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
+        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = "",
+        lang: str = "ja-JP",
     ) -> float:
         # Reads ctx.vars live, at call time -- always the object's own
         # (never stale, unlike PilFontMetrics below, so the explicit
         # `text_sizes` override this Protocol method accepts is unneeded
-        # here and ignored, as is `typeface`: every family is charwid wide.
+        # here and ignored, as are `typeface` and `lang`: every family is
+        # charwid wide.
         charw = self._ctx.vars["charwid"] * _font_scale(flags, self._ctx)
         return charw * len(text)
 
@@ -1511,11 +1530,12 @@ def _text_area_height(shape: Shape) -> float:
     return bottom - top - 2 * shape.text_vmargin
 
 
-def _column_length(metrics, text: str, flags: list[str], sizes: dict[str, float] | None, typeface: str) -> float:
+def _column_length(metrics, text: str, flags: list[str], sizes: dict[str, float] | None, typeface: str,
+                   lang: str) -> float:
     """How long `text` is set vertically (`vertical`): its FontMetrics'
     `column_length()`, or, for one with none, as long as it is wide."""
-    length = getattr(metrics, "column_length", None)
-    return length(text, flags, sizes, typeface) if length else metrics.text_width(text, flags, sizes, typeface)
+    length = getattr(metrics, "column_length", None) or metrics.text_width
+    return length(text, flags, sizes, typeface, lang)
 
 
 def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
@@ -1528,7 +1548,7 @@ def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
         return
     if shape.vertical:
         longest = max(
-            (_column_length(ctx.metrics, text, flags, shape.text_sizes, shape.typeface)
+            (_column_length(ctx.metrics, text, flags, shape.text_sizes, shape.typeface, shape.lang)
              for text, flags in shape.texts if len(text) > 1),
             default=0.0,
         )
@@ -1542,7 +1562,7 @@ def _check_text_overflow(shape: Shape, label: str | None, ctx: _Ctx) -> None:
             ))
         return
     widest = max(
-        (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface)
+        (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface, shape.lang)
          for text, flags in shape.texts if len(text) > 1),
         default=0.0,
     )
@@ -1823,12 +1843,16 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
     sizes = shape.text_sizes
     if shape.vertical:
         # Columns side by side, each a line high (wide), as long as its text.
-        longest = max((_column_length(m, text, flags, sizes, shape.typeface) for text, flags in shape.texts),
-                      default=0.0)
+        longest = max(
+            (_column_length(m, text, flags, sizes, shape.typeface, shape.lang) for text, flags in shape.texts),
+            default=0.0,
+        )
         shape.w = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 2 * shape.text_margin
         shape.h = longest + 2 * shape.text_vmargin
     else:
-        widest = max((m.text_width(text, flags, sizes, shape.typeface) for text, flags in shape.texts), default=0.0)
+        widest = max(
+            (m.text_width(text, flags, sizes, shape.typeface, shape.lang) for text, flags in shape.texts), default=0.0
+        )
         shape.w = widest + 2 * shape.text_margin
         shape.h = sum(m.line_height(flags, sizes) for _text, flags in shape.texts) + 2 * shape.text_vmargin
     # The object stays centered on its own position with the text shifted
@@ -2260,6 +2284,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
     # point a later object's own override may already have changed them.
     text_sizes_now = {name: _as_number(ctx.vars[name]) for name in ("small", "medium", "large")}
     typeface_now = _as_string(ctx.vars.get("typeface", ""), "typeface")
+    lang_now = _as_lang(ctx.vars.get("lang", "ja-JP"))
     text_margin_now = _as_number(ctx.vars.get("margin", 0.0), "margin")
     text_vmargin_now = _as_number(ctx.vars.get("vmargin", 0.0), "vmargin")
 
@@ -2305,6 +2330,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
 
     shape.text_sizes = text_sizes_now
     shape.typeface = typeface_now
+    shape.lang = lang_now
     shape.text_margin = text_margin_now
     shape.text_vmargin = text_vmargin_now
     shape.in_dir = direction
@@ -2401,7 +2427,8 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
                                      ctx)
             shape.routed = _is_elbow(build.path)
         shape.label_width = max(
-            (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface) for text, flags in shape.texts),
+            (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface, shape.lang)
+             for text, flags in shape.texts),
             default=0.0,
         )
         shape.path = build.path

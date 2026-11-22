@@ -23,7 +23,8 @@ import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from lxml import etree
 
@@ -489,16 +490,33 @@ def installed_fonts() -> FontIndex:
 _A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 
 
+# The scripts a theme names an East Asian font for (`<a:font script>`)
+# that PowerPoint takes by a run's language: Japanese, Korean, and
+# simplified and traditional Chinese.
+EAST_ASIAN_SCRIPTS = ("Jpan", "Hang", "Hans", "Hant")
+
+
 @dataclass(frozen=True)
 class ThemeFonts:
     """A theme's heading (major) and body (minor) fonts, as family names:
-    Latin, and East Asian. An empty `<a:ea>` -- the usual case -- means
-    the theme's per-script choice; the Japanese one (`Jpan`) is taken."""
+    Latin; East Asian, as `<a:ea>` has it; and the East Asian one for each
+    of EAST_ASIAN_SCRIPTS the theme names one for. An empty `<a:ea>` --
+    the usual case -- means the one for the script of the text's language
+    (east_asian())."""
 
     major_latin: str = ""
     major_ea: str = ""
     minor_latin: str = ""
     minor_ea: str = ""
+    major_scripts: Mapping[str, str] = field(default_factory=dict, hash=False)
+    minor_scripts: Mapping[str, str] = field(default_factory=dict, hash=False)
+
+    def east_asian(self, major: bool, script: str) -> str:
+        """The heading (`major`) or body font East Asian text in `script`
+        (EAST_ASIAN_SCRIPTS) is set in: `<a:ea>`'s, else the script's;
+        empty where the theme names neither."""
+        ea, scripts = (self.major_ea, self.major_scripts) if major else (self.minor_ea, self.minor_scripts)
+        return ea or scripts.get(script, "")
 
 
 def theme_fonts_from_xml(theme_xml: bytes) -> ThemeFonts:
@@ -507,14 +525,14 @@ def theme_fonts_from_xml(theme_xml: bytes) -> ThemeFonts:
     for which in ("major", "minor"):
         font = root.find(f".//{{{_A}}}fontScheme/{{{_A}}}{which}Font")
         latin = ea = ""
+        scripts = {}
         if font is not None:
             el = font.find(f"{{{_A}}}latin")
             latin = el.get("typeface", "") if el is not None else ""
             el = font.find(f"{{{_A}}}ea")
             ea = el.get("typeface", "") if el is not None else ""
-            if not ea:
-                for el in font.findall(f"{{{_A}}}font"):
-                    if el.get("script") == "Jpan":
-                        ea = el.get("typeface", "")
-        found[f"{which}_latin"], found[f"{which}_ea"] = latin, ea
+            for el in font.findall(f"{{{_A}}}font"):
+                if el.get("script") in EAST_ASIAN_SCRIPTS and el.get("typeface"):
+                    scripts[el.get("script")] = el.get("typeface")
+        found[f"{which}_latin"], found[f"{which}_ea"], found[f"{which}_scripts"] = latin, ea, scripts
     return ThemeFonts(**found)

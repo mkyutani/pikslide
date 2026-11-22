@@ -600,7 +600,7 @@ def test_fit_measurement_tracks_a_medium_override_at_the_objects_own_position():
     calls = []
 
     class RecordingMetrics:
-        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+        def text_width(self, text, flags=(), text_sizes=None, typeface="", lang="ja-JP"):
             calls.append(dict(text_sizes))
             return 1.0
 
@@ -659,7 +659,7 @@ def test_a_copy_of_a_fit_diamonds_size_holds_its_text(copy: str):
 
 def test_fit_width_is_the_widest_line_plus_margin_each_side():
     class FixedMetrics:
-        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+        def text_width(self, text, flags=(), text_sizes=None, typeface="", lang="ja-JP"):
             return 0.1 * len(text)
 
         def line_height(self, flags=(), text_sizes=None):
@@ -678,7 +678,7 @@ def test_fit_width_is_the_widest_line_plus_margin_each_side():
 def test_text_wider_than_a_fixed_size_objects_text_area_warns():
     # issue #8: the text area is the width less `margin` each side.
     class FixedMetrics:
-        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+        def text_width(self, text, flags=(), text_sizes=None, typeface="", lang="ja-JP"):
             return 0.1 * len(text)
 
         def line_height(self, flags=(), text_sizes=None):
@@ -731,7 +731,7 @@ def test_a_macro_argument_that_is_an_expression_is_one_value():
 def test_text_area_is_the_preset_text_rectangle():
     # issue #12: what PowerPoint wraps the text in, less `margin` each side.
     class FixedMetrics:
-        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+        def text_width(self, text, flags=(), text_sizes=None, typeface="", lang="ja-JP"):
             return 0.1 * len(text)
 
         def line_height(self, flags=(), text_sizes=None):
@@ -756,7 +756,7 @@ def test_text_area_is_the_preset_text_rectangle():
 
 def test_fit_sizes_a_preset_for_its_text_rectangle():
     class FixedMetrics:
-        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+        def text_width(self, text, flags=(), text_sizes=None, typeface="", lang="ja-JP"):
             return 0.1 * len(text)
 
         def line_height(self, flags=(), text_sizes=None):
@@ -780,7 +780,7 @@ def test_above_and_below_offset_text_from_the_objects_center():
     # mirror image. The object stays centered on its `at` point and grows
     # by the offset on both sides.
     class FixedMetrics:
-        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+        def text_width(self, text, flags=(), text_sizes=None, typeface="", lang="ja-JP"):
             return 1.0
 
         def line_height(self, flags=(), text_sizes=None):

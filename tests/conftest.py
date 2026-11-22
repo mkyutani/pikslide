@@ -1,5 +1,6 @@
 """Make the tests independent of whether this machine has the built-in
-Office theme's fonts (Calibri, ＭＳ Ｐゴシック): a Windows install, or WSL,
+Office theme's fonts (Calibri, ＭＳ Ｐゴシック, and its Korean and Chinese
+ones): a Windows install, or WSL,
 has them, a Linux CI runner doesn't. A test about the theme or `--strict`
 shouldn't hinge on that, so where one of those fonts isn't installed it
 is found as the substitute `fit` would measure with anyway. Any other
@@ -11,7 +12,6 @@ they skip where it isn't installed (Windows, in CI)."""
 
 from __future__ import annotations
 
-import dataclasses
 import shutil
 
 import pytest
@@ -35,7 +35,9 @@ class _WithOfficeFonts:
 
 @pytest.fixture(autouse=True)
 def office_fonts(monkeypatch):
-    families = {f for f in dataclasses.astuple(pptx_writer.default_theme_fonts()) if f}
+    t = pptx_writer.default_theme_fonts()
+    families = {t.major_latin, t.major_ea, t.minor_latin, t.minor_ea, *t.major_scripts.values(),
+                *t.minor_scripts.values()} - {""}
     index = _WithOfficeFonts(pptx_writer.installed_fonts(), families, pptx_writer._find_measure_font())
     monkeypatch.setattr(pptx_writer, "installed_fonts", lambda: index)
 

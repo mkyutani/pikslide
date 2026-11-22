@@ -244,7 +244,7 @@ class _Painter:
             size_in = self.metrics.size_pt(flags, shape.text_sizes) / 72
             size_px = max(1, round(size_in * self.scale))
             color = self.rgb(string_color(shape, i) or Color(rgb=0))
-            runs = self.metrics.run_fonts(text, flags, shape.text_sizes, shape.typeface, size_px)
+            runs = self.metrics.run_fonts(text, flags, shape.text_sizes, shape.typeface, size_px, shape.lang)
             pieces = _wrap(runs, (fb - ft) * self.scale, _column_advance) if wrap and fb > ft else [runs]
             for column_runs in pieces:
                 length = sum(_column_advance(run) for run in column_runs) / self.scale
@@ -279,7 +279,7 @@ class _Painter:
             size_in = self.metrics.size_pt(flags, shape.text_sizes) / 72
             size_px = max(1, round(size_in * self.scale))
             color = self.rgb(string_color(shape, i) or Color(rgb=0))
-            runs = self.metrics.run_fonts(text, flags, shape.text_sizes, shape.typeface, size_px)
+            runs = self.metrics.run_fonts(text, flags, shape.text_sizes, shape.typeface, size_px, shape.lang)
             for k, line_runs in enumerate(_wrap(runs, (fr - fl) * self.scale) if wrap and fr > fl else [runs]):
                 width = sum(run.font.getlength(run.text) for run in line_runs) / self.scale
                 if "ljust" in flags:
@@ -324,7 +324,8 @@ class _Painter:
         for i, ((x0, y0, x1, y1), text, flags) in enumerate(_line_label_rects(shape)):
             left, top = self.tf.point((x0, y1))
             label = Shape(kind="text", name=None, cx=0.0, cy=0.0, w=0.0, h=0.0, texts=[(text, flags)],
-                          text_colors=[string_color(shape, i)], text_sizes=shape.text_sizes, typeface=shape.typeface)
+                          text_colors=[string_color(shape, i)], text_sizes=shape.text_sizes, typeface=shape.typeface,
+                          lang=shape.lang)
             for line in self._layout_text(label, (left, top, left + (x1 - x0), top + (y1 - y0)), wrap=False,
                                           anchor_top=True):
                 line.draw(draw, self._px)

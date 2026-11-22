@@ -137,6 +137,49 @@ def _script_runs(text: str) -> list[tuple[bool, str]]:
     return runs
 
 
+#: The language of East Asian text with no kana or Hangul, where the
+#: `lang` variable doesn't say (docs/spec.md SS3.3).
+DEFAULT_LANG = "ja-JP"
+
+
+def _is_hangul(ch: str) -> bool:
+    o = ord(ch)
+    return 0x1100 <= o <= 0x11FF or 0x3130 <= o <= 0x318F or 0xA960 <= o <= 0xA97F or 0xAC00 <= o <= 0xD7FF
+
+
+def _is_kana(ch: str) -> bool:
+    o = ord(ch)
+    return 0x3040 <= o <= 0x30FF or 0x31F0 <= o <= 0x31FF or 0xFF66 <= o <= 0xFF9F
+
+
+def text_language(text: str, lang: str = DEFAULT_LANG) -> str | None:
+    """The language a run of `text` is marked as (`lang`, docs/spec.md
+    SS3.3), by its script: with Hangul, Korean; with kana, Japanese; any
+    other East Asian text -- Han alone, say -- `lang`, the `lang`
+    variable's. None for text with no East Asian character, which is left
+    unmarked."""
+    if not any(_is_east_asian(ch) for ch in text):
+        return None
+    if any(_is_hangul(ch) for ch in text):
+        return "ko-KR"
+    if any(_is_kana(ch) for ch in text):
+        return "ja-JP"
+    return lang or DEFAULT_LANG
+
+
+def _language_script(language: str) -> str:
+    """The theme script (fonts.EAST_ASIAN_SCRIPTS) whose East Asian font
+    PowerPoint sets text in `language` in: Korean, Hang; Chinese, Hant
+    for Taiwan, Hong Kong and Macao or a `Hant` tag, else Hans; Japanese,
+    and anything else, Jpan."""
+    primary, _, rest = language.lower().partition("-")
+    if primary == "ko":
+        return "Hang"
+    if primary == "zh":
+        return "Hant" if rest.split("-")[0] in ("hant", "tw", "hk", "mo") else "Hans"
+    return "Jpan"
+
+
 def default_theme_fonts() -> ThemeFonts:
     """The built-in Office theme's fonts: python-pptx's default template,
     what write_pptx() starts a deck from."""
@@ -257,13 +300,17 @@ class PilFontMetrics:
         inches = sizes.get(_text_size_name(flags), medium)
         return inches * 72.0
 
-    def _families(self, flags: list[str], typeface: str) -> tuple[str, str]:
+    def _families(self, flags: list[str], typeface: str, text: str, lang: str) -> tuple[str, str]:
+        """The Latin and East Asian families `text` is set in: `typeface`
+        for both, else the theme's, the East Asian one that for the script
+        of the text's language (text_language()), as PowerPoint picks it."""
         if typeface:
             return typeface, typeface
         t = self._theme_fonts
-        if "major" in flags:
-            return t.major_latin, t.major_ea or t.major_latin
-        return t.minor_latin, t.minor_ea or t.minor_latin
+        major = "major" in flags
+        latin = t.major_latin if major else t.minor_latin
+        script = _language_script(text_language(text, lang) or DEFAULT_LANG)
+        return latin, t.east_asian(major, script) or latin
 
     def _font(self, family: str, bold: bool, italic: bool, size_px: int) -> ImageFont.FreeTypeFont:
         key = (family, bold, italic, size_px)
@@ -290,12 +337,13 @@ class PilFontMetrics:
         return self._cache[key]
 
     def run_fonts(
-        self, text: str, flags: list[str], text_sizes: dict[str, float] | None, typeface: str, size_px: int
+        self, text: str, flags: list[str], text_sizes: dict[str, float] | None, typeface: str, size_px: int,
+        lang: str = DEFAULT_LANG,
     ) -> list[FontRun]:
         """`text` in runs, each with the font it's drawn in at `size_px`
         pixels to the em, as text_width() measures it: for --renderer
         direct to draw text where `fit` made room for it."""
-        latin, ea = self._families(flags, typeface)
+        latin, ea = self._families(flags, typeface, text, lang)
         bold, italic = "bold" in flags, "italic" in flags
         out = []
         for is_ea, run in _script_runs(text):
@@ -306,12 +354,14 @@ class PilFontMetrics:
             out.append(FontRun(run, font, self._faces[(family, bold, italic, size_px)], embolden))
         return out
 
-    def missing_glyphs(self, text: str, flags: list[str], typeface: str) -> list[tuple[str, str]]:
+    def missing_glyphs(
+        self, text: str, flags: list[str], typeface: str, lang: str = DEFAULT_LANG
+    ) -> list[tuple[str, str]]:
         """The characters of `text` its fonts have no glyph for, by family:
         PowerPoint draws them in another font, which `fit` can't measure.
         A family not installed here, measured with a substitute, is not
         looked at: that is a warning of its own."""
-        latin, ea = self._families(flags, typeface)
+        latin, ea = self._families(flags, typeface, text, lang)
         bold, italic = "bold" in flags, "italic" in flags
         out: dict[str, str] = {}
         for is_ea, run in _script_runs(text):
@@ -333,11 +383,12 @@ class PilFontMetrics:
         return self._size_pt(flags, text_sizes)
 
     def text_width(
-        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
+        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = "",
+        lang: str = DEFAULT_LANG,
     ) -> float:
         size_pt = self._size_pt(flags, text_sizes)
         size_px = max(1, round(size_pt * _MEASURE_SCALE))
-        latin, ea = self._families(flags, typeface)
+        latin, ea = self._families(flags, typeface, text, lang)
         bold, italic = "bold" in flags, "italic" in flags
         px = 0.0
         for is_ea, run in _script_runs(text):
@@ -348,13 +399,14 @@ class PilFontMetrics:
         return _LINE_PITCH * self._size_pt(flags, text_sizes) / 72.0
 
     def column_length(
-        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = ""
+        self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = "",
+        lang: str = DEFAULT_LANG,
     ) -> float:
         """Length, in inches, of `text` set vertically (`vertical`, issue
         #36): an East Asian character's vertical advance, as its font's
         vertical metrics give it, and any other's width, turned a quarter."""
         size_px = max(1, round(self._size_pt(flags, text_sizes) * _MEASURE_SCALE))
-        latin, ea = self._families(flags, typeface)
+        latin, ea = self._families(flags, typeface, text, lang)
         bold, italic = "bold" in flags, "italic" in flags
         px = 0.0
         for is_ea, run in _script_runs(text):
@@ -455,7 +507,7 @@ def _glyph_warnings(shapes: list[Shape], metrics: PilFontMetrics) -> list[Layout
     found: dict[str, tuple[list[str], list[str]]] = {}
     for shape in shapes:
         for text, flags in shape.texts:
-            for family, _lacking in metrics.missing_glyphs(text, flags, shape.typeface):
+            for family, _lacking in metrics.missing_glyphs(text, flags, shape.typeface, shape.lang):
                 names, texts = found.setdefault(family, ([], []))
                 if shape.name not in names:
                     names.append(shape.name or "")
@@ -614,7 +666,7 @@ def _apply_line_style(line, shape: Shape) -> None:
         line.dash_style = MSO_LINE_DASH_STYLE.ROUND_DOT
 
 
-def _apply_run_font(run, flags: list[str], typeface: str) -> None:
+def _apply_run_font(run, flags: list[str], typeface: str, lang: str = DEFAULT_LANG) -> None:
     """Set a run's font family (docs/spec.md SS3.3): by default the
     theme's own minor font (`+mn-lt`/`+mn-ea`), or its major (heading)
     font (`+mj-lt`/`+mj-ea`) when the `major` string attribute is present --
@@ -628,12 +680,14 @@ def _apply_run_font(run, flags: list[str], typeface: str) -> None:
     python-pptx's `Font.name` only ever touches `<a:latin>` -- `<a:ea>` has
     no public API at all (checked), so it's set directly on the run's `rPr`.
 
-    A run with East Asian characters in it is marked Japanese (`lang`),
-    as PowerPoint marks text typed in Japanese: with no language, PowerPoint
-    draws it in its own default Japanese font rather than the theme's
-    Japanese one (an empty `<a:ea>` defers to its `Jpan` font, checked),
-    which is not the one `fit` measured with (PilFontMetrics). Call this
-    after setting `run.text`."""
+    A run with East Asian characters in it is marked with its language
+    (`lang`, text_language(): Korean for Hangul, Japanese for kana, else
+    `lang`, the `lang` variable's), as PowerPoint marks text typed in it.
+    PowerPoint picks the theme's East Asian font by it (an empty `<a:ea>`
+    defers to the font for the language's script, `Jpan`, `Hang`, `Hans`
+    or `Hant`), as `fit` does (PilFontMetrics); with no language, it draws
+    the text in its own default font instead. Call this after setting
+    `run.text`."""
     major = "major" in flags
     if typeface:
         latin_val = ea_val = typeface
@@ -647,8 +701,9 @@ def _apply_run_font(run, flags: list[str], typeface: str) -> None:
         ea = OxmlElement("a:ea")
         rPr.find(qn("a:latin")).addnext(ea)  # <a:ea> must follow <a:latin> in schema order
     ea.set("typeface", ea_val)
-    if any(_is_east_asian(ch) for ch in run.text):
-        rPr.set("lang", "ja-JP")
+    language = text_language(run.text, lang)
+    if language:
+        rPr.set("lang", language)
         rPr.set("altLang", "en-US")
 
 
@@ -695,7 +750,7 @@ def _apply_text(pptx_shape, shape: Shape) -> None:
         para.line_spacing = 1.0  # see _LINE_PITCH
         run = para.add_run()
         run.text = text
-        _apply_run_font(run, flags, shape.typeface)
+        _apply_run_font(run, flags, shape.typeface, shape.lang)
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
@@ -784,7 +839,7 @@ def _add_image_shape(container, shape: Shape, tf: _Transform, name: str):
         para.line_spacing = 1.0  # see _LINE_PITCH
         run = para.add_run()
         run.text = text
-        _apply_run_font(run, flags, shape.typeface)
+        _apply_run_font(run, flags, shape.typeface, shape.lang)
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
@@ -1074,7 +1129,7 @@ def _text_rects(shape: Shape, metrics: PilFontMetrics) -> list[tuple[float, floa
         right = shape.cx + sum(widths) / 2
         out = []
         for (text, flags), w in zip(shape.texts, widths):
-            length = metrics.column_length(text, flags, shape.text_sizes, shape.typeface)
+            length = metrics.column_length(text, flags, shape.text_sizes, shape.typeface, shape.lang)
             if usable is not None:
                 length = min(length, usable)
             if "ljust" in flags:
@@ -1089,7 +1144,7 @@ def _text_rects(shape: Shape, metrics: PilFontMetrics) -> list[tuple[float, floa
     if shape.kind in LINE_LIKE:
         out = []
         for (x0, y0, x1, y1), text, flags in _line_label_rects(shape):
-            w = metrics.text_width(text, flags, shape.text_sizes, shape.typeface)
+            w = metrics.text_width(text, flags, shape.text_sizes, shape.typeface, shape.lang)
             left = x0 if "ljust" in flags else x1 - w if "rjust" in flags else (x0 + x1 - w) / 2
             out.append((left, y0, left + w, y1))
         return out
@@ -1110,7 +1165,7 @@ def _text_rects(shape: Shape, metrics: PilFontMetrics) -> list[tuple[float, floa
     for i, ((text, flags), h) in enumerate(zip(shape.texts, heights)):
         if i == first_below:
             top -= split
-        w = metrics.text_width(text, flags, shape.text_sizes, shape.typeface)
+        w = metrics.text_width(text, flags, shape.text_sizes, shape.typeface, shape.lang)
         if usable is not None:
             w = min(w, usable)
         if "ljust" in flags and not image:
@@ -1144,7 +1199,7 @@ def _add_line_text(container, shape: Shape, tf: _Transform, name: str) -> None:
         para.line_spacing = 1.0  # see _LINE_PITCH
         run = para.add_run()
         run.text = text
-        _apply_run_font(run, flags, shape.typeface)
+        _apply_run_font(run, flags, shape.typeface, shape.lang)
         run.font.bold = "bold" in flags
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)

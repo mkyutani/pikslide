@@ -418,14 +418,90 @@ def test_text_frame_insets_are_margin_and_vmargin(tmp_path: pathlib.Path):
     assert (b.text_frame.margin_top, b.text_frame.margin_bottom) == (Inches(0.08), Inches(0.08))
 
 
-def test_east_asian_text_is_marked_japanese(tmp_path: pathlib.Path):
-    # Unmarked, PowerPoint draws it in its default Japanese font, not the
-    # theme's one that `fit` measured with.
-    prs = render('box "日本語" "latin"\narrow "ラベル"\n', tmp_path)
-    runs = {r.text: r for s in prs.slides[0].shapes if s.has_text_frame for p in s.text_frame.paragraphs for r in p.runs}
-    assert runs["日本語"].font._rPr.get("lang") == "ja-JP"
-    assert runs["ラベル"].font._rPr.get("lang") == "ja-JP"
-    assert runs["latin"].font._rPr.get("lang") is None
+def _languages(prs) -> dict[str, str | None]:
+    return {r.text: r.font._rPr.get("lang")
+            for s in prs.slides[0].shapes if s.has_text_frame for p in s.text_frame.paragraphs for r in p.runs}
+
+
+def test_east_asian_text_is_marked_with_its_language(tmp_path: pathlib.Path):
+    # issue #44: PowerPoint picks the theme's East Asian font by it, and
+    # unmarked, draws the text in its own default font, not the theme's
+    # one that `fit` measured with.
+    prs = render('box "日本語" "latin" "한국어 漢字"\narrow "ラベル"\n', tmp_path)
+    assert _languages(prs) == {"日本語": "ja-JP", "latin": None, "한국어 漢字": "ko-KR", "ラベル": "ja-JP"}
+
+
+def test_lang_is_the_language_of_han_with_no_kana_or_hangul(tmp_path: pathlib.Path):
+    # Each object's own, as it stood when the object was written.
+    prs = render('box "東京"\nlang = "zh-CN"\nbox "北京" "東京タワー" "서울"\nlang = "zh-TW"\narrow "臺北"\n', tmp_path)
+    assert _languages(prs) == {"東京": "ja-JP", "北京": "zh-CN", "東京タワー": "ja-JP", "서울": "ko-KR", "臺北": "zh-TW"}
+
+
+def test_a_templates_settings_file_sets_lang(tmp_path: pathlib.Path):
+    result = resolve_for_pptx(parse('box "北京"\n'), settings_text='lang = "zh-CN"\n')
+    assert result.shapes[0].lang == "zh-CN"
+
+
+@pytest.mark.parametrize("value", ['"en-US"', '""', "3"])
+def test_lang_is_a_chinese_japanese_or_korean_language(value: str):
+    with pytest.raises(LayoutError, match="lang"):
+        resolve_for_pptx(parse(f'lang = {value}\nbox "北京"\n'))
+
+
+@pytest.mark.parametrize(("text", "lang", "language"), [
+    ("plain", "zh-CN", None),
+    ("北京", "zh-CN", "zh-CN"),
+    ("ＡＢ", "ko-KR", "ko-KR"),  # full-width forms alone: no script of their own
+    ("ｶﾀｶﾅ", "zh-CN", "ja-JP"),  # half-width katakana
+    ("ᄒᆞᆫ", "ja-JP", "ko-KR"),  # Hangul jamo
+    ("漢字かな한글", "zh-CN", "ko-KR"),  # Hangul over kana
+])
+def test_text_language_is_by_script(text: str, lang: str, language: str | None):
+    from pikslide.pptx_writer import text_language
+
+    assert text_language(text, lang) == language
+
+
+@pytest.mark.parametrize(("language", "script"), [
+    ("ja-JP", "Jpan"), ("ko-KR", "Hang"), ("zh-CN", "Hans"), ("zh-SG", "Hans"), ("zh", "Hans"),
+    ("zh-TW", "Hant"), ("zh-HK", "Hant"), ("zh-MO", "Hant"), ("zh-Hant", "Hant"), ("zh-Hans-HK", "Hans"),
+])
+def test_a_languages_theme_script(language: str, script: str):
+    from pikslide.pptx_writer import _language_script
+
+    assert _language_script(language) == script
+
+
+class _RecordingIndex:
+    """Finds no font, and records each family asked for."""
+
+    def __init__(self):
+        self.asked = []
+
+    def find(self, family, bold=False, italic=False):
+        self.asked.append(family)
+        return None
+
+
+def test_fit_measures_with_the_theme_font_for_the_texts_language():
+    # The built-in Office theme's: ＭＳ Ｐゴシック, 맑은 고딕, 宋体, 新細明體.
+    def asked(src: str) -> set[str]:
+        index = _RecordingIndex()
+        resolve_for_pptx(parse(src), font_index=index)
+        return set(index.asked) - {"Calibri"}
+
+    assert asked('box "東京" fit\n') == {"ＭＳ Ｐゴシック"}
+    assert asked('box "서울" fit\n') == {"맑은 고딕"}
+    assert asked('lang = "zh-CN"\nbox "北京" fit\n') == {"宋体"}
+    assert asked('lang = "zh-TW"\nbox "臺北" "東京タワー" fit vertical\n') == {"新細明體", "ＭＳ Ｐゴシック"}
+
+
+def test_the_direct_renderer_draws_with_the_theme_font_for_the_texts_language():
+    from pikslide.pptx_writer import PilFontMetrics
+
+    index = _RecordingIndex()
+    PilFontMetrics(font_index=index).run_fonts("北京 Beijing", [], None, "", 80, "zh-CN")
+    assert set(index.asked) == {"宋体", "Calibri"}
 
 
 def _template_with_fonts(tmp_path: pathlib.Path, latin: str, jpan: str) -> pathlib.Path:

@@ -129,7 +129,7 @@ def test_fit_and_the_overflow_warning_follow_the_handles():
     # less a 0.25 in head, but not less 1.8 in.
 
     class FixedMetrics:
-        def text_width(self, text, flags=(), text_sizes=None, typeface=""):
+        def text_width(self, text, flags=(), text_sizes=None, typeface="", lang="ja-JP"):
             return 0.1 * len(text)
 
         def line_height(self, flags=(), text_sizes=None):

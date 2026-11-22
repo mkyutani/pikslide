@@ -326,7 +326,9 @@ font for `major`). The theme is the one the slide is made in — the
 Office theme. As in PowerPoint, East Asian characters (kana, CJK
 ideographs, Hangul, full-width forms) use the theme's East Asian font and
 all others its Latin one; an empty East Asian font means the theme's
-Japanese (`Jpan`) choice. `bold` and `italic` use those faces.
+choice for the script of the text's language (below): `Jpan` for
+Japanese, `Hang` for Korean, `Hans` and `Hant` for simplified and
+traditional Chinese. `bold` and `italic` use those faces.
 
 - **Fonts are found by name** among the fonts installed on the machine,
   including a localized name such as `游ゴシック`. Under WSL the Windows
@@ -357,9 +359,18 @@ Japanese (`Jpan`) choice. `bold` and `italic` use those faces.
   Japanese) is a warning naming the objects: PowerPoint draws those
   characters in another font, which `fit` can't measure, and
   `--renderer direct` draws them as boxes.
-- **Text containing East Asian characters is marked Japanese** (`lang`),
-  as PowerPoint marks Japanese input. Unmarked, PowerPoint draws it in its
-  own default Japanese font instead of the theme's, which is not the font
+- **Text containing East Asian characters is marked with its language**
+  (`lang`), as PowerPoint marks text typed in it, by its script: text with
+  Hangul is Korean (`ko-KR`), text with kana Japanese (`ja-JP`), and other
+  East Asian text — Han alone, say — is in the language of the string
+  variable `lang`: `ja-JP` unless a program or a template's settings file
+  (§3.8) sets another, such as `lang = "zh-CN"` (`zh-TW` for traditional
+  Chinese, `ko-KR`). It must be a Chinese, Japanese or Korean language
+  tag. As with `typeface`, an object's text is in the `lang` that stood
+  when the object was written. PowerPoint sets the text in the theme's
+  East Asian font for that language's script, and `fit` and
+  `--renderer direct` take the same; unmarked, PowerPoint would draw it in
+  its own default font instead of the theme's, which is not the font
   `fit` measured with.
 
 **Vertical text.** `vertical` sets an object's text vertically, as
@@ -614,6 +625,7 @@ large      = 12pt
 
 layout     = ""
 typeface   = ""
+lang       = "ja-JP"
 
 primary    = text2
 emphasis   = accent1
@@ -633,7 +645,8 @@ emphasis   = accent1
   so `9pt` is 9/72 in; the PowerPoint writer converts back to points.
 - **It defines `layout` and `typeface`**, both empty strings: the slide layout
   for a new slide and the font family (§3.3, §3.8). The PowerPoint writer
-  reads them, not the layout stage.
+  reads them, not the layout stage. It defines `lang`, `ja-JP`: the
+  language of East Asian text with no kana or Hangul (§3.3).
 - **It defines the standard accent-color names** `primary` and `emphasis`,
   so a diagram that uses them runs with any template; a template's settings
   file (§3.8) gives them that template's own colors.
@@ -662,7 +675,8 @@ file**, found beside it or named with `--settings FILE`, which holds:
 
 - the slide layout for a new slide (`layout`), which also fixes the master
   and so the theme (§3.3);
-- the font (`typeface`, §3.3);
+- the font (`typeface`, §3.3), and the language of Han text (`lang`,
+  §3.3), for a template made for Chinese or Korean;
 - the accent colors: which of the theme's colors the diagram uses for
   emphasis. `primary` and `emphasis` are the standard names (§3.7); a
   template may define others;

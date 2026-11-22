@@ -244,6 +244,15 @@ large = 12pt
 
 typeface = ""
 
+# The language of East Asian text with neither kana nor Hangul -- Han
+# alone, say -- that its runs are marked with: PowerPoint sets them in the
+# theme's East Asian font for that language's script (Japanese for
+# "ja-JP", simplified Chinese for "zh-CN", traditional for "zh-TW",
+# Korean for "ko-KR"). Text with kana is always Japanese, with Hangul
+# always Korean.
+
+lang = "ja-JP"
+
 # --- Slide layout (docs/spec.md SS3.8) --------------------------------------
 # Empty means "the template's first layout with exactly one placeholder
 # besides its title, subtitle, date, footer and slide number" (a Title and

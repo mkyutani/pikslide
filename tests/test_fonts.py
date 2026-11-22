@@ -37,12 +37,29 @@ def test_font_index_finds_a_family_and_its_bold_face(dejavu_dir: pathlib.Path):
     assert index.find("No Such Font") is None
 
 
-def test_theme_fonts_take_the_japanese_font_when_east_asian_is_empty():
+def test_theme_fonts_take_each_scripts_font_when_east_asian_is_empty():
     template = pathlib.Path(pptx.__file__).parent / "templates" / "default.pptx"
     with zipfile.ZipFile(template) as z:
         fonts = theme_fonts_from_xml(z.read("ppt/theme/theme1.xml"))
-    assert (fonts.minor_latin, fonts.minor_ea) == ("Calibri", "ＭＳ Ｐゴシック")
-    assert (fonts.major_latin, fonts.major_ea) == ("Calibri", "ＭＳ Ｐゴシック")
+    assert (fonts.minor_latin, fonts.minor_ea) == ("Calibri", "")
+    for major in (False, True):
+        assert fonts.east_asian(major, "Jpan") == "ＭＳ Ｐゴシック"
+        assert fonts.east_asian(major, "Hang") == "맑은 고딕"
+        assert fonts.east_asian(major, "Hans") == "宋体"
+        assert fonts.east_asian(major, "Hant") == "新細明體"
+
+
+def test_theme_fonts_east_asian_font_is_every_scripts():
+    theme = (
+        '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements>'
+        '<a:fontScheme name="x"><a:majorFont><a:latin typeface="Arial"/><a:ea typeface="Meiryo"/>'
+        '<a:font script="Hang" typeface="Batang"/></a:majorFont>'
+        '<a:minorFont><a:latin typeface="Arial"/><a:ea typeface=""/></a:minorFont>'
+        '</a:fontScheme></a:themeElements></a:theme>'
+    ).encode()
+    fonts = theme_fonts_from_xml(theme)
+    assert fonts.east_asian(True, "Hang") == "Meiryo"  # <a:ea> over the script's
+    assert fonts.east_asian(False, "Hang") == ""  # neither: the Latin font's, to PilFontMetrics
 
 
 def test_text_splits_into_east_asian_and_other_runs():

@@ -154,7 +154,7 @@ tell which shape is which.
 With its name, a line can refer to a point on the object: `Web.s` is the
 middle of its bottom edge.
 
-![The points of a box and of a circle: .n .ne .e .se .s .sw .w .nw and .center](edges.png)
+![The points of a box and of a circle: .n .ne .e .se .s .sw .w .nw and .c](edges.png)
 
 `with .n at 0.6in below Web.s` places the queue by its top edge, `.n`,
 at the point 0.6in below the web server's bottom: the queue hangs under

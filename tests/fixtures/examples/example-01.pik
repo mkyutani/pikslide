@@ -1,4 +1,4 @@
-box "Click on any diagram on this page" large \
-    "to see the diagram source text" large \
+box "Click on any diagram on this page" big \
+    "to see the diagram source text" big \
     stroke red wid 2.6in
 

@@ -20,13 +20,6 @@ def test_every_reserved_word_has_a_help_entry(word: str):
     assert any(word in e.names for e in ENTRIES), f"no --help entry for {word!r}"
 
 
-def test_no_help_entry_teaches_a_rarer_spelling():
-    # issue #48: the error names the word to write, and --help has only that
-    from pikslide.pik.tokens import RESPELLED
-
-    assert {name for e in ENTRIES for name in e.names} & set(RESPELLED) == set()
-
-
 def test_every_built_in_variable_is_described():
     colors = set(_css_colors())
     missing = [n for n, v in prelude_values().items()

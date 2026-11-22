@@ -11,8 +11,8 @@ LC:     box "lexical" "corrector"
 Syn:    box "syntactic" "corrector"
         arrow up
 DMP:    box "diagnostic" "message" "printer"
-        arrow <-> right  from e of DMP
+        arrow <-> right  from east of DMP
 ST:     box "symbol" "table"
         arrow from LC.ne to DMP.sw
         arrow from Sem.nw to DMP.se
-        arrow <-> from Sem.top to ST.bottom
+        arrow <-> from Sem.top to ST.bot

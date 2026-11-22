@@ -55,6 +55,7 @@ class TokType(Enum):
     BEHIND = auto()
     BELOW = auto()
     BETWEEN = auto()
+    BIG = auto()
     BOLD = auto()
     EDGEPT = auto()
     BOTTOM = auto()
@@ -97,6 +98,7 @@ class TokType(Enum):
     SMALL = auto()
     SOLID = auto()
     START = auto()
+    THE = auto()
     THEN = auto()
     THICK = auto()
     THICKNESS = auto()
@@ -107,6 +109,7 @@ class TokType(Enum):
     UNTIL = auto()
     UP = auto()
     VERTEX = auto()
+    WAY = auto()
     WIDTH = auto()
     WITH = auto()
     X = auto()
@@ -158,8 +161,11 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "behind": (TokType.BEHIND, None, None),
     "below": (TokType.BELOW, None, None),
     "between": (TokType.BETWEEN, None, None),
+    "big": (TokType.BIG, None, None),
     "bold": (TokType.BOLD, None, None),
+    "bot": (TokType.EDGEPT, None, "s"),
     "bottom": (TokType.BOTTOM, None, "s"),
+    "c": (TokType.EDGEPT, None, "c"),
     "ccw": (TokType.CCW, None, None),
     "center": (TokType.CENTER, None, "c"),
     "chop": (TokType.CHOP, None, None),
@@ -174,6 +180,7 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "dotted": (TokType.DOTTED, None, None),
     "down": (TokType.DOWN, DIR_DOWN, None),
     "e": (TokType.EDGEPT, None, "e"),
+    "east": (TokType.EDGEPT, None, "e"),
     "end": (TokType.END, None, "end"),
     "even": (TokType.EVEN, None, None),
     "fill": (TokType.FILL, None, None),
@@ -188,6 +195,7 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "in": (TokType.IN, None, None),
     "int": (TokType.FUNC1, "int", None),
     "invis": (TokType.INVIS, None, None),
+    "invisible": (TokType.INVIS, None, None),
     "italic": (TokType.ITALIC, None, None),
     "last": (TokType.LAST, None, None),
     "left": (TokType.LEFT, DIR_LEFT, "w"),
@@ -198,8 +206,10 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "monospace": (TokType.MONO, None, None),
     "n": (TokType.EDGEPT, None, "n"),
     "ne": (TokType.EDGEPT, None, "ne"),
+    "north": (TokType.EDGEPT, None, "n"),
     "nw": (TokType.EDGEPT, None, "nw"),
     "of": (TokType.OF, None, None),
+    "previous": (TokType.LAST, None, None),
     "rad": (TokType.RADIUS, None, None),
     "radius": (TokType.RADIUS, None, None),
     "right": (TokType.RIGHT, DIR_RIGHT, "e"),
@@ -210,10 +220,13 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "sin": (TokType.FUNC1, "sin", None),
     "small": (TokType.SMALL, None, None),
     "solid": (TokType.SOLID, None, None),
+    "south": (TokType.EDGEPT, None, "s"),
     "sqrt": (TokType.FUNC1, "sqrt", None),
     "start": (TokType.START, None, "start"),
     "stroke": (TokType.STROKE, None, None),
     "sw": (TokType.EDGEPT, None, "sw"),
+    "t": (TokType.TOP, None, "n"),
+    "the": (TokType.THE, None, None),
     "then": (TokType.THEN, None, None),
     "thick": (TokType.THICK, None, None),
     "thickness": (TokType.THICKNESS, None, None),
@@ -226,6 +239,8 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "vertex": (TokType.VERTEX, None, None),
     "vertical": (TokType.VERTICAL, None, None),
     "w": (TokType.EDGEPT, None, "w"),
+    "way": (TokType.WAY, None, None),
+    "west": (TokType.EDGEPT, None, "w"),
     "wid": (TokType.WIDTH, None, None),
     "width": (TokType.WIDTH, None, None),
     "with": (TokType.WITH, None, None),
@@ -254,28 +269,13 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "off": (TokType.NOCOLOR, None, None),
 }
 
-# The rarer spellings of a word, each with the one to write (issue #48):
-# each lexes as that word does, and is an error when the parser takes it
-# as that word (Token.respell).
-RESPELLED = {
-    "big": "large",
-    "bot": "bottom",
-    "c": "center",
-    "colour": "color",
-    "east": "e",
-    "invisible": "invis",
-    "north": "n",
-    "previous": "last",
-    "south": "s",
-    "t": "top",
-    "west": "w",
-}
-
-# The rarer spellings of an arrowhead, each an error where it's written.
-ARROWS_RESPELLED = {
-    "→": "->", "←": "<-", "↔": "<->",
-    "&rightarrow;": "->", "&rarr;": "->", "&leftarrow;": "<-", "&larr;": "<-", "&leftrightarrow;": "<->",
-}
+ENTITIES = [
+    ("&rightarrow;", TokType.RARROW),
+    ("&rarr;", TokType.RARROW),
+    ("&leftarrow;", TokType.LARROW),
+    ("&larr;", TokType.LARROW),
+    ("&leftrightarrow;", TokType.LRARROW),
+]
 
 _UNIT_DIVISORS = {"cm": 2.54, "mm": 25.4, "px": 96, "pt": 72, "pc": 6, "in": 1}
 
@@ -292,10 +292,6 @@ class Token:
     line: int
     code: object = None   # eCode: sub-operator for ASSIGN, direction id, fn name, ordinal...
     edge: str | None = None  # eEdge: compass/edge tag for EDGEPT-like tokens
-    respell: str | None = None
-    """The word to write instead, for a rarer spelling of it (RESPELLED):
-    the token is that word's, and the parser raises a SpellingError when
-    it takes it as that word."""
     file: str | None = None
     """Which file this token came from (docs/spec.md SS5: an error names
     the file it's actually in) -- `None` for the main source text, an
@@ -327,24 +323,6 @@ class PikSyntaxError(Exception):
         """The file this error is actually in (docs/spec.md SS5), when it
         differs from the main source being parsed -- an included file's
         resolved path. `None` means the main source itself."""
-
-
-class SpellingError(PikSyntaxError):
-    """A word written in a rarer spelling (issue #48): an error that
-    names the one to write. Never backtracked past: wherever the parser
-    took the token, it took it as that word."""
-
-
-def respelled(word: str, instead: str) -> str:
-    return f"'{word}' is written '{instead}'"
-
-
-def keyword(word: str) -> tuple[TokType, object, str | None, str | None] | None:
-    """A lowercase word's keyword, if it is one: its (TokType, eCode,
-    eEdge), and the word to write instead, for a rarer spelling."""
-    instead = RESPELLED.get(word)
-    found = KEYWORDS.get(instead or word)
-    return (*found, instead) if found else None
 
 
 def format_syntax_error(err: PikSyntaxError, main_path: str, main_text: str) -> str:
@@ -563,8 +541,12 @@ class Lexer:
                 return Token(TokType.LARROW, "<-", i, line), 2, line
             return Token(TokType.LT, c, i, line), 1, line
 
-        if c in ARROWS_RESPELLED:
-            raise SpellingError(respelled(c, ARROWS_RESPELLED[c]), line, c, pos=i, file=self.file)
+        if c == "←":  # unicode leftwards arrow (UTF-8: e2 86 90)
+            return Token(TokType.LARROW, c, i, line), 1, line
+        if c == "→":
+            return Token(TokType.RARROW, c, i, line), 1, line
+        if c == "↔":
+            return Token(TokType.LRARROW, c, i, line), 1, line
 
         if c == "{":
             j = i + 1
@@ -582,9 +564,9 @@ class Lexer:
             return Token(TokType.CODEBLOCK, z[i:j], i, line), j - i, line
 
         if c == "&":
-            for entity, instead in ARROWS_RESPELLED.items():
+            for entity, ttype in ENTITIES:
                 if z[i : i + len(entity)] == entity:
-                    raise SpellingError(respelled(entity, instead), line, entity, pos=i, file=self.file)
+                    return Token(ttype, entity, i, line), len(entity), line
             return Token(TokType.ERROR, c, i, line), 1, line
 
         if c == "." :
@@ -594,7 +576,7 @@ class Lexer:
                 while j < n and "a" <= z[j] <= "z":
                     j += 1
                 word = z[i + 1 : j]
-                found = keyword(word)
+                found = KEYWORDS.get(word)
                 if found and (found[2] is not None or found[0] in (TokType.EDGEPT, TokType.START, TokType.END)):
                     return Token(TokType.DOT_E, z[i:i+1], i, line), 1, line
                 if found and found[0] in (TokType.X, TokType.Y):
@@ -615,10 +597,10 @@ class Lexer:
             while j < n and (_is_alnum_ascii(z[j]) or z[j] == "_"):
                 j += 1
             word = z[i:j]
-            found = keyword(word)
+            found = KEYWORDS.get(word)
             if found:
-                ttype, code, edge, instead = found
-                return Token(ttype, word, i, line, code=code, edge=edge, respell=instead), j - i, line
+                ttype, code, edge = found
+                return Token(ttype, word, i, line, code=code, edge=edge), j - i, line
             if word in CLASS_NAMES:
                 return Token(TokType.CLASSNAME, word, i, line), j - i, line
             return Token(TokType.ID, word, i, line), j - i, line

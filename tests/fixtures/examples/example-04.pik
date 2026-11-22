@@ -17,7 +17,7 @@ arrow from X9 to last box.w
 
 # The main rule that goes straight through from start to finish
 #
-box "object-definition" italic fit at 11/16 between X0 and X9
+box "object-definition" italic fit at 11/16 way between X0 and X9
 arrow to X9
 arrow from X0 to last box.w
 

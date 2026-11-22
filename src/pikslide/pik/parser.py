@@ -15,8 +15,7 @@ import re
 
 from . import ast
 from .macros import expand_macros
-from .tokens import (PikSyntaxError, SpellingError, Token, TokType, is_hex_number, nth_value, numeric_value,
-                     respelled, unescape_string)
+from .tokens import PikSyntaxError, Token, TokType, is_hex_number, nth_value, numeric_value, unescape_string
 
 _DIR_NAME = {
     TokType.UP: "up",
@@ -64,6 +63,7 @@ _STRING_ATTR_NAME = {
     TokType.BELOW: "below",
     TokType.ITALIC: "italic",
     TokType.BOLD: "bold",
+    TokType.BIG: "big",
     TokType.SMALL: "small",
     # pikslide ext: docs/grammar.md, Objects (string-attr)
     TokType.MAJOR: "major",
@@ -162,17 +162,6 @@ class Parser:
         return t is not None and t.type in types
 
     def advance(self) -> Token:
-        """The next token, taken as the word it is: a rarer spelling of
-        that word (Token.respell) is an error naming the one to write."""
-        t = self.toks[self.i]
-        if t.respell is not None:
-            self._error(respelled(t.text, t.respell), SpellingError)
-        self.i += 1
-        return t
-
-    def _take(self) -> Token:
-        """The next token, taken as text, whatever word it is (a handle's
-        name, an arrowhead's kind)."""
         t = self.toks[self.i]
         self.i += 1
         return t
@@ -183,14 +172,14 @@ class Parser:
             self._error(f"expected {type_.name}")
         return self.advance()
 
-    def _error(self, message: str, error: type[PikSyntaxError] = PikSyntaxError):
+    def _error(self, message: str):
         t = self.peek()
         last = self.toks[-1] if self.toks else None
         line = t.line if t is not None else (last.line if last is not None else 0)
         text = t.text if t is not None else ""
         pos = t.pos if t is not None else (last.pos if last is not None else 0)
         file = t.file if t is not None else (last.file if last is not None else None)
-        raise error(message, line, text, pos=pos, file=file)
+        raise PikSyntaxError(message, line, text, pos=pos, file=file)
 
     def _starts_expr(self) -> bool:
         return self.at(*_EXPR_START)
@@ -280,8 +269,6 @@ class Parser:
         t = self.peek()
         if t is None:
             return
-        if t.respell is not None:
-            self.advance()  # raises
         if t.type in _STRING_ATTR_NAME or t.type == TokType.COLOR:
             self._error(f"'{t.text}' is a string attribute: write it right after the string it applies to")
         if t.type in _STROKE_ONLY:
@@ -474,7 +461,7 @@ class Parser:
             if word is None or _HANDLE_WORD.fullmatch(word.text) is None:
                 self._error(f"expected an arrowhead after '{end}': triangle, open, stealth, diamond, "
                             "oval or none")
-            kind = self._take().text
+            kind = self.advance().text
             size = self.advance().text if self.at(TokType.SMALL, TokType.LARGE) else None
             return ast.Arrowhead(end, kind, size)
 
@@ -535,7 +522,7 @@ class Parser:
             word = self.peek()
             if word is None or _HANDLE_WORD.fullmatch(word.text) is None:
                 self._error("expected a connector's form after 'path': straight, elbow or curved")
-            return ast.ConnectorPath(self._take().text)
+            return ast.ConnectorPath(self.advance().text)
 
         return None
 
@@ -548,10 +535,10 @@ class Parser:
 
         if not is_word(self.peek()):
             self._error("expected a handle's name after 'adjust' (head.length, adj1, ...)")
-        words = [self._take().text]
+        words = [self.advance().text]
         while self.at(TokType.DOT_L, TokType.DOT_XY, TokType.DOT_E) and is_word(self.peek(1)):
             self.advance()
-            words.append(self._take().text)
+            words.append(self.advance().text)
         return ".".join(words)
 
     def _parse_go_direction(self) -> ast.GoDirection:
@@ -742,8 +729,6 @@ class Parser:
         mark = self.i
         try:
             return self._parse_expr_led_position()
-        except SpellingError:
-            raise
         except PikSyntaxError:
             self.i = mark
         if self.at(TokType.LP):
@@ -801,31 +786,37 @@ class Parser:
             self.expect(TokType.OF)
             return ast.HeadingOffset(x, edge=edge, angle=None, base=self.parse_position())
 
+        if self.at(TokType.WAY):
+            self.advance()
+            self.expect(TokType.BETWEEN)
+            p1 = self.parse_position()
+            self.expect(TokType.AND)
+            p2 = self.parse_position()
+            return ast.Between(x, p1, p2)
         if self.at(TokType.BETWEEN):
             self.advance()
             p1 = self.parse_position()
             self.expect(TokType.AND)
             p2 = self.parse_position()
             return ast.Between(x, p1, p2)
-        self._check_between_respelled()
+        if self.at(TokType.OF):
+            self.advance()
+            self.expect(TokType.THE)
+            self.expect(TokType.WAY)
+            self.expect(TokType.BETWEEN)
+            p1 = self.parse_position()
+            self.expect(TokType.AND)
+            p2 = self.parse_position()
+            return ast.Between(x, p1, p2)
+        if self.at(TokType.LT):
+            self.advance()
+            p1 = self.parse_position()
+            self.expect(TokType.COMMA)
+            p2 = self.parse_position()
+            self.expect(TokType.GT)
+            return ast.Between(x, p1, p2)
 
         self._error("expected a position expression after the leading number")
-
-    def _check_between_respelled(self) -> None:
-        """The rarer spellings of `F between P and Q` (issue #48), each an
-        error naming the one to write: `F way between`, `F of the way
-        between` and `F <P, Q>`. `way` and `the` are ordinary names."""
-
-        def word(offset: int, text: str) -> bool:
-            t = self.peek(offset)
-            return t is not None and t.type == TokType.ID and t.text == text
-
-        if word(0, "way") and self.peek(1) is not None and self.peek(1).type == TokType.BETWEEN:
-            self._error(respelled("way between", "between"), SpellingError)
-        if self.at(TokType.OF) and word(1, "the") and word(2, "way"):
-            self._error(respelled("of the way between", "between"), SpellingError)
-        if self.at(TokType.LT):
-            self._error(respelled("F <P, Q>", "F between P and Q"), SpellingError)
 
     def _parse_place_led_position(self) -> ast.Position:
         place = self.parse_place()

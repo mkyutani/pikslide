@@ -9,11 +9,11 @@
             arrow from Img chop down until even with Parse \
               then to Layout.nw rad 20px
             "embedded" "images" rjust \
-              at 2nd vertex of last
+              at 2nd vertex of previous
             arrow from Prelude chop down until even with Parse \
               then to Layout.ne rad 20px
             "default" "variables" ljust \
-              at 2nd vertex of last
+              at 2nd vertex of previous
   Shapes:   box "shapes" with .n at lineht below Layout.s
             arrow from Layout to Shapes chop
             arrow down from Shapes.s

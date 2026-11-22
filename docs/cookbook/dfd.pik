@@ -6,7 +6,7 @@
 define store { [
   Upper: line right 1.3in
   Lower: line right 1.3in from 0.4in below Upper.start
-  text $1 at 1/2 between Upper.center and Lower.center
+  text $1 at 1/2<Upper.c, Lower.c>
 ] }
 
 Customer: box "Customer" fit

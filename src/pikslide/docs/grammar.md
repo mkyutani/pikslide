@@ -6,7 +6,8 @@ syntax in BNF/EBNF, and a short account of what the constructs mean. For
 [spec.md](spec.md).
 
 This document describes the target language. Every rule here is
-implemented. One reserved word, `connector`, is used by no rule.
+implemented. Three reserved words, `aligned`, `mono` and `monospace`, are
+used by no rule (see [Reserved words](#reserved-words)).
 
 ## Notation
 
@@ -83,9 +84,9 @@ Notes:
   any other lowercase word (a property such as `.width`), and before an
   uppercase letter (a sub-object: `Outer.Inner`).
 - **Keyword aliases.** `wid`=`width`, `ht`=`height`, `rad`=`radius`,
-  `invis`=`invisible`, `mono`=`monospace`, `previous`=`last`; compass
-  words `north`/`south`/`east`/`west` = `n`/`s`/`e`/`w`; `bot` = `bottom`;
-  `t` = `top`; `c` = `center`.
+  `invis`=`invisible`, `previous`=`last`; compass words
+  `north`/`south`/`east`/`west` = `n`/`s`/`e`/`w`; `bot` = `bottom`; `t` =
+  `top`; `c` = `center`.
 
 ## Macros
 
@@ -206,7 +207,7 @@ preset-name     ::= ID | CLASSNAME                   (* an OOXML preset geometry
                                                         e.g. chevron, roundRect, ellipse *)
 
 string-attr     ::= "center" | "above" | "below"
-                   | "italic" | "bold" | "mono"
+                   | "italic" | "bold"
                    | "big" | "small" | "major" | "medium" | "large"
                    | "color" color-value
 ```
@@ -243,7 +244,7 @@ attribute       ::= numprop relexpr
                    | "from" position
                    | "to" position
                    | boolprop
-                   | "ljust" | "rjust" | "aligned"
+                   | "ljust" | "rjust"
                    | arrowdir
                    | ( "start" | "end" ) arrowhead [ "small" | "large" ]   (* lines only *)
                    | "at" position
@@ -410,7 +411,12 @@ names.
 | `theme` | builds a theme color from a slot name, `theme "accent1"` |
 | `lighter`, `darker` | color modifiers |
 | `none`, `off` | the *no color* value |
-| `connector` | unused |
+
+`aligned`, `mono` and `monospace` are reserved too, and used by no rule:
+pikslide doesn't turn text to a line's direction, and has no monospace
+text. Each is an error that says it isn't supported, wherever it's
+written, so either can come back later, doing what it says, without
+breaking a diagram.
 
 Semantic constraints the grammar cannot express (each is an error):
 
@@ -497,7 +503,7 @@ the object immediately below `X` in z-order.
 
 **Text.** Each `STRING` is a line of text on the object. Its string
 attributes place it (`center`, `above`, `below`), style it (`bold`,
-`italic`, `mono`), size it and color it. Size attributes select one of
+`italic`), size it and color it. Size attributes select one of
 three sizes: `small`, `medium` (the default), and `large` or `big`. Their
 values are set by assigning to the words themselves, as `fill`, `color`
 and `thickness` set theirs; the prelude gives `small = 9pt`,
@@ -512,11 +518,10 @@ other: to set the size of every string, give it to each one
 not placed `above`/`below`/`center` are stacked evenly above and below its
 center.
 
-`ljust`, `rjust` and `aligned` are object attributes instead, applying to
-all of the object's strings: `ljust` aligns them left, `margin` in from
-the object's left side (a line's: from its left end), and on a `text`
-with `at P` puts the text's left edge at P; `rjust` mirrors it. `aligned`
-(rotate along a line) is accepted and has no effect.
+`ljust` and `rjust` are object attributes instead, applying to all of
+the object's strings: `ljust` aligns them left, `margin` in from the
+object's left side (a line's: from its left end), and on a `text` with
+`at P` puts the text's left edge at P; `rjust` mirrors it.
 
 **Why some words are reserved and others aren't.** A word is reserved
 exactly when the grammar needs it as a literal token somewhere — an object

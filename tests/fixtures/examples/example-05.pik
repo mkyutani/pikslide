@@ -6,13 +6,13 @@
     box same fill 0xc5d8ef
     box same as first box
     box same as 2nd box
-    line "Alan" above aligned \
+    line "Alan" above \
       from 1st box.sw+(0.2,0) up until even with 1st box.n
-    line "Betty" above aligned \
+    line "Betty" above \
       from 2nd box.sw+(0.2,0) up until even with 2nd box.n
-    line "Charlie" above aligned \
+    line "Charlie" above \
       from 3rd box.sw+(0.2,0) up until even with 3rd box.n
-    line "Darlene" above aligned \
+    line "Darlene" above \
       from 4th box.sw+(0.2,0) up until even with 4th box.n
 
     # fill in content for the Alice lane
@@ -24,7 +24,7 @@ A1: circle "1" rad 0.1in at end of first line + (0.2,-0.2) \
     arrow right until even with first box.e - (0.65,0.0)
     ellipse "future" fit fill white height 0.2 width 0.5 stroke thickness 1.5px
 A3: circle "3" same at A1+(0.8,-0.3) fill 0xc0c0c0
-    arrow "fork!" below from A1 to last circle chop aligned
+    arrow "fork!" below from A1 to last circle chop
 
     # content for the Betty lane
 B1: circle "1" same as A1 at A1-(0,$laneh)

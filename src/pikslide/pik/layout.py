@@ -1977,8 +1977,7 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         for sub in attr.attrs:
             _apply_attribute(sub, shape, build, ctx)
     elif isinstance(attr, ast.Justify):
-        if attr.name != "aligned":
-            shape.just = attr.name
+        shape.just = attr.name
     elif isinstance(attr, ast.BoolProperty):
         if attr.name == "cw":
             shape.cw = True

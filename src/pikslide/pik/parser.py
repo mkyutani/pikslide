@@ -63,7 +63,6 @@ _STRING_ATTR_NAME = {
     TokType.BELOW: "below",
     TokType.ITALIC: "italic",
     TokType.BOLD: "bold",
-    TokType.MONO: "mono",
     TokType.BIG: "big",
     TokType.SMALL: "small",
     # pikslide ext: docs/grammar.md, Objects (string-attr)
@@ -73,7 +72,15 @@ _STRING_ATTR_NAME = {
 }
 
 # The object-level justification (docs/spec.md SS3.1): all strings at once.
-_JUSTIFY_NAME = {TokType.LJUST: "ljust", TokType.RJUST: "rjust", TokType.ALIGNED: "aligned"}
+_JUSTIFY_NAME = {TokType.LJUST: "ljust", TokType.RJUST: "rjust"}
+
+# Reserved words no rule uses, each an error wherever an attribute can
+# stand (docs/grammar.md, Reserved words): reserved, so that either can
+# come back, doing what it says, without breaking a diagram.
+_UNSUPPORTED = {
+    TokType.ALIGNED: "text isn't turned to a line's direction",
+    TokType.MONO: "there's no monospace text",
+}
 
 _DOTL_PROP_NAME = {
     TokType.WIDTH: "width",
@@ -385,6 +392,9 @@ class Parser:
         if t is None:
             return None
         tt = t.type
+
+        if tt in _UNSUPPORTED:
+            self._error(f"'{t.text}' isn't supported: {_UNSUPPORTED[tt]}; leave it out")
 
         if tt in _NUMPROP_NAME:
             self.advance()

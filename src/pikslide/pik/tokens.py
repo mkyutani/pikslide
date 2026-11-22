@@ -48,7 +48,7 @@ class TokType(Enum):
     ABOVE = auto()
     FUNC1 = auto()
     FUNC2 = auto()
-    ALIGNED = auto()
+    ALIGNED = auto()  # reserved, not supported: an error (parser)
     AND = auto()
     AS = auto()
     AT = auto()
@@ -88,7 +88,7 @@ class TokType(Enum):
     LAST = auto()
     LEFT = auto()
     LJUST = auto()
-    MONO = auto()
+    MONO = auto()  # reserved, not supported: an error (parser)
     NTH_WORD = auto()  # 'first' -- lexes as NTH, kept separate only for clarity
     OF = auto()
     RADIUS = auto()
@@ -133,7 +133,6 @@ class TokType(Enum):
     LIGHTER = auto()
     DARKER = auto()
     NOCOLOR = auto()  # "none" / "off"
-    CONNECTOR = auto()  # reserved for a future object class; not used yet
 
     ERROR = auto()
     WHITESPACE = auto()
@@ -268,7 +267,6 @@ KEYWORDS: dict[str, tuple[TokType, object, str | None]] = {
     "darker": (TokType.DARKER, None, None),
     "none": (TokType.NOCOLOR, None, None),
     "off": (TokType.NOCOLOR, None, None),
-    "connector": (TokType.CONNECTOR, None, None),  # reserved; not used yet
 }
 
 ENTITIES = [

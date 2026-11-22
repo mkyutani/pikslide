@@ -174,10 +174,6 @@ ENTRIES: tuple[Entry, ...] = (
     _line(("move",), "moves the current point, drawing nothing",
           "Like a line, but invisible: it moves where the next object goes.",
           ("movewid", "lineht"), "move right 0.5"),
-    Entry(("connector",), "a reserved word, unused",
-          body="Reserved: it can't name a variable or a macro, and no statement uses it. "
-               "To write a line as a connector, see attach.",
-          see=("attach",)),
 
     # --- size, style ------------------------------------------------------
     Entry(("width", "wid"), "an object's width", synopsis=("width EXPR[%]",),
@@ -266,9 +262,8 @@ ENTRIES: tuple[Entry, ...] = (
                "center (also `.c`).", group="flag", see=("flags", "edges")),
     Entry(("bold", "italic"), "bold or italic text", synopsis=('"string" bold', '"string" italic'),
           group="flag", example='box "Title" bold "subtitle" italic', see=("flags",)),
-    Entry(("mono", "monospace"), "monospace text (accepted; draws in the normal font)",
-          group="flag", see=("flags",)),
-    Entry(("aligned",), "text along the line's direction (accepted; no effect in v1)", group="attribute"),
+    Entry(("mono", "monospace"), "reserved, not supported: an error (there's no monospace text)"),
+    Entry(("aligned",), "reserved, not supported: an error (text isn't turned to a line's direction)"),
     Entry(("small", "medium", "large", "big"), "text size; as variables, the three sizes",
           synopsis=('"string" small', '"string" large', "small = 9pt"),
           body="Text flags for the three sizes (`big` is `large`); the last one on a "
@@ -1039,7 +1034,6 @@ _LLM_BODIES = {
     "spline": "Curve through its path's points; drawn as straight segments in v1.",
     "arc": "Turns left, right with cw; next object goes the way it turned.",
     "move": "Invisible line: moves where the next object goes.",
-    "connector": "Reserved: names no variable or macro; no statement uses it. A line as a connector: attach.",
     "width": "Width in inches; N% = percent of current.",
     "height": "Height in inches; N% = percent of current.",
     "radius": "Circle's/arc's radius; box's (file's) corner radius; cylinder's end depth.",

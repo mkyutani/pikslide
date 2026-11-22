@@ -375,10 +375,10 @@ class TextAttribute(Attribute):
 
 @dataclass
 class Justify(Attribute):
-    """``ljust`` / ``rjust`` / ``aligned``: an object attribute, applying
-    to all of the object's strings at once (docs/spec.md SS3.1)."""
+    """``ljust`` / ``rjust``: an object attribute, applying to all of the
+    object's strings at once (docs/spec.md SS3.1)."""
 
-    name: str  # 'ljust', 'rjust', 'aligned'
+    name: str  # 'ljust', 'rjust'
 
 
 @dataclass

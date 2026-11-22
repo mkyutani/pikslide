@@ -43,11 +43,11 @@ written in a `.pik`; see §4.
   first (§3.7), so a program can override them. An undefined name is an
   error. Arithmetic on a color (`primary + 1`) is an error too.
 - **New words are reserved.** The words `shape`, `image`, `include`, `alt`,
-  `theme`, `major`, `medium`, `large`, `lighter`, `darker`, `none`, `off`,
-  and `connector` (unused) are ordinary reserved words: they cannot be
-  used as variable or macro names. Names such as `accent1` are not among
-  them; the prelude defines those as ordinary variables (§3.7). See
-  [grammar.md](grammar.md), *Reserved words*.
+  `theme`, `major`, `medium`, `large`, `lighter`, `darker`, `none` and
+  `off` are ordinary reserved words: they cannot be used as variable or
+  macro names. Names such as `accent1` are not among them; the prelude
+  defines those as ordinary variables (§3.7). See [grammar.md](grammar.md),
+  *Reserved words*.
 - **Text size** is in points, not a percentage (§3.3).
 - **File extension.** Source files use `.pik`, for the syntax-highlighting
   and editor support that extension already carries in the wild.
@@ -216,8 +216,6 @@ arrow from A.e to B.w attach
   as it opens the deck, by its own numbering of a shape's sites: a
   cylinder's (`can`) differs from PowerPoint's, so a line attached to a
   cylinder comes out wrong there, though right in PowerPoint.
-
-`connector`, a reserved word, stays unused.
 
 ### 3.3 Theme colors and fonts
 
@@ -840,6 +838,11 @@ Humans and LLMs both need errors they can act on.
   a fixed-size object stays a warning: it is a fact about the diagram,
   visible in the output itself.
 - A `define` naming an already-defined variable is an **error** (§3.6).
+- A reserved word that isn't supported, `aligned`, `mono` or
+  `monospace`, is an **error** that says so, not a word accepted and
+  ignored: a diagram written with one would look as if it worked. Each
+  can come back later, doing what it says, without breaking a diagram
+  ([grammar.md](grammar.md), *Reserved words*).
 - An operator that takes only part of a macro's argument or body, pasted
   in as text (`5 - $1` with `1 + 1`), is a **warning** naming the call;
   see [grammar.md](grammar.md), *Macros*.

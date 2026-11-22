@@ -844,3 +844,22 @@ def test_stroke_groups_color_and_line_attributes():
 def test_misplaced_or_conflicting_attributes_are_errors(src: str, message: str):
     with pytest.raises(PikSyntaxError, match=re.escape(message)):
         parse(src)
+
+
+@pytest.mark.parametrize(("src", "word"), [
+    ('box "a" mono\n', "mono"),
+    ('"a" monospace bold\n', "monospace"),
+    ('box "a" mono width 1\n', "mono"),
+    ('line "a" above aligned\n', "aligned"),
+    ("arrow from (0, 0) to (1, 1) aligned\n", "aligned"),
+])
+def test_an_unsupported_word_is_an_error_that_says_so(src: str, word: str):
+    # issue #46: accepted and ignored, it would look as if it worked
+    with pytest.raises(PikSyntaxError, match=re.escape(f"'{word}' isn't supported")) as exc:
+        parse(src)
+    assert exc.value.text == word and exc.value.pos == src.index(word)
+
+
+def test_connector_is_not_reserved():
+    doc = parse("connector = 2\nbox width connector\n")
+    assert doc.statements[0] == ast.AssignStatement("connector", "=", ast.Num(2.0))

@@ -9,7 +9,7 @@ import pathlib
 import re
 
 import pytest
-from PIL import Image, ImageChops, ImageFilter, ImageStat
+from PIL import Image, ImageChops, ImageFilter, ImageStat, features
 from pptx import Presentation
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 
@@ -185,6 +185,8 @@ def _docs_fonts_installed() -> bool:
 
 
 @pytest.mark.skipif(not _docs_fonts_installed(), reason="docs/ was drawn in Calibri and MS PGothic, not installed here")
+@pytest.mark.skipif(not features.check("raqm"), reason="without raqm (FriBiDi, which Windows lacks) Pillow leaves out "
+                    "the fonts' kerning, and `fit` makes text a little wider than PowerPoint draws it")
 @pytest.mark.parametrize("pik", _DOCS_PICTURES, ids=lambda p: f"{p.parent.name}/{p.stem}")
 def test_docs_pictures_are_drawn_as_powerpoint_drew_them(pik: pathlib.Path):
     # Blurred a little, so that a line a pixel apart or an edge smoothed

@@ -52,7 +52,6 @@ from .pptx_writer import (
     _is_east_asian,
     _line_label_rects,
     slide_setup,
-    vertical_advance,
 )
 
 DPI = 200
@@ -119,7 +118,7 @@ class _Painter:
     def __init__(self, setup, dpi: int):
         self.tf = setup.tf
         self.colors = setup.theme_colors
-        self.metrics = PilFontMetrics(theme_fonts=setup.theme_fonts)
+        self.metrics = PilFontMetrics(theme_fonts=setup.theme_fonts, kern_from=setup.kern_from)
         self.size = (_pixels(self.tf.slide_width, dpi), _pixels(self.tf.slide_height, dpi))
         self.ss = _SUPERSAMPLE
         while self.ss > 1 and self.size[0] * self.size[1] * self.ss**2 > _MAX_PIXELS:
@@ -247,8 +246,8 @@ class _Painter:
             color = self.rgb(string_color(shape, i) or Color(rgb=0))
             runs = self.metrics.run_fonts(text, flags, shape.text_sizes, shape.typeface, size_px, shape.lang)
             pieces = _wrap(runs, (fb - ft) * self.scale, _column_advance) if wrap and fb > ft else [runs]
-            for column_runs in pieces:
-                length = sum(_column_advance(run) for run in column_runs) / self.scale
+            for column_runs in map(_merged, pieces):
+                length = sum(run.column_length() for run in column_runs) / self.scale
                 if "ljust" in flags:
                     top = ft
                 elif "rjust" in flags:
@@ -282,7 +281,8 @@ class _Painter:
             color = self.rgb(string_color(shape, i) or Color(rgb=0))
             runs = self.metrics.run_fonts(text, flags, shape.text_sizes, shape.typeface, size_px, shape.lang)
             for k, line_runs in enumerate(_wrap(runs, (fr - fl) * self.scale) if wrap and fr > fl else [runs]):
-                width = sum(run.font.getlength(run.text) for run in line_runs) / self.scale
+                line_runs = _merged(line_runs)
+                width = sum(run.length() for run in line_runs) / self.scale
                 if "ljust" in flags:
                     x = fl
                 elif "rjust" in flags:
@@ -447,9 +447,8 @@ class _TextLine:
             # A bold with no bold face, emboldened as PowerPoint does it:
             # thicker to the right, as wide as it was.
             grow = round(run.font.size * _EMBOLDEN / 2) if run.embolden else 0
-            draw.text((x + grow, y), run.text, font=run.font, fill=self.color, anchor="ls",
-                      stroke_width=grow, stroke_fill=self.color)
-            x += run.font.getlength(run.text)
+            _draw_run(draw, (x, y), run, self.color, grow)
+            x += run.length()
 
 
 class _TextColumn:
@@ -476,33 +475,66 @@ class _TextColumn:
             grow = round(run.font.size * _EMBOLDEN / 2) if run.embolden else 0
             if _is_east_asian(run.text[0]):
                 # Upright, a character under the last, in their vertical forms.
-                try:
-                    draw.text((middle, y), run.text, font=run.font, fill=self.color, direction="ttb", anchor="mt",
-                              stroke_width=grow, stroke_fill=self.color)
-                except (KeyError, ValueError, OSError, TypeError):
-                    for k, ch in enumerate(run.text):  # no layout engine for vertical text
-                        draw.text((middle, y + k * run.font.size), ch, font=run.font, fill=self.color, anchor="mt",
-                                  stroke_width=grow, stroke_fill=self.color)
+                advances = run.vertical_advances() or [run.column_length(ch) for ch in run.text]
+                at = y
+                for ch, advance in zip(run.text, advances):
+                    _draw_upright(draw, (middle, at), ch, run, self.color, grow)
+                    at += advance
             else:
                 # Turned a quarter clockwise: the line's top to the column's right.
-                width = run.font.getlength(run.text)
+                width = run.length()
                 tile = Image.new("RGBA", (math.ceil(width) + 2 * grow + 2, max(1, round(right - left))), (0, 0, 0, 0))
                 baseline = self.baseline / self.pitch * tile.height
-                ImageDraw.Draw(tile).text((grow, baseline), run.text, font=run.font, fill=self.color + (255,),
-                                          anchor="ls", stroke_width=grow, stroke_fill=self.color + (255,))
+                _draw_run(ImageDraw.Draw(tile), (0, baseline), run, self.color + (255,), grow)
                 turned = tile.rotate(-90, expand=True)
                 image.paste(turned, (round(left), round(y)), turned)
-            y += _column_advance(run)
+            y += run.column_length()
 
 
 def _column_advance(run: FontRun, text: str | None = None) -> float:
     """How far `text` (the run's own, unless given) advances down a column
-    of vertical text, in its font's pixels: upright if East Asian, turned
-    otherwise."""
-    text = run.text if text is None else text
-    if not text:
-        return 0.0
-    return vertical_advance(run.font, text) if _is_east_asian(text[0]) else run.font.getlength(text)
+    of vertical text, in its font's pixels (FontRun.column_length())."""
+    return run.column_length(text)
+
+
+def _merged(runs: list[FontRun]) -> list[FontRun]:
+    """`runs` with each joined to the one before it in the same font, as
+    a line's pieces are after _wrap(): so that the kerning between them
+    counts."""
+    out: list[FontRun] = []
+    for run in runs:
+        if out and out[-1][1:] == run[1:]:
+            out[-1] = out[-1]._replace(text=out[-1].text + run.text)
+        else:
+            out.append(run)
+    return out
+
+
+def _draw_run(draw: ImageDraw.ImageDraw, xy: tuple[float, float], run: FontRun, fill, grow: int) -> None:
+    """Draw `run` with the left end of its baseline at `xy`, each character
+    where PowerPoint sets it (FontRun.advances()), or where Pillow sets it,
+    the whole at once; emboldened by `grow` pixels."""
+    x, y = xy
+    advances = run.advances()
+    if advances is None:
+        draw.text((x + grow, y), run.text, font=run.font, fill=fill, anchor="ls", stroke_width=grow, stroke_fill=fill)
+        return
+    for ch, advance in zip(run.text, advances):
+        if not ch.isspace():
+            draw.text((x + grow, y), ch, font=run.font, fill=fill, anchor="ls", stroke_width=grow, stroke_fill=fill)
+        x += advance
+
+
+def _draw_upright(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, run: FontRun, fill,
+                  grow: int) -> None:
+    """Draw `text`, East Asian, upright in a column from `xy`, the middle
+    of its top, in its vertical forms -- which only raqm can draw; without
+    it, as it is set horizontally."""
+    try:
+        draw.text(xy, text, font=run.font, fill=fill, direction="ttb", anchor="mt", stroke_width=grow,
+                  stroke_fill=fill)
+    except (KeyError, ValueError, OSError, TypeError):
+        draw.text(xy, text, font=run.font, fill=fill, anchor="mt", stroke_width=grow, stroke_fill=fill)
 
 
 def _pixels(inches: float, dpi: int) -> int:
@@ -548,7 +580,7 @@ def _wrap(runs: list[FontRun], width: float, measure=None) -> list[list[FontRun]
 
     def length(piece: FontRun, text: str | None = None) -> float:
         text = piece.text if text is None else text
-        return measure(piece, text) if measure else piece.font.getlength(text)
+        return measure(piece, text) if measure else piece.length(text)
 
     lines: list[list[FontRun]] = [[]]
     used = 0.0

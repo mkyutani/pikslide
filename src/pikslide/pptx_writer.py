@@ -12,10 +12,12 @@ comments below.
 
 from __future__ import annotations
 
+import functools
 import io
 import math
 import os
 import tempfile
+import unicodedata
 import zipfile
 from dataclasses import dataclass
 from typing import NamedTuple
@@ -33,7 +35,10 @@ from pptx.oxml.xmlchemy import OxmlElement
 from pptx.parts.image import ImagePart
 from pptx.util import Emu, Inches, Pt
 
-from .fonts import FontIndex, ThemeFonts, glyph_coverage, installed_fonts, powerpoint_sees, theme_fonts_from_xml
+from .fonts import (
+    FontIndex, GlyphMetrics, ThemeFonts, glyph_coverage, glyph_metrics, installed_fonts, powerpoint_sees,
+    theme_fonts_from_xml,
+)
 from .pik import ast
 from .pik.layout import (
     _FRAMED_TEXT_KINDS,
@@ -258,18 +263,95 @@ class FontRun(NamedTuple):
     embolden: bool
     """Bold asked for, of a font with no bold face: PowerPoint draws it
     emboldened."""
+    glyphs: GlyphMetrics | None = None
+    """How far the font's glyphs advance, as PowerPoint sets them (issue
+    #49); None where Pillow sets the text instead: in its own font, one
+    that can't be read, or text that needs shaping (_needs_shaping())."""
+    kern: bool = False
+    """Whether it's kerned: Latin text at the deck's kerning size or more."""
+
+    def advances(self, text: str | None = None) -> list[float] | None:
+        """How far each character of `text` (the run's own, unless given)
+        advances, in the font's pixels; None where Pillow sets it whole."""
+        text = self.text if text is None else text
+        if self.glyphs is None:
+            return None
+        return [a * self.font.size for a in self.glyphs.advances(text, self.kern)]
+
+    def length(self, text: str | None = None) -> float:
+        """How wide `text` (the run's own, unless given) is, in the font's
+        pixels."""
+        text = self.text if text is None else text
+        advances = self.advances(text)
+        return sum(advances) if advances is not None else self.font.getlength(text)
+
+    def vertical_advances(self, text: str | None = None) -> list[float] | None:
+        """How far each character of `text` (the run's own, unless given)
+        advances set upright in a column, in the font's pixels; None where
+        Pillow sets it whole."""
+        text = self.text if text is None else text
+        if self.glyphs is None:
+            return None
+        return [a * self.font.size for a in self.glyphs.vertical_advances(text)]
+
+    def column_length(self, text: str | None = None) -> float:
+        """How far `text` (the run's own, unless given) advances down a
+        column of vertical text, in the font's pixels: upright if East
+        Asian, turned otherwise."""
+        text = self.text if text is None else text
+        if not text:
+            return 0.0
+        if not _is_east_asian(text[0]):
+            return self.length(text)
+        advances = self.vertical_advances(text)
+        return sum(advances) if advances is not None else vertical_advance(self.font, text)
+
+
+def _needs_shaping(text: str) -> bool:
+    """Whether `text` is in a script whose characters change with their
+    neighbours -- right to left, or with combining marks (Arabic, Hebrew,
+    the Indic scripts, Thai) -- which Pillow sets whole, through raqm where
+    it has it, rather than pikslide character by character."""
+    return any(unicodedata.bidirectional(ch) in ("R", "AL", "AN") or unicodedata.category(ch) in ("Mn", "Mc", "Me")
+               for ch in text)
+
+
+@functools.lru_cache(maxsize=1)
+def default_kern_from() -> float:
+    """The built-in Office theme's kerning size (master_kern_from())."""
+    return master_kern_from(Presentation().slide_masters[0])
+
+
+def master_kern_from(master) -> float:
+    """The text size, in points, from which PowerPoint kerns a diagram's
+    text on a slide of `master` (issue #49): the `kern` of the
+    presentation's default text style, else of the master's text style
+    for shapes (`otherStyle`), in hundredths of a point -- 12pt in the
+    built-in template; with neither, every size."""
+    styles = (master.part.package.presentation_part._element.find(qn("p:defaultTextStyle")),
+              master._element.find(f"{qn('p:txStyles')}/{qn('p:otherStyle')}"))
+    for style in styles:
+        rpr = style.find(f"{qn('a:lvl1pPr')}/{qn('a:defRPr')}") if style is not None else None
+        if rpr is not None and rpr.get("kern") is not None:
+            return int(rpr.get("kern")) / 100
+    return 0.0
 
 
 class PilFontMetrics:
     """A pikslide.pik.layout.FontMetrics that measures with the fonts the
-    deck will actually be drawn in (docs/spec.md SS3.3), via Pillow: the
-    object's `typeface`, else the theme's body font (its heading font for
-    `major`) -- the Latin one for Latin text and the East Asian one for
-    CJK, as PowerPoint picks per character -- in the bold/italic face the
-    flags ask for. Each is looked up among this machine's installed fonts
+    deck will actually be drawn in (docs/spec.md SS3.3): the object's
+    `typeface`, else the theme's body font (its heading font for `major`)
+    -- the Latin one for Latin text and the East Asian one for CJK, as
+    PowerPoint picks per character -- in the bold/italic face the flags
+    ask for. Each is looked up among this machine's installed fonts
     (pikslide.fonts); one that isn't installed is measured with a
     substitute instead (_MEASURE_FONT_CANDIDATES), or with none of those
     either, Pillow's own font, and named in `.missing`.
+
+    Text is set as PowerPoint sets it (issue #49), the same with raqm or
+    without: each glyph's own advance, the kerning of Latin text at
+    `kern_from` points (the deck's, master_kern_from()) and more, no
+    ligatures (fonts.GlyphMetrics).
     """
 
     def __init__(
@@ -277,11 +359,13 @@ class PilFontMetrics:
         text_sizes: dict[str, float] | None = None,
         theme_fonts: ThemeFonts | None = None,
         font_index: FontIndex | None = None,
+        kern_from: float | None = None,
     ):
         # inches, keyed "small"/"medium"/"large" -- docs/spec.md SS3.3/SS3.7.
         self._text_sizes = text_sizes if text_sizes is not None else default_text_sizes()
         self._theme_fonts = theme_fonts if theme_fonts is not None else default_theme_fonts()
         self._index = font_index if font_index is not None else installed_fonts()
+        self.kern_from = kern_from if kern_from is not None else default_kern_from()
         self.substitute = _find_measure_font()
         self._cache: dict[tuple, ImageFont.FreeTypeFont] = {}
         self._faces: dict[tuple, tuple[str, int] | None] = {}
@@ -339,6 +423,24 @@ class PilFontMetrics:
             self._cache[key] = font
         return self._cache[key]
 
+    def _runs(self, text: str, flags: list[str], text_sizes: dict[str, float] | None, typeface: str, size_px: int,
+              lang: str) -> list[FontRun]:
+        """`text` in runs of East Asian and other characters, each in the
+        font it's set in at `size_px` pixels to the em."""
+        latin, ea = self._families(flags, typeface, text, lang)
+        bold, italic = "bold" in flags, "italic" in flags
+        kern = self._size_pt(flags, text_sizes) >= self.kern_from
+        out = []
+        for is_ea, run in _script_runs(text):
+            family = ea if is_ea else latin
+            font = self._font(family, bold, italic, size_px)
+            face = self._faces[(family, bold, italic, size_px)]
+            found = self._index.find(family, bold, italic) if family else None
+            embolden = bold and not (found.bold if found is not None else False)
+            glyphs = glyph_metrics(*face) if face is not None and not _needs_shaping(run) else None
+            out.append(FontRun(run, font, face, embolden, glyphs, kern and not is_ea))
+        return out
+
     def run_fonts(
         self, text: str, flags: list[str], text_sizes: dict[str, float] | None, typeface: str, size_px: int,
         lang: str = DEFAULT_LANG,
@@ -346,16 +448,7 @@ class PilFontMetrics:
         """`text` in runs, each with the font it's drawn in at `size_px`
         pixels to the em, as text_width() measures it: for --renderer
         direct to draw text where `fit` made room for it."""
-        latin, ea = self._families(flags, typeface, text, lang)
-        bold, italic = "bold" in flags, "italic" in flags
-        out = []
-        for is_ea, run in _script_runs(text):
-            family = ea if is_ea else latin
-            font = self._font(family, bold, italic, size_px)
-            face = self._index.find(family, bold, italic) if family else None
-            embolden = bold and not (face.bold if face is not None else False)
-            out.append(FontRun(run, font, self._faces[(family, bold, italic, size_px)], embolden))
-        return out
+        return self._runs(text, flags, text_sizes, typeface, size_px, lang)
 
     def missing_glyphs(
         self, text: str, flags: list[str], typeface: str, lang: str = DEFAULT_LANG
@@ -389,13 +482,8 @@ class PilFontMetrics:
         self, text: str, flags: list[str] = (), text_sizes: dict[str, float] | None = None, typeface: str = "",
         lang: str = DEFAULT_LANG,
     ) -> float:
-        size_pt = self._size_pt(flags, text_sizes)
-        size_px = max(1, round(size_pt * _MEASURE_SCALE))
-        latin, ea = self._families(flags, typeface, text, lang)
-        bold, italic = "bold" in flags, "italic" in flags
-        px = 0.0
-        for is_ea, run in _script_runs(text):
-            px += self._font(ea if is_ea else latin, bold, italic, size_px).getlength(run)
+        size_px = max(1, round(self._size_pt(flags, text_sizes) * _MEASURE_SCALE))
+        px = sum(run.length() for run in self._runs(text, flags, text_sizes, typeface, size_px, lang))
         return px / _MEASURE_SCALE / 72.0
 
     def line_height(self, flags: list[str] = (), text_sizes: dict[str, float] | None = None) -> float:
@@ -406,22 +494,18 @@ class PilFontMetrics:
         lang: str = DEFAULT_LANG,
     ) -> float:
         """Length, in inches, of `text` set vertically (`vertical`, issue
-        #36): an East Asian character's vertical advance, as its font's
-        vertical metrics give it, and any other's width, turned a quarter."""
+        #36): an East Asian character's vertical advance, in its vertical
+        form, and any other's width, turned a quarter."""
         size_px = max(1, round(self._size_pt(flags, text_sizes) * _MEASURE_SCALE))
-        latin, ea = self._families(flags, typeface, text, lang)
-        bold, italic = "bold" in flags, "italic" in flags
-        px = 0.0
-        for is_ea, run in _script_runs(text):
-            font = self._font(ea if is_ea else latin, bold, italic, size_px)
-            px += vertical_advance(font, run) if is_ea else font.getlength(run)
+        px = sum(run.column_length() for run in self._runs(text, flags, text_sizes, typeface, size_px, lang))
         return px / _MEASURE_SCALE / 72.0
 
 
 def vertical_advance(font: ImageFont.FreeTypeFont, text: str) -> float:
     """How far `text`, East Asian, advances set vertically, in `font`'s
-    pixels: its vertical metrics, through Pillow's layout engine (raqm),
-    or where that can't, a square to each character."""
+    pixels, where Pillow sets it (FontRun.glyphs is None): its vertical
+    metrics, through raqm, or where that can't, a square to each
+    character."""
     try:
         return font.getlength(text, direction="ttb")
     except (KeyError, ValueError, OSError, TypeError):
@@ -477,7 +561,8 @@ def resolve_for_pptx(
         try:
             layout = _resolve_template_layout(prs, layout_name)
             master = layout.slide_master
-            metrics = PilFontMetrics(theme_fonts=_master_theme_fonts(master), font_index=font_index)
+            metrics = PilFontMetrics(theme_fonts=_master_theme_fonts(master), font_index=font_index,
+                                     kern_from=master_kern_from(master))
             result = resolve_layout(
                 doc, metrics=metrics, base_dir=base_dir, **settings,
                 template_defaults=template_defaults_from_xml(_master_theme_xml(master)),
@@ -1702,6 +1787,9 @@ class SlideSetup:
     theme_colors: dict[str, int]
     placeholders: list[str]
     """The placeholders it keeps beside the diagram."""
+    kern_from: float = 12.0
+    """The text size, in points, from which its text is kerned
+    (master_kern_from())."""
 
 
 def slide_setup(result: LayoutResult, template_path: str | None = None, layout_name: str = "") -> SlideSetup:
@@ -1713,7 +1801,7 @@ def slide_setup(result: LayoutResult, template_path: str | None = None, layout_n
     `layout_name` names the layout. Nothing else goes on it."""
     if template_path is None:
         tf = _Transform(_content_bbox(result), _SLIDE_MARGIN)
-        return SlideSetup(tf, default_theme_fonts(), default_theme_colors(), [])
+        return SlideSetup(tf, default_theme_fonts(), default_theme_colors(), [], default_kern_from())
     prs, tmp_path = _open_template_base(template_path)
     try:
         layout = _resolve_template_layout(prs, layout_name)
@@ -1724,7 +1812,8 @@ def slide_setup(result: LayoutResult, template_path: str | None = None, layout_n
         if layout_name:
             placeholders = [p.name for p in layout.iter_cloneable_placeholders() if not _is_content(p)]
         master = layout.slide_master
-        return SlideSetup(tf, _master_theme_fonts(master), _master_theme_colors(master), placeholders)
+        return SlideSetup(tf, _master_theme_fonts(master), _master_theme_colors(master), placeholders,
+                          master_kern_from(master))
     finally:
         if tmp_path is not None:
             os.remove(tmp_path)

@@ -9,7 +9,7 @@ import pathlib
 import re
 
 import pytest
-from PIL import Image, ImageChops, ImageFilter, ImageStat, features
+from PIL import Image, ImageChops, ImageFilter, ImageStat
 from pptx import Presentation
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 
@@ -119,6 +119,22 @@ def test_text_is_drawn_with_no_font_file_at_all(monkeypatch):
     assert sum(1 for v in image.get_flattened_data() if v < 128) > 100
 
 
+def test_text_is_drawn_where_fit_set_it_kerned_from_12pt():
+    # issue #49: each character where PowerPoint sets it, raqm or not --
+    # kerned at 12pt and more, as the built-in template's text style says.
+    from pikslide.fonts import glyph_metrics, installed_fonts
+
+    face = installed_fonts().find("DejaVu Sans")
+    if face is None:
+        pytest.skip("DejaVu Sans not installed")
+    glyphs = glyph_metrics(face.path, face.index)
+    for pt, kern in ((10.5, False), (40, True)):
+        image = _draw(f'medium = {pt}pt\ntypeface = "DejaVu Sans"\ntext "AVAVAVAV" ljust at (0, 0)\n').convert("L")
+        left, _top, right, _bottom = ImageChops.invert(image).getbbox()
+        kerned, plain = (sum(glyphs.advances("AVAVAVAV", k)) * pt / 72 * 200 for k in (True, False))
+        assert abs((right - left) - (kerned if kern else plain)) < (plain - kerned) / 4
+
+
 def test_east_asian_text_is_drawn_in_the_theme_font_for_its_language(monkeypatch):
     # issue #44: an object's text, and a line's label, in the `lang` it was
     # written with -- here simplified Chinese, the theme's 宋体.
@@ -211,8 +227,6 @@ def _docs_fonts_installed() -> bool:
 
 
 @pytest.mark.skipif(not _docs_fonts_installed(), reason="docs/ was drawn in Calibri and MS PGothic, not installed here")
-@pytest.mark.skipif(not features.check("raqm"), reason="without raqm (FriBiDi, which Windows lacks) Pillow leaves out "
-                    "the fonts' kerning, and `fit` makes text a little wider than PowerPoint draws it")
 @pytest.mark.parametrize("pik", _DOCS_PICTURES, ids=lambda p: f"{p.parent.name}/{p.stem}")
 def test_docs_pictures_are_drawn_as_powerpoint_drew_them(pik: pathlib.Path):
     # Blurred a little, so that a line a pixel apart or an edge smoothed

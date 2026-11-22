@@ -12,6 +12,7 @@ are the cloud fonts Office downloads, which it draws with too.
 
 from __future__ import annotations
 
+import functools
 import glob
 import io
 import json
@@ -184,57 +185,68 @@ def baseline_ratio(path: str, index: int = 0) -> float:
     return 0.96
 
 
+def _read_tables(path: str, index: int, tags: tuple[bytes, ...]) -> dict[bytes, bytes]:
+    """The tables named `tags` the font at `path` (`index` in a collection)
+    has, by tag. Raises OSError or struct.error where it can't be read."""
+    out = {}
+    with open(path, "rb") as f:
+        offset = 0
+        if f.read(4) == b"ttcf":
+            f.seek(12 + 4 * index)
+            offset = struct.unpack(">I", f.read(4))[0]
+        f.seek(offset + 4)
+        num_tables = struct.unpack(">H", f.read(2))[0]
+        f.seek(offset + 12)
+        directory = f.read(16 * num_tables)
+        for i in range(num_tables):
+            tag, _checksum, t_offset, t_length = struct.unpack_from(">4sIII", directory, 16 * i)
+            if tag in tags:
+                f.seek(t_offset)
+                out[tag] = f.read(t_length)
+    return out
+
+
+def _char_glyphs(cmap: bytes) -> dict[int, int]:
+    """Each code point's glyph, from the `cmap` table `cmap`: its
+    full-repertoire subtable (format 12) if it has one, else its BMP one
+    (format 4). Raises struct.error where it can't be read."""
+    _version, count = struct.unpack_from(">HH", cmap, 0)
+    subtables = {}
+    for i in range(count):
+        platform_id, encoding_id, sub_offset = struct.unpack_from(">HHI", cmap, 4 + 8 * i)
+        fmt = struct.unpack_from(">H", cmap, sub_offset)[0]
+        subtables.setdefault((fmt, platform_id, encoding_id), sub_offset)
+    for (fmt, platform_id, encoding_id), sub_offset in subtables.items():
+        if fmt == 12 and (platform_id, encoding_id) in ((3, 10), (0, 4), (0, 6)):
+            return dict(_format12(cmap, sub_offset))
+    for (fmt, platform_id, encoding_id), sub_offset in subtables.items():
+        if fmt == 4 and (platform_id == 0 or (platform_id, encoding_id) == (3, 1)):
+            return dict(_format4(cmap, sub_offset))
+    return {}
+
+
 def glyph_coverage(path: str, index: int = 0) -> frozenset[int]:
     """The code points the font at `path` (`index` in a collection) has a
-    glyph for, from its `cmap` table: the full-repertoire subtable
-    (format 12) if it has one, else the BMP one (format 4). Empty when the
-    font can't be read."""
+    glyph for, from its `cmap` table (_char_glyphs()). Empty when the font
+    can't be read."""
     try:
-        with open(path, "rb") as f:
-            offset = 0
-            if f.read(4) == b"ttcf":
-                f.seek(12 + 4 * index)
-                offset = struct.unpack(">I", f.read(4))[0]
-            f.seek(offset + 4)
-            num_tables = struct.unpack(">H", f.read(2))[0]
-            f.seek(offset + 12)
-            directory = f.read(16 * num_tables)
-            tables = {}
-            for i in range(num_tables):
-                tag, _checksum, t_offset, t_length = struct.unpack_from(">4sIII", directory, 16 * i)
-                tables[tag] = (t_offset, t_length)
-            if b"cmap" not in tables:
-                return frozenset()
-            f.seek(tables[b"cmap"][0])
-            cmap = f.read(tables[b"cmap"][1])
+        tables = _read_tables(path, index, (b"cmap",))
+        return frozenset(_char_glyphs(tables[b"cmap"])) if b"cmap" in tables else frozenset()
     except (OSError, struct.error):
         return frozenset()
-    try:
-        _version, count = struct.unpack_from(">HH", cmap, 0)
-        subtables = {}
-        for i in range(count):
-            platform_id, encoding_id, sub_offset = struct.unpack_from(">HHI", cmap, 4 + 8 * i)
-            fmt = struct.unpack_from(">H", cmap, sub_offset)[0]
-            subtables.setdefault((fmt, platform_id, encoding_id), sub_offset)
-        for (fmt, platform_id, encoding_id), sub_offset in sorted(subtables.items(), key=lambda kv: kv[0][0] != 12):
-            if fmt == 12 and (platform_id, encoding_id) in ((3, 10), (0, 4), (0, 6)):
-                return frozenset(_format12(cmap, sub_offset))
-        for (fmt, platform_id, encoding_id), sub_offset in subtables.items():
-            if fmt == 4 and (platform_id == 0 or (platform_id, encoding_id) == (3, 1)):
-                return frozenset(_format4(cmap, sub_offset))
-    except struct.error:
-        pass
-    return frozenset()
 
 
 def _format12(cmap: bytes, at: int):
+    """Each (code point, glyph) of the format 12 cmap subtable at `at`."""
     n_groups = struct.unpack_from(">I", cmap, at + 12)[0]
     for g in range(n_groups):
         start, end, glyph = struct.unpack_from(">III", cmap, at + 16 + 12 * g)
-        yield from range(start + (glyph == 0), end + 1)
+        for c in range(start + (glyph == 0), end + 1):
+            yield c, glyph + c - start
 
 
 def _format4(cmap: bytes, at: int):
+    """Each (code point, glyph) of the format 4 cmap subtable at `at`."""
     seg_count = struct.unpack_from(">H", cmap, at + 6)[0] // 2
     ends = struct.unpack_from(f">{seg_count}H", cmap, at + 14)
     starts = struct.unpack_from(f">{seg_count}H", cmap, at + 16 + 2 * seg_count)
@@ -249,7 +261,290 @@ def _format4(cmap: bytes, at: int):
                 glyph = struct.unpack_from(">H", cmap, range_at + 2 * i + range_offset + 2 * (c - start))[0]
                 glyph = (glyph + delta) & 0xFFFF if glyph else 0
             if glyph:
-                yield c
+                yield c, glyph
+
+
+# ---------------------------------------------------------------------------
+# How far glyphs advance, as PowerPoint sets text (issue #49)
+# ---------------------------------------------------------------------------
+
+
+class GlyphMetrics:
+    """How far the glyphs of one font advance, as PowerPoint sets them,
+    in ems: each glyph's own advance, unrounded (`hmtx`), and the kerning
+    between two, from the `kern` feature of the font's GPOS table, or
+    where that has none its `kern` table; no ligatures, which PowerPoint
+    doesn't set (checked). Set vertically, a character's vertical form
+    (GSUB's `vert` feature) and its advance (`vmtx`, or with none the
+    font's height, as FreeType has it), unkerned, as raqm sets it.
+    Read with glyph_metrics()."""
+
+    def __init__(self, tables: dict[bytes, bytes]):
+        self._upem = struct.unpack_from(">H", tables[b"head"], 18)[0]
+        self._glyphs = _char_glyphs(tables[b"cmap"])
+        self._h = _long_metrics(tables[b"hhea"], tables[b"hmtx"])
+        if b"vhea" in tables and b"vmtx" in tables:
+            self._v = _long_metrics(tables[b"vhea"], tables[b"vmtx"])
+        else:
+            height = _font_height(tables.get(b"OS/2"), tables[b"hhea"])
+            self._v = lambda _glyph: height
+        gpos, gsub = tables.get(b"GPOS"), tables.get(b"GSUB")
+        self._kerning = _Kerning(gpos, tables.get(b"kern"))
+        try:
+            self._vertical_forms = _single_substitutions(gsub, _EAST_ASIAN, b"vert") if gsub else {}
+        except struct.error:
+            self._vertical_forms = {}
+
+    def advances(self, text: str, kern: bool) -> list[float]:
+        """How far each character of `text` advances, in ems, with the
+        kerning between it and the next added to it if `kern`."""
+        glyphs = [self._glyphs.get(ord(ch), 0) for ch in text]
+        units = [self._h(g) for g in glyphs]
+        if kern:
+            for i, (left, right) in enumerate(zip(glyphs, glyphs[1:])):
+                units[i] += self._kerning(left, right)
+        return [u / self._upem for u in units]
+
+    def vertical_advances(self, text: str) -> list[float]:
+        """How far each character of `text` advances set upright in a
+        column, in ems, in its vertical form."""
+        glyphs = [self._glyphs.get(ord(ch), 0) for ch in text]
+        return [self._v(self._vertical_forms.get(g, g)) / self._upem for g in glyphs]
+
+
+# The scripts a feature is taken from, the first a font has: for Latin
+# text, and for East Asian text set vertically.
+_LATIN = (b"latn", b"DFLT")
+_EAST_ASIAN = (b"kana", b"hani", b"hang", b"DFLT")
+
+
+def _long_metrics(header: bytes, metrics: bytes):
+    """A glyph's advance from an `hmtx` (or `vmtx`) table, whose `hhea`
+    (`vhea`) table is `header`: the glyphs after the last long metric
+    advance as far as it."""
+    count = struct.unpack_from(">H", header, 34)[0]
+    advances = struct.unpack_from(f">{2 * count}H", metrics)[0::2]  # (advance, side bearing) pairs
+
+    def advance(glyph: int) -> int:
+        return advances[min(glyph, count - 1)] if count else 0
+
+    return advance
+
+
+def _font_height(os2: bytes | None, hhea: bytes) -> int:
+    """How far a glyph advances set vertically in a font with no vertical
+    metrics, as FreeType has it: its OS/2 typographic ascender less its
+    descender, else its `hhea` ones."""
+    try:
+        if os2:
+            ascender, descender = struct.unpack_from(">hh", os2, 68)
+            return ascender - descender
+    except struct.error:
+        pass
+    ascender, descender = struct.unpack_from(">hh", hhea, 4)
+    return ascender - descender
+
+
+class _Kerning:
+    """The kerning between two glyphs, in font units: the pair adjustments
+    (lookup type 2) of the `kern` feature of the GPOS table `gpos`, for
+    Latin text; where it has none, the horizontal pairs of the `kern`
+    table `kern`, as HarfBuzz does. A table that can't be read kerns
+    nothing."""
+
+    def __init__(self, gpos: bytes | None, kern: bytes | None):
+        self._gpos = gpos or b""
+        self._lookups: list[list[tuple]] = []
+        self._pairs: dict[tuple[int, int], int] = {}
+        self._cache: dict[tuple[int, int], int] = {}
+        try:
+            if gpos:
+                self._lookups = [[_pair_subtable(gpos, at) for at in _subtables(gpos, index, 2, 9)]
+                                 for index in _feature_lookups(gpos, _LATIN, b"kern")]
+            if not self._lookups and kern:
+                self._pairs = _kern_table_pairs(kern)
+        except struct.error:
+            self._lookups, self._pairs = [], {}
+
+    def __call__(self, first: int, second: int) -> int:
+        key = (first, second)
+        if key not in self._cache:
+            if self._lookups:
+                try:
+                    self._cache[key] = sum(_pair_adjustment(self._gpos, subtables, first, second)
+                                           for subtables in self._lookups)
+                except struct.error:
+                    self._cache[key] = 0
+            else:
+                self._cache[key] = self._pairs.get(key, 0)
+        return self._cache[key]
+
+
+def _feature_lookups(table: bytes, scripts: tuple[bytes, ...], feature: bytes) -> list[int]:
+    """The lookups, in order, of `feature` in the GSUB or GPOS `table`,
+    for the default language of the first of `scripts` it has."""
+    _major, _minor, script_list, feature_list, _lookup_list = struct.unpack_from(">HHHHH", table, 0)
+    found = {}
+    for i in range(struct.unpack_from(">H", table, script_list)[0]):
+        tag, offset = struct.unpack_from(">4sH", table, script_list + 2 + 6 * i)
+        found[tag] = script_list + offset
+    features = ()
+    for tag in scripts:
+        if tag in found and (default := struct.unpack_from(">H", table, found[tag])[0]):
+            lang_sys = found[tag] + default
+            count = struct.unpack_from(">H", table, lang_sys + 4)[0]
+            features = struct.unpack_from(f">{count}H", table, lang_sys + 6)
+            break
+    lookups = set()
+    for index in features:
+        tag, offset = struct.unpack_from(">4sH", table, feature_list + 2 + 6 * index)
+        if tag == feature:
+            count = struct.unpack_from(">H", table, feature_list + offset + 2)[0]
+            lookups.update(struct.unpack_from(f">{count}H", table, feature_list + offset + 4))
+    return sorted(lookups)
+
+
+def _subtables(table: bytes, index: int, kind: int, extension: int) -> list[int]:
+    """Where the subtables of lookup `index` of the GSUB or GPOS `table`
+    are, those of lookup type `kind`, an `extension` lookup's included."""
+    lookup_list = struct.unpack_from(">H", table, 8)[0]
+    lookup = lookup_list + struct.unpack_from(">H", table, lookup_list + 2 + 2 * index)[0]
+    lookup_type, _flag, count = struct.unpack_from(">HHH", table, lookup)
+    out = []
+    for k in range(count):
+        at = lookup + struct.unpack_from(">H", table, lookup + 6 + 2 * k)[0]
+        this = lookup_type
+        if this == extension:  # the subtable is further on
+            _format, this, offset = struct.unpack_from(">HHI", table, at)
+            at += offset
+        if this == kind:
+            out.append(at)
+    return out
+
+
+def _single_substitutions(gsub: bytes, scripts: tuple[bytes, ...], feature: bytes) -> dict[int, int]:
+    """The glyph each glyph becomes under `feature`'s single substitutions
+    (GSUB lookup type 1) -- the first lookup's that has it."""
+    out: dict[int, int] = {}
+    for index in _feature_lookups(gsub, scripts, feature):
+        for at in _subtables(gsub, index, 1, 7):
+            fmt, coverage = struct.unpack_from(">HH", gsub, at)
+            covered = _coverage(gsub, at + coverage)
+            if fmt == 1:
+                delta = struct.unpack_from(">h", gsub, at + 4)[0]
+                substitutes = {glyph: (glyph + delta) & 0xFFFF for glyph in covered}
+            else:
+                count = struct.unpack_from(">H", gsub, at + 4)[0]
+                array = struct.unpack_from(f">{count}H", gsub, at + 6)
+                substitutes = {glyph: array[i] for glyph, i in covered.items() if i < count}
+            for glyph, substitute in substitutes.items():
+                out.setdefault(glyph, substitute)
+    return out
+
+
+def _pair_subtable(gpos: bytes, at: int) -> tuple:
+    """A pair adjustment subtable: its format, the glyphs it covers, its
+    two value formats and its offset, and for format 2 its two class
+    definitions and its second class count."""
+    fmt, coverage, value1, value2 = struct.unpack_from(">HHHH", gpos, at)
+    covered = _coverage(gpos, at + coverage)
+    if fmt == 2:
+        class_def1, class_def2, _class1_count, class2_count = struct.unpack_from(">HHHH", gpos, at + 8)
+        return (2, covered, value1, value2, at, _class_def(gpos, at + class_def1), _class_def(gpos, at + class_def2),
+                class2_count)
+    return (fmt, covered, value1, value2, at, None, None, 0)
+
+
+def _pair_adjustment(gpos: bytes, subtables: list[tuple], first: int, second: int) -> int:
+    """How much one lookup's subtables change the advance between `first`
+    and `second`: the first subtable that has the pair, or for format 2
+    covers `first`, gives both glyphs' XAdvance."""
+    for fmt, covered, value1, value2, at, classes1, classes2, class2_count in subtables:
+        if first not in covered:
+            continue
+        size1, size2 = _value_size(value1), _value_size(value2)
+        if fmt == 1:
+            pair_set = at + struct.unpack_from(">H", gpos, at + 10 + 2 * covered[first])[0]
+            record = 2 + size1 + size2
+            for r in range(struct.unpack_from(">H", gpos, pair_set)[0]):
+                here = pair_set + 2 + record * r
+                if struct.unpack_from(">H", gpos, here)[0] == second:
+                    return _x_advance(gpos, here + 2, value1) + _x_advance(gpos, here + 2 + size1, value2)
+        elif fmt == 2:
+            here = at + 16 + (classes1.get(first, 0) * class2_count + classes2.get(second, 0)) * (size1 + size2)
+            return _x_advance(gpos, here, value1) + _x_advance(gpos, here + size1, value2)
+    return 0
+
+
+def _value_size(value_format: int) -> int:
+    return 2 * bin(value_format & 0xFF).count("1")
+
+
+def _x_advance(data: bytes, at: int, value_format: int) -> int:
+    """The XAdvance of the value record at `at`, of `value_format`."""
+    if not value_format & 0x4:
+        return 0
+    return struct.unpack_from(">h", data, at + 2 * bin(value_format & 0x3).count("1"))[0]
+
+
+def _coverage(data: bytes, at: int) -> dict[int, int]:
+    """A coverage table: each glyph it covers, and its index."""
+    fmt, count = struct.unpack_from(">HH", data, at)
+    if fmt == 1:
+        return {glyph: i for i, glyph in enumerate(struct.unpack_from(f">{count}H", data, at + 4))}
+    out = {}
+    for r in range(count):
+        start, end, first = struct.unpack_from(">HHH", data, at + 4 + 6 * r)
+        for glyph in range(start, end + 1):
+            out[glyph] = first + glyph - start
+    return out
+
+
+def _class_def(data: bytes, at: int) -> dict[int, int]:
+    """A class definition table: each glyph's class, but class 0's."""
+    fmt = struct.unpack_from(">H", data, at)[0]
+    out = {}
+    if fmt == 1:
+        start, count = struct.unpack_from(">HH", data, at + 2)
+        for i, value in enumerate(struct.unpack_from(f">{count}H", data, at + 6)):
+            out[start + i] = value
+    elif fmt == 2:
+        for r in range(struct.unpack_from(">H", data, at + 2)[0]):
+            start, end, value = struct.unpack_from(">HHH", data, at + 4 + 6 * r)
+            for glyph in range(start, end + 1):
+                out[glyph] = value
+    return out
+
+
+def _kern_table_pairs(kern: bytes) -> dict[tuple[int, int], int]:
+    """The horizontal kerning pairs of a `kern` table's format 0
+    subtables (the OpenType version; Apple's is passed over)."""
+    version, count = struct.unpack_from(">HH", kern, 0)
+    if version != 0:
+        return {}
+    pairs: dict[tuple[int, int], int] = {}
+    at = 4
+    for _ in range(count):
+        _sub_version, length, coverage = struct.unpack_from(">HHH", kern, at)
+        # horizontal, not minimum values nor cross-stream, format 0
+        if coverage & 0x7 == 0x1 and coverage >> 8 == 0:
+            n_pairs = struct.unpack_from(">H", kern, at + 6)[0]
+            for p in range(n_pairs):
+                left, right, value = struct.unpack_from(">HHh", kern, at + 14 + 6 * p)
+                pairs[(left, right)] = pairs.get((left, right), 0) + value
+        at += length
+    return pairs
+
+
+@functools.lru_cache(maxsize=64)
+def glyph_metrics(path: str, index: int = 0) -> GlyphMetrics | None:
+    """The GlyphMetrics of the font at `path` (`index` in a collection);
+    None where it can't be read."""
+    tags = (b"head", b"cmap", b"hhea", b"hmtx", b"vhea", b"vmtx", b"OS/2", b"GPOS", b"GSUB", b"kern")
+    try:
+        return GlyphMetrics(_read_tables(path, index, tags))
+    except (OSError, struct.error, KeyError):
+        return None
 
 
 def powerpoint_sees(path: str) -> bool:

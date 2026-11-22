@@ -486,6 +486,15 @@ def test_a_languages_theme_script(language: str, script: str):
     assert _language_script(language) == script
 
 
+def test_text_that_needs_shaping_is_set_by_pillow():
+    # issue #49: pikslide sets text a character at a time, but not where
+    # characters change with their neighbours.
+    from pikslide.pptx_writer import _needs_shaping
+
+    assert all(map(_needs_shaping, ["مرحبا", "שלום", "नमस्ते", "ที่นี่"]))
+    assert not any(map(_needs_shaping, ["AVATAR Toyota", "日本語のテキスト、です。", "한국어 텍스트", "Ελληνικά"]))
+
+
 class _RecordingIndex:
     """Finds no font, and records each family asked for."""
 

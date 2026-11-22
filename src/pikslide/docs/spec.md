@@ -351,6 +351,18 @@ choice for the script of the text's language (below): `Jpan` for
 Japanese, `Hang` for Korean, `Hans` and `Hant` for simplified and
 traditional Chinese. `bold` and `italic` use those faces.
 
+It sets the text as PowerPoint does (checked): each character as far as
+its font advances it, with no ligatures (`ffi` is three letters); Latin
+text kerned only from the deck's kerning size up, the `kern` of its text
+style (12 pt in the built-in template; a `--template`'s own), so the
+default 10.5 pt text is not kerned; set vertically, each East Asian
+character in its vertical form, as far as the font advances that. It
+reads all this from the font itself, so it measures the same on every
+platform, and `--renderer direct` draws each character where it set it.
+Text that changes with its neighbours (right to left, or with combining
+marks, as Arabic, Hebrew, the Indic scripts and Thai) is set by Pillow
+instead.
+
 - **Fonts are found by name** among the fonts installed on the machine,
   including a localized name such as `游ゴシック`. Under WSL the Windows
   fonts are searched too, since PowerPoint draws with those. On Windows and

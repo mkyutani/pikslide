@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import pathlib
 import shutil
+import struct
 import sys
 import zipfile
 
@@ -293,3 +294,142 @@ def test_a_cloud_font_is_found_by_its_family(dejavu_dir: pathlib.Path, tmp_path:
     family.mkdir(parents=True)
     shutil.copy(dejavu_dir / "DejaVuSans.ttf", family / "30876484867.ttf")
     assert FontIndex(dirs=[str(tmp_path / "CloudFonts")]).find("DejaVu Sans").path == str(family / "30876484867.ttf")
+
+
+# ---------------------------------------------------------------------------
+# Text set as PowerPoint sets it, raqm or not (issue #49)
+# ---------------------------------------------------------------------------
+
+
+def _layout_table(script: bytes, feature: bytes, lookup_type: int, subtable: bytes) -> bytes:
+    """A GSUB or GPOS table with one script, whose default language has one
+    feature, of one lookup, of one subtable."""
+    scripts = struct.pack(">H4sH", 1, script, 8) + struct.pack(">HH", 4, 0) + struct.pack(">HHHH", 0, 0xFFFF, 1, 0)
+    features = struct.pack(">H4sH", 1, feature, 8) + struct.pack(">HHH", 0, 1, 0)
+    lookups = struct.pack(">HH", 1, 4) + struct.pack(">HHHH", lookup_type, 0, 1, 8) + subtable
+    offsets = (10, 10 + len(scripts), 10 + len(scripts) + len(features))
+    return struct.pack(">HHHHH", 1, 0, *offsets) + scripts + features + lookups
+
+
+# Glyph 10 then glyph 20: -50 (a pair), -30 (their classes); -40 in a `kern` table.
+_PAIR_FORMAT1 = (struct.pack(">HHHHHH", 1, 12, 0x4, 0, 1, 18)  # header
+                 + struct.pack(">HHH", 1, 1, 10)  # coverage: glyph 10
+                 + struct.pack(">HHh", 1, 20, -50))  # pair set: glyph 20, -50
+_PAIR_FORMAT2 = (struct.pack(">HHHHHHHH", 2, 24, 0x4, 0, 30, 40, 2, 2)  # header
+                 + struct.pack(">hhhh", 0, 0, 0, -30)  # class 1 then class 1: -30
+                 + struct.pack(">HHH", 1, 1, 10)  # coverage: glyph 10
+                 + struct.pack(">HHHHH", 2, 1, 10, 10, 1)  # first classes: glyph 10, class 1
+                 + struct.pack(">HHHH", 1, 20, 1, 1))  # second classes: glyph 20, class 1
+_KERN_TABLE = (struct.pack(">HH", 0, 1)  # version 0, one subtable
+               + struct.pack(">HHHHHHH", 0, 20, 1, 1, 6, 0, 0)  # horizontal, format 0, one pair
+               + struct.pack(">HHh", 10, 20, -40))
+
+
+def test_kerning_is_gpos_kern_features_pair_adjustments():
+    from pikslide.fonts import _Kerning
+
+    for subtable, value in ((_PAIR_FORMAT1, -50), (_PAIR_FORMAT2, -30)):
+        kerning = _Kerning(_layout_table(b"latn", b"kern", 2, subtable), _KERN_TABLE)
+        assert (kerning(10, 20), kerning(10, 21), kerning(11, 20)) == (value, 0, 0)
+    extension = struct.pack(">HHI", 1, 2, 8) + _PAIR_FORMAT1  # an extension lookup's subtable
+    assert _Kerning(_layout_table(b"DFLT", b"kern", 9, extension), None)(10, 20) == -50
+
+
+def test_kerning_is_the_kern_tables_where_gpos_has_no_kern_feature():
+    # Malgun Gothic's GPOS has no features, and its kerning is in `kern`.
+    from pikslide.fonts import _Kerning
+
+    no_latin_kern = [_layout_table(b"latn", b"liga", 2, _PAIR_FORMAT1),
+                     _layout_table(b"cyrl", b"kern", 2, _PAIR_FORMAT1)]
+    for gpos in (None, *no_latin_kern):
+        assert _Kerning(gpos, _KERN_TABLE)(10, 20) == -40
+    assert _Kerning(b"\x00\x01", None)(10, 20) == 0  # not readable: none
+
+
+def test_vertical_forms_are_the_vert_features_substitutions():
+    from pikslide.fonts import _EAST_ASIAN, _single_substitutions
+
+    delta = struct.pack(">HHh", 1, 6, 100) + struct.pack(">HHH", 1, 1, 5)
+    array = struct.pack(">HHHH", 2, 8, 1, 70) + struct.pack(">HHH", 1, 1, 7)
+    assert _single_substitutions(_layout_table(b"hani", b"vert", 1, delta), _EAST_ASIAN, b"vert") == {5: 105}
+    assert _single_substitutions(_layout_table(b"kana", b"vert", 1, array), _EAST_ASIAN, b"vert") == {7: 70}
+    assert _single_substitutions(_layout_table(b"latn", b"vert", 1, array), _EAST_ASIAN, b"vert") == {}
+
+
+def test_glyph_metrics_advance_and_kern(dejavu_dir: pathlib.Path):
+    from pikslide.fonts import glyph_metrics
+
+    glyphs = glyph_metrics(str(dejavu_dir / "DejaVuSans.ttf"))
+    plain, kerned = glyphs.advances("AV", kern=False), glyphs.advances("AV", kern=True)
+    assert kerned[0] < plain[0] and kerned[1] == plain[1]
+    assert glyph_metrics(str(dejavu_dir / "nothing.ttf")) is None
+
+
+def test_glyph_metrics_set_text_as_raqm_does_but_for_its_ligatures(dejavu_dir: pathlib.Path):
+    # raqm (HarfBuzz) is what --renderer direct was checked against before;
+    # it kerns at every size and sets ligatures, which PowerPoint doesn't.
+    from PIL import ImageFont, features
+
+    from pikslide.fonts import glyph_metrics
+
+    if not features.check("raqm"):
+        pytest.skip("no raqm to compare with")
+    path = str(dejavu_dir / "DejaVuSans.ttf")
+    raqm = ImageFont.truetype(path, 1000, layout_engine=ImageFont.Layout.RAQM)
+    glyphs = glyph_metrics(path)
+    for text in ("AVATAR Toyota WAVE", "How Japan's capital moved"):
+        assert sum(glyphs.advances(text, kern=True)) * 1000 == pytest.approx(raqm.getlength(text), rel=1e-5)
+    # Set vertically, with no vertical metrics: the font's height.
+    assert sum(glyphs.vertical_advances("AB")) * 1000 == pytest.approx(raqm.getlength("AB", direction="ttb"), rel=1e-5)
+
+
+def _template_with_kern(tmp_path: pathlib.Path, kern: str | None) -> pathlib.Path:
+    """The built-in template, its text styles' `kern="1200"` set to `kern`,
+    or left out."""
+    src = pathlib.Path(pptx.__file__).parent / "templates" / "default.pptx"
+    out = tmp_path / f"template-{kern}.pptx"
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename in ("ppt/presentation.xml", "ppt/slideMasters/slideMaster1.xml"):
+                data = data.replace(b' kern="1200"', f' kern="{kern}"'.encode() if kern else b"")
+            zout.writestr(item, data)
+    return out
+
+
+def test_the_decks_kerning_size_is_its_text_styles(tmp_path: pathlib.Path):
+    from pikslide.pptx_writer import master_kern_from
+
+    assert master_kern_from(pptx.Presentation().slide_masters[0]) == 12.0
+    assert master_kern_from(pptx.Presentation(str(_template_with_kern(tmp_path, "2000"))).slide_masters[0]) == 20.0
+    assert master_kern_from(pptx.Presentation(str(_template_with_kern(tmp_path, None))).slide_masters[0]) == 0.0
+
+
+def test_latin_text_is_kerned_from_the_decks_kerning_size(dejavu_dir: pathlib.Path, tmp_path: pathlib.Path):
+    # PowerPoint kerns text of 12pt and more, as the built-in template's
+    # text style says, and sets no ligatures (checked).
+    from pikslide.fonts import glyph_metrics
+    from pikslide.pik import parse
+    from pikslide.pptx_writer import PilFontMetrics, resolve_for_pptx
+
+    index = FontIndex(dirs=[str(dejavu_dir)])
+    glyphs = glyph_metrics(str(dejavu_dir / "DejaVuSans.ttf"))
+
+    def width(text: str, pt: float, kern: bool) -> float:
+        return sum(glyphs.advances(text, kern)) * pt / 72
+
+    def measured(metrics, text: str, pt: float) -> float:
+        return metrics.text_width(text, [], {"medium": pt / 72}, "DejaVu Sans")
+
+    metrics = PilFontMetrics(font_index=index)
+    for pt, kern in ((10.5, False), (12, True), (24, True)):
+        assert measured(metrics, "AVAVAV", pt) == pytest.approx(width("AVAVAV", pt, kern))
+    always = PilFontMetrics(font_index=index, kern_from=0.0)
+    assert measured(always, "AVAVAV", 10.5) == pytest.approx(width("AVAVAV", 10.5, True))
+    assert measured(metrics, "office", 24) == pytest.approx(width("office", 24, True))
+
+    # A template's own kerning size.
+    src = 'typeface = "DejaVu Sans"\nmedium = 12pt\nbox "AVAVAV" fit\n'
+    built_in = resolve_for_pptx(parse(src), font_index=index).shapes[0].w
+    template = str(_template_with_kern(tmp_path, "2000"))
+    assert resolve_for_pptx(parse(src), template_path=template, font_index=index).shapes[0].w > built_in

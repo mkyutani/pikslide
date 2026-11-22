@@ -12,10 +12,11 @@ line with a "good enough for common diagrams" scope:
   a flat per-character guess,
 - name resolution is a simplified scope-chain search.
 
-`chop` ends a line where it crosses the outline of a circle, an ellipse
-or an oval, but on any other object at the compass point facing the line
-(chop_point()): a place a diagram can name (`A.ne`), not where the line
-crosses a diamond's, a cylinder's or a preset's outline. That is meant
+`chop` ends a line where it crosses the outline of a circle or an
+ellipse, but on any other object at the compass point facing the line
+(chop_point()): a place a diagram can name (`A.ne`), on a box's or an
+oval's outline, not where the line crosses a diamond's, a cylinder's or a
+preset's outline. That is meant
 (issue #41), not left out: a line that should end on such an outline
 attaches to it (`attach`), at a connection site its preset puts there.
 
@@ -116,7 +117,7 @@ _DIR_CODE = {"right": DIR_RIGHT, "down": DIR_DOWN, "left": DIR_LEFT, "up": DIR_U
 _OPPOSITE_EDGE = {DIR_RIGHT: W, DIR_LEFT: E, DIR_UP: S, DIR_DOWN: N}
 _HEADING_ANGLE = {N: 0.0, NE: 45.0, E: 90.0, SE: 135.0, S: 180.0, SW: 225.0, W: 270.0, NW: 315.0, C: 0.0}
 
-ELLIPSE_LIKE = {"circle", "ellipse", "oval"}
+ELLIPSE_LIKE = {"circle", "ellipse"}
 LINE_LIKE = {"line", "arrow", "spline", "arc", "move"}
 NOT_RENDERED = {"move", "point"}  # pseudo-objects: real for placement/naming, never drawn
 
@@ -1408,6 +1409,8 @@ def _init_class_defaults(shape: Shape, classname: str, ctx: _Ctx) -> None:
         shape.w, shape.h = _var_number(ctx, wname), _var_number(ctx, hname)
         if classname == "box":
             shape.rad = _var_number(ctx, "boxrad")
+        elif classname == "oval":
+            _round_oval(shape)
         elif classname == "cylinder":
             shape.rad = _var_number(ctx, "cylrad")
         elif classname == "file":
@@ -1430,6 +1433,13 @@ def _init_class_defaults(shape: Shape, classname: str, ctx: _Ctx) -> None:
         shape.rad = _var_number(ctx, "boxrad")
     else:
         raise LayoutError(f"unknown object class: {classname}")
+
+
+def _round_oval(shape: Shape) -> None:
+    """An oval is a pill: a box whose ends are half circles, its corner
+    radius half its shorter side (issue #52), as pikchr's is."""
+    if shape.kind == "oval":
+        shape.rad = 0.5 * min(shape.w, shape.h)
 
 
 def _apply_circle_constraint(shape: Shape) -> None:
@@ -1479,21 +1489,22 @@ def _text_placement(shape: Shape, ctx: _Ctx) -> tuple[float, float]:
 
 # How much bigger than its text (plus `margin` each side) `fit` makes a
 # circle or an ellipse: the text box is the largest rectangle inscribed.
-_TEXT_AREA_SCALE = {"circle": math.sqrt(2), "ellipse": math.sqrt(2), "oval": math.sqrt(2)}
+_TEXT_AREA_SCALE = {"circle": math.sqrt(2), "ellipse": math.sqrt(2)}
 
 # The objects whose text wraps inside a fixed-size frame.
 _FRAMED_TEXT_KINDS = {"box", "circle", "ellipse", "oval", "diamond", "cylinder", "file", "shape"}
 
 # The preset each kind of object is drawn as; see preset_of().
 _KIND_PRESETS = {
-    "box": "rect", "circle": "ellipse", "ellipse": "ellipse", "oval": "ellipse", "dot": "ellipse",
+    "box": "rect", "circle": "ellipse", "ellipse": "ellipse", "oval": "roundRect", "dot": "ellipse",
     "diamond": "diamond", "cylinder": "can", "file": "foldedCorner", "text": "rect",
 }
 
 
 def preset_of(shape: Shape) -> str | None:
     """The preset geometry `shape` is drawn as: a `shape`'s own, a roundRect
-    for a box with `rad`, and for a text object the rectangle of its frame;
+    for a box with `rad` and for an oval, and for a text object the
+    rectangle of its frame;
     None for what isn't drawn as a preset (a line, an image, a block)."""
     if shape.kind == "shape":
         return shape.preset
@@ -1907,7 +1918,11 @@ def _autosize_text(shape: Shape, ctx: _Ctx) -> None:
         preset = preset_of(shape)
         assert preset is not None
         shape.w, shape.h = _fit_preset(shape, preset, shape.w, shape.h)
-    elif shape.kind in ("circle", "ellipse", "oval"):
+    elif shape.kind == "oval":
+        # A pill: a roundRect, its corners half its shorter side, whose
+        # text rectangle is inset by about 0.3 of that at each side.
+        shape.w, shape.h = fit_size("roundRect", shape.w, shape.h, {"adj": 50000})
+    elif shape.kind in ("circle", "ellipse"):
         # The largest axis-aligned rectangle inscribed in an ellipse of
         # full width/height (W, H) is (W/sqrt(2)) x (H/sqrt(2)) -- so to
         # give the text box that exact size, the ellipse's own bounding
@@ -2068,6 +2083,9 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
             shape.h = value
             if shape.kind == "circle":
                 shape.w, shape.rad = value, value / 2
+        elif attr.name in ("radius", "diameter") and shape.kind == "oval":
+            raise LayoutError(f"'{attr.name}' on an oval: its ends are always half circles, its radius half its "
+                              f"shorter side; for other corners, draw a box with radius")
         elif attr.name == "radius":
             shape.rad = value
             if shape.kind == "circle":
@@ -2424,6 +2442,7 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
             _size_image(shape, ctx)
         elif (shape.w <= 0.0 or shape.h <= 0.0) and shape.texts:
             _autosize_text(shape, ctx)
+        _round_oval(shape)
         if shape.texts:
             shape.text_dy, shape.text_split = _text_placement(shape, ctx)
         if shape.rotate:

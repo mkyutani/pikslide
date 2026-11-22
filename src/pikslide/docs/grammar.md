@@ -461,6 +461,8 @@ Semantic constraints the grammar cannot express (each is an error):
 - `aligned` on anything but a `line`, an `arrow` or a `move` of one
   segment;
 - a second `color` on one string;
+- `radius` or `diameter` on an `oval`, whose radius is half its shorter
+  side;
 - `stroke` on an object that draws no line (`text`, `image`, `move`, a
   `[ … ]` block), and an empty `stroke`;
 - arithmetic on a color (`primary + 1`);
@@ -501,7 +503,7 @@ or through a block (`Outer.Inner`), and points on them by edge (`Web.ne`,
 | `box` | `boxwid` × `boxht` (0.75 × 0.5) | corner radius `boxrad` (0) |
 | `circle` | diameter `2 × circlerad` (0.5) | `width`/`height`/`radius`/`diameter` all keep it round |
 | `ellipse` | `ellipsewid` × `ellipseht` (0.75 × 0.5) | |
-| `oval` | `ovalwid` × `ovalht` (1 × 0.5) | |
+| `oval` | `ovalwid` × `ovalht` (1 × 0.5) | a pill: a box whose ends are half circles, its corner radius half its shorter side |
 | `diamond` | `diamondwid` × `diamondht` (1 × 0.75) | |
 | `cylinder` | `cylwid` × `cylht` (0.75 × 0.5) | end radius `cylrad` |
 | `file` | `filewid` × `fileht` (0.5 × 0.75) | corner radius `filerad` |
@@ -529,8 +531,8 @@ dashing), `invis` (hide it) and `dashed`/`dotted` with an optional length
 (see *Text*); `cw`/`ccw` set which way an arc turns (`ccw` by default); `<-`/`->`/`<->` add arrowheads,
 and `start`/`end` set the kind and size of the one at that end, over them;
 `fit` sizes the object to its text; `chop` shortens a line's ends to the
-objects it joins: to where it crosses a circle's, an ellipse's or an
-oval's outline, and to the compass point facing it on any other object
+objects it joins: to where it crosses a circle's or an ellipse's
+outline, and to the compass point facing it on any other object
 ([spec.md](spec.md) §3.2); `attach` attaches a line's ends to the
 objects they lie on, and `path` picks the form of its connector; `close` closes a path; `behind X` places
 the object immediately below `X` in z-order.

@@ -48,7 +48,7 @@ TOLERANCE = 0.02
 less than a line's width, and than the gap round a line of text."""
 
 _ELLIPSE_SIDES = 48
-_ELLIPSES = {"circle", "ellipse", "oval"}
+_ELLIPSES = {"circle", "ellipse"}
 _ELLIPSE_PRESETS = {"ellipse", "flowChartConnector"}
 _DIAMOND_PRESETS = {"diamond", "flowChartDecision"}
 

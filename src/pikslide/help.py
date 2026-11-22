@@ -115,7 +115,9 @@ ENTRIES: tuple[Entry, ...] = (
             ("circlerad",), 'circle "A" radius 0.3'),
     _closed(("ellipse",), "an ellipse", "An ellipse.",
             ("ellipsewid", "ellipseht"), 'ellipse "Start" fit'),
-    _closed(("oval",), "a pill shape: a box with round ends", "A box whose ends are half circles.",
+    _closed(("oval",), "a pill shape: a box with round ends",
+            "A box whose ends are half circles: its corner radius is half its shorter side, so `radius` "
+            "is an error on it.",
             ("ovalwid", "ovalht"), 'oval "Login"'),
     _closed(("diamond",), "a diamond, for a decision", "A diamond (a square on its point).",
             ("diamondwid", "diamondht"), 'diamond "ok?" fit'),
@@ -310,8 +312,8 @@ ENTRIES: tuple[Entry, ...] = (
           example="line right then up then left close"),
     Entry(("chop",), "trims a line's ends to the edges of the objects it joins",
           body="Ends a line at the object named by its `from`/`to`, not at its center: "
-               "where it crosses a circle's, an ellipse's or an oval's outline; on any "
-               "other object, a diamond or a preset shape too, at the compass point facing "
+               "where it crosses a circle's or an ellipse's outline; on any other object, a "
+               "box, an oval, a diamond or a preset shape too, at the compass point facing "
                "it (.n .ne .e ...), which may be off its outline. To end on such an "
                "outline, `attach` the line.",
           example="arrow from A to B chop", group="attribute", see=("attach",)),
@@ -1082,7 +1084,7 @@ _LLM_BODIES = {
     "box": "Rectangle; radius rounds corners.",
     "circle": "Circle; width, height, radius, diameter D all keep it round.",
     "ellipse": "Ellipse.",
-    "oval": "Box with half-circle ends.",
+    "oval": "Box with half-circle ends: corner radius half its shorter side (radius: an error).",
     "diamond": "Square on its point.",
     "cylinder": "Cylinder; radius = end depth.",
     "file": "Page, top-right corner folded down; radius = fold size.",
@@ -1134,8 +1136,8 @@ _LLM_BODIES = {
             "edge facing the line.",
     "up": "Alone: changes current direction (objects chain edge to edge). On a line: moves its path that way. "
           "In a position: N left of P = N inches left of P.",
-    "chop": "Ends a line at its from/to object, not center: circle, ellipse, oval where it crosses the "
-            "outline; else at the compass point facing it (.ne, ...), maybe off the outline (attach to end on it).",
+    "chop": "Ends a line at its from/to object, not center: circle, ellipse where it crosses the outline; "
+            "else at the compass point facing it (.ne, ...), maybe off the outline (attach to end on it).",
     "attach": "Line → connector; ends follow objects when moved. End attaches at a site (box .n .e .s .w; "
               "circle's 8 compass points) of its from/to object, else the one there; can't → warning. path "
               "elbow: right angles, as PowerPoint; path curved: curves along that route.",

@@ -159,11 +159,13 @@ box and the overlap warnings follow the curve; its points, `.start`,
 `.end` and `--check`'s, are the ones it passes through. A spline of two
 points is a straight line, as PowerPoint draws one.
 
-**`chop`** ends a line at the outline of a circle, an ellipse or an oval
-(drawn as an ellipse) where the line crosses it. On any other object, a
-diamond, a cylinder, a file, a preset shape too, it ends the line at
-the compass point facing it (`.n`, `.ne`, …): a place a diagram can
-name, `A.ne`, though not always where the line crosses the outline. A
+**`chop`** ends a line at the outline of a circle or an ellipse where
+the line crosses it. On any other object, a box, an oval, a diamond, a
+cylinder, a file, a preset shape too, it ends the line at the compass
+point facing it (`.n`, `.ne`, …): a place a diagram can name, `A.ne`,
+though not always where the line crosses the outline. An oval's compass
+points are a box's with half its shorter side for a corner radius, as
+pikchr's are: its `.ne` is on its rounded end. A
 line that should end on such an outline attaches to it (`attach`,
 below), at a connection site its preset puts there.
 
@@ -430,9 +432,9 @@ set explicitly, so a template's own default spacing can't change it.
 
 **The text area.** PowerPoint sets an object's text not in its whole
 box but in its shape's *text rectangle*, which each preset geometry
-defines (`<a:rect>`, ECMA-376): a box's is the whole box; a rounded box
-is inset by about 0.3 of its corner radius at each side; a circle,
-ellipse or oval's is its inscribed rectangle, √2 smaller each way; a
+defines (`<a:rect>`, ECMA-376): a box's is the whole box; a rounded box,
+an oval too, is inset by about 0.3 of its corner radius at each side; a
+circle or ellipse's is its inscribed rectangle, √2 smaller each way; a
 diamond's is the middle half of its width and height. A preset shape
 (§3.4) has its own: `flowChartInputOutput` leaves out a fifth of the
 width at each slanted end, and an arrow's leaves out most of its head.
@@ -440,8 +442,9 @@ The text area is that rectangle less `margin` on each side.
 
 - `fit` makes a preset shape just big enough for its text rectangle to
   hold the text (a parallelogram 5/3 as wide as a box; a flowchart
-  decision twice as wide and twice as tall). A circle, ellipse or oval is
-  made √2 times bigger each way, and a diamond twice, as its preset is:
+  decision twice as wide and twice as tall). A circle or an ellipse is
+  made √2 times bigger each way, a diamond twice, and an oval as its
+  rounded corners need, as its preset is:
   so an object of the same size without `fit` (`same as`, `width A.wid`)
   holds the same text too.
 - An object with a size of its own and no `fit` wraps a string wider than
@@ -522,7 +525,8 @@ shape wedgeRectCallout "Note" fit
   | Class | PowerPoint |
   |---|---|
   | `box` | `rect` (`roundRect` when `rad > 0`) |
-  | `circle`, `ellipse`, `oval`, `dot` | `ellipse` |
+  | `circle`, `ellipse`, `dot` | `ellipse` |
+  | `oval` | `roundRect`, its corner radius half its shorter side: a pill |
   | `diamond` | `diamond` |
   | `cylinder` | `can` |
   | `file` | `foldedCorner` (a page with a corner folded down) |

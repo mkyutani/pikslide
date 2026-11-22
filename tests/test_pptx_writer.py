@@ -1242,3 +1242,10 @@ def test_aligned_ljust_starts_at_the_lines_end_along_it(tmp_path: pathlib.Path):
     result = resolve_for_pptx(parse('line "a" above ljust from (0, 0) to (3, 3) aligned\n'))
     (label,) = object_list(flatten_shapes(result.shapes))[0]["labels"]
     assert label["x"] < 0.75 and label["y"] < 0.9  # near the start, not the middle (1.5, 1.5)
+
+
+def test_an_oval_is_written_as_a_pill(tmp_path: pathlib.Path):
+    # issue #52: a rounded rectangle, its corners half its shorter side
+    oval = render('oval "Start" fit\n', tmp_path).slides[0].shapes[0]
+    assert oval.auto_shape_type == MSO_SHAPE.ROUNDED_RECTANGLE
+    assert oval.adjustments[0] == pytest.approx(0.5)

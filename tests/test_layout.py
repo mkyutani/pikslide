@@ -1106,3 +1106,47 @@ def test_a_line_that_isnt_aligned_has_level_labels():
 def test_aligned_on_anything_but_a_straight_line_is_an_error(src: str, message: str):
     with pytest.raises(LayoutError, match=re.escape(message)):
         layout(src)
+
+
+# ---------------------------------------------------------------------------
+# An oval is a pill (issue #52)
+# ---------------------------------------------------------------------------
+
+
+def test_an_oval_is_a_roundrect_with_half_its_shorter_side_for_a_radius():
+    from pikslide.pik.layout import preset_of
+
+    plain, wide, tall = layout("oval\noval wid 2 ht 0.4\noval wid 0.4 ht 1\n").shapes
+    assert [preset_of(o) for o in (plain, wide, tall)] == ["roundRect"] * 3
+    assert (plain.rad, wide.rad, tall.rad) == (pytest.approx(0.25), pytest.approx(0.2), pytest.approx(0.2))
+
+
+def test_an_ovals_points_are_a_boxs_with_that_radius():
+    oval = layout("O: oval wid 2 ht 1 at (0, 0)\n").shapes[0]
+    # .ne on the right end's half circle, at 45 degrees from its center
+    r = 0.5
+    assert oval.offset("ne") == (pytest.approx(1 - r + r * math.sqrt(0.5)), pytest.approx(r * math.sqrt(0.5)))
+    assert oval.offset("e") == (pytest.approx(1.0), pytest.approx(0.0))
+
+
+def test_chop_ends_a_line_at_the_ovals_compass_point_facing_it():
+    result = layout("O: oval wid 2 ht 1 at (0, 0)\narrow from (3, 3) to O chop\n")
+    end = result.shapes[1].path[-1]
+    r = 0.5
+    assert end == (pytest.approx(1 - r + r * math.sqrt(0.5)), pytest.approx(r * math.sqrt(0.5)))
+
+
+def test_fit_makes_an_ovals_text_rectangle_hold_its_text():
+    from pikslide.pik.layout import _text_area_width
+
+    oval = layout('oval "Start here" fit\n').shapes[0]
+    assert oval.rad == pytest.approx(min(oval.w, oval.h) / 2)
+    same = layout(f'oval "Start here" wid {oval.w} ht {oval.h}\n')
+    assert same.warnings == []  # the same size without fit holds it too
+    assert _text_area_width(same.shapes[0]) > 0
+
+
+@pytest.mark.parametrize("attr", ["radius 0.1", "diameter 0.2"])
+def test_an_ovals_radius_is_its_own(attr: str):
+    with pytest.raises(LayoutError, match=re.escape("on an oval: its ends are always half circles")):
+        layout(f"oval {attr}\n")

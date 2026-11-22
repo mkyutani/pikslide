@@ -420,7 +420,6 @@ ENTRIES: tuple[Entry, ...] = (
 
 _VARIABLE_DOCS = {
     "arcrad": "default arc radius",
-    "arrowhead": "(accepted; no effect in v1)",
     "arrowht": "arrowhead length",
     "arrowwid": "arrowhead width",
     "boxht": "default box height",
@@ -449,7 +448,6 @@ _VARIABLE_DOCS = {
     "movewid": "default length of a move",
     "ovalht": "default oval height",
     "ovalwid": "default oval width",
-    "scale": "(accepted; no effect in v1)",
     "stroke": "default line and outline color",
     "textht": "default height of a text object with no strings",
     "textwid": "default width of a text object with no strings",

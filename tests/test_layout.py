@@ -21,7 +21,9 @@ from pikslide.pik.layout import (
     arrowheads,
     assign_text_slots,
     flatten_shapes,
+    line_points,
     resolve_layout,
+    spline_curves,
 )
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures" / "examples"
@@ -233,6 +235,51 @@ def test_an_arcs_box_is_the_box_round_its_curve():
 def test_an_arc_is_one_curve(src: str):
     with pytest.raises(LayoutError, match="an arc is one curve"):
         layout(src + "\n")
+
+
+def _powerpoint_curves():
+    path = pathlib.Path(__file__).parent / "fixtures" / "powerpoint_curves.txt"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#"):
+            continue
+        points, pieces = line.split(" : ")
+        yield ([tuple(float(v) for v in p.split(",")) for p in points.split()],
+               [(kind, [tuple(float(v) for v in p.split(",")) for p in rest]) for kind, *rest in
+                (piece.split() for piece in pieces.split(" | "))])
+
+
+def test_a_spline_is_the_curve_powerpoints_curve_draws_through_its_points():
+    # Issue #41: as PowerPoint built them through the same points, all Auto
+    # Points (tests/fixtures/powerpoint_curves.txt), each curved piece;
+    # PowerPoint's straight ones are spline_curves()'s docstring's.
+    curved = 0
+    for path, pieces in _powerpoint_curves():
+        if len(path) < 3:
+            continue
+        for (kind, want), got in zip(pieces, spline_curves(path), strict=True):
+            if kind == "C":
+                assert list(got[1:]) == [pytest.approx(p, abs=0.01) for p in want]
+                curved += 1
+    assert curved == 32
+
+
+def test_a_spline_passes_through_each_of_its_points_and_its_box_is_the_curves():
+    spline = layout("spline from (0, 0) right 1 then up 1 then right 1\n").shapes[0]
+    assert spline.path == [pytest.approx(p) for p in [(0, 0), (1, 0), (1, 1), (2, 1)]]
+    points = line_points(spline)
+    assert all(any(q == pytest.approx(p) for q in points) for p in spline.path)
+    # Through (1, 0) heading up and right, the curve dips below the path's box before it.
+    x0, y0, x1, y1 = spline.bbox
+    assert (x0, x1) == pytest.approx((0, 2)) and y0 < -0.05 and y1 > 1.05
+    assert (spline.cy, spline.h) == pytest.approx(((y0 + y1) / 2, y1 - y0))
+
+
+def test_a_closed_spline_goes_on_round_its_start():
+    spline = layout("spline from (0, 0) right 1 then up 1 then left 1 close\n").shapes[0]
+    first, *_, last = spline_curves(spline.path)
+    # Its first and last control points on one line through the start, each
+    # a sixth of the way between the points either side of it.
+    assert first[1] == pytest.approx((1 / 6, -1 / 6)) and last[2] == pytest.approx((-1 / 6, 1 / 6))
 
 
 # ---------------------------------------------------------------------------

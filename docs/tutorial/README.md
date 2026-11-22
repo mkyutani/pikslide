@@ -251,7 +251,7 @@ mailer and the customer when someone moves either of them in PowerPoint.
 A line without `attach` stays where the `.pik` drew it.
 
 To draw a straight line on a slant, `arrow from A to B chop` joins two
-objects' centers, cut short at their outlines.
+objects' centers, cut short at their edges.
 
 ## 5. Color and line style
 

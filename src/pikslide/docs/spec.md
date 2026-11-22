@@ -133,6 +133,27 @@ quadratic Bézier, written as the cubic one PowerPoint's own curves use),
 with `stroke`'s `dashed`, `dotted`, `thick`, `thin` and the arrowheads
 `<-`, `->`, `<->` mapped to dash style, weight and arrowheads.
 
+**A spline is a curve** through each point of its path, drawn as
+PowerPoint's Curve draws one: a freeform of cubic Béziers, a person can
+move each point (Edit Points), and its arrowheads point along its ends.
+Each point's control points lie along the line through the points
+before and after it, a sixth of their distance from it; at the start, a
+sixth of the way to the next point, and at the end five twenty-fourths
+of the way to the one before, as PowerPoint puts them (checked against
+the curves it built through 15 paths, its points all Auto Points). A
+closed spline goes on round its start as through any other point. Its
+box and the overlap warnings follow the curve; its points, `.start`,
+`.end` and `--check`'s, are the ones it passes through. A spline of two
+points is a straight line, as PowerPoint draws one.
+
+**`chop`** ends a line at the outline of a circle, an ellipse or an oval
+(drawn as an ellipse) where the line crosses it. On any other object, a
+diamond, a cylinder, a file, a preset shape too, it ends the line at
+the compass point facing it (`.n`, `.ne`, …): a place a diagram can
+name, `A.ne`, though not always where the line crosses the outline. A
+line that should end on such an outline attaches to it (`attach`,
+below), at a connection site its preset puts there.
+
 **Arrowheads.** `->`, `<-` and `<->` put a filled triangle at a line's
 end, its start, or both. `start KIND` and `end KIND` set the one at that
 end, whatever the arrows say and wherever they're written: `triangle`,

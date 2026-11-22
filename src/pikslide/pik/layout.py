@@ -2,19 +2,22 @@
 
 Covers default object sizes, current-direction sequential placement,
 ``at``/``with``/``from``/``to``/``then``/``go``/``same``/``chop``, and
-box/ellipse/diamond edge geometry. Deliberately left out, in line with a
-"good enough for common diagrams" scope:
+box/ellipse/diamond edge geometry. An arc and a spline are curves (see
+`arc_control_point()` and `spline_curves()`). Deliberately left out, in
+line with a "good enough for common diagrams" scope:
 
-- a spline is treated as a straight polyline (an arc is a curve: see
-  `arc_control_point()`),
 - "fit" text sizing defaults to an estimate from charwid/charht constants;
   pass a real `FontMetrics` (e.g. pptx_writer's Pillow-backed one) to
   `resolve_layout()` for sizing that tracks actual text content instead of
   a flat per-character guess,
-- chopping against diamond/cylinder/file uses their rectangle-like
-  edge offsets via the same 8-direction dispatch as box chopping,
-  rather than each shape's true outline,
 - name resolution is a simplified scope-chain search.
+
+`chop` ends a line where it crosses the outline of a circle, an ellipse
+or an oval, but on any other object at the compass point facing the line
+(chop_point()): a place a diagram can name (`A.ne`), not where the line
+crosses a diamond's, a cylinder's or a preset's outline. That is meant
+(issue #41), not left out: a line that should end on such an outline
+attaches to it (`attach`), at a connection site its preset puts there.
 
 All coordinates are inches, with y pointing *up* --
 callers producing screen/slide coordinates (y-down) must flip y.
@@ -630,21 +633,75 @@ def curved_connector(route: list[tuple[float, float]]) -> list[tuple[tuple[float
     return curves
 
 
+SPLINE_END_HANDLE = 5 / 24
+"""How far towards the point before it the last control point of an open
+spline is, as a fraction of the way there: PowerPoint's, though the first
+is a sixth of the way to the point after the start (spline_curves())."""
+
+
+def spline_curves(path: list[tuple[float, float]]) -> list[tuple[tuple[float, float], ...]]:
+    """The cubic Beziers (start, control, control, end) a spline is drawn
+    with through each point of its `path` (issue #41), as PowerPoint's
+    Curve draws one, its points all Auto Points: each point's two control
+    points on either side of it, along the line through the points before
+    and after it, a sixth of their distance from it (a Catmull-Rom curve);
+    at the start, a sixth of the way to the next point, and at the end
+    SPLINE_END_HANDLE of the way to the one before. A closed path (its
+    last point its first) goes on round its start as through any other
+    point. Checked against the curves PowerPoint built through 15 paths
+    (FreeformBuilder, msoEditingAuto) and read back (tests/fixtures/
+    powerpoint_curves.txt), but for two pieces it writes straight, which
+    this doesn't follow: one whose four points are all on one line, and
+    the last of `right 1 then down 1`, though they aren't, which makes a
+    corner there."""
+    n = len(path) - 1
+    closed = n > 2 and path[0] == path[-1]
+
+    def handle(i: int, before: int, after: int, f: float) -> tuple[float, float]:
+        (x0, y0), (x1, y1) = path[before], path[after]
+        return (path[i][0] + f * (x1 - x0), path[i][1] + f * (y1 - y0))
+
+    curves = []
+    for i in range(n):
+        if i > 0:
+            c1 = handle(i, i - 1, i + 1, 1 / 6)
+        elif closed:
+            c1 = handle(0, n - 1, 1, 1 / 6)
+        else:
+            c1 = handle(0, 0, 1, 1 / 6)
+        if i + 1 < n:
+            c2 = handle(i + 1, i + 2, i, 1 / 6)
+        elif closed:
+            c2 = handle(n, 1, n - 1, 1 / 6)
+        else:
+            c2 = handle(n, n, n - 1, SPLINE_END_HANDLE)
+        curves.append((path[i], c1, c2, path[i + 1]))
+    return curves
+
+
+def _bezier_points(curves: list[tuple[tuple[float, float], ...]]) -> list[tuple[float, float]]:
+    """Cubic Beziers, each in ARC_SEGMENTS straight pieces."""
+    points = [curves[0][0]]
+    for p0, c1, c2, p1 in curves:
+        for i in range(1, ARC_SEGMENTS + 1):
+            t = i / ARC_SEGMENTS
+            a, b, c, d = (1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3
+            points.append((a * p0[0] + b * c1[0] + c * c2[0] + d * p1[0], a * p0[1] + b * c1[1] + c * c2[1] + d * p1[1]))
+    return points
+
+
 def line_points(shape: Shape) -> list[tuple[float, float]]:
     """The points a line is drawn through: its path, or an arc's curve in
-    ARC_SEGMENTS straight pieces, or a curved connector's in as many to
-    each of its Beziers (curved_connector()). An arc's path is still its
-    two ends, and a curved connector's the route it is drawn through,
-    which is what `.start`/`.end` and --check give."""
+    ARC_SEGMENTS straight pieces, or a spline's or a curved connector's
+    in as many to each of its Beziers (spline_curves(),
+    curved_connector()). An arc's path is still its two ends, a spline's
+    the points it is drawn through and a curved connector's the route it
+    is drawn along, which is what `.start`/`.end` and --check give."""
     assert shape.path is not None
     if shape.routed and shape.connector_path == "curved":
-        points = [shape.path[0]]
-        for p0, c1, c2, p1 in curved_connector(shape.path):
-            for i in range(1, ARC_SEGMENTS + 1):
-                t = i / ARC_SEGMENTS
-                a, b, c, d = (1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3
-                points.append((a * p0[0] + b * c1[0] + c * c2[0] + d * p1[0], a * p0[1] + b * c1[1] + c * c2[1] + d * p1[1]))
-        return points
+        return _bezier_points(curved_connector(shape.path))
+    if shape.kind == "spline" and len(shape.path) > 2:
+        return _bezier_points(spline_curves(shape.path))
     if shape.kind != "arc" or len(shape.path) != 2:
         return shape.path
     (x0, y0), (x2, y2) = shape.path

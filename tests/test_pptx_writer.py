@@ -181,6 +181,26 @@ def test_arc_becomes_a_freeform_with_one_curve(tmp_path: pathlib.Path):
     assert shape.line._get_or_add_ln().find(qn("a:tailEnd")).get("type") == "triangle"
 
 
+@pytest.mark.parametrize("close", ["", " close"])
+def test_spline_becomes_a_freeform_of_curves_through_its_points(tmp_path: pathlib.Path, close: str):
+    # Issue #41: a curve through each point, as PowerPoint's Curve draws one,
+    # so that a person can move each point (Edit Points); closed if it is.
+    prs = render(f"spline from (0, 0) right 1 then up 1 then left 1{close} ->\n", tmp_path)
+    [shape] = prs.slides[0].shapes
+    assert shape.shape_type == MSO_SHAPE_TYPE.FREEFORM
+    [path] = shape._element.spPr.find(qn("a:custGeom")).find(qn("a:pathLst"))
+    curves = 4 if close else 3
+    assert [el.tag for el in path] == [qn("a:moveTo")] + [qn("a:cubicBezTo")] * curves + [qn("a:close")] * bool(close)
+    # Each curve ends at the next point (y down, from the frame's top left).
+    left, top = shape.left, shape.top
+    ends = [(int(el[-1].get("x")) + left, int(el[-1].get("y")) + top) for el in path if len(el)]
+    one = int(Inches(1))
+    corners = [(0, one), (one, one), (one, 0), (0, 0), (0, one)][: curves + 1]
+    origin = (ends[0][0] - corners[0][0], ends[0][1] - corners[0][1])
+    assert ends == [pytest.approx((x + origin[0], y + origin[1]), abs=2) for x, y in corners]
+    assert shape.line._get_or_add_ln().find(qn("a:tailEnd")).get("type") == "triangle"
+
+
 def test_arrowheads_are_written_as_powerpoints_line_ends(tmp_path: pathlib.Path):
     # issue #36: open is OOXML's arrow; a size is both the width and the length
     src = "line right start diamond end open large\narrow right then down start oval small\narc end stealth\n"

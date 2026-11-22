@@ -491,7 +491,7 @@ or through a block (`Outer.Inner`), and points on them by edge (`Web.ne`,
 | `file` | `filewid` × `fileht` (0.5 × 0.75) | corner radius `filerad` |
 | `dot` | radius `dotrad` (0.015) | filled |
 | `text` | 0 × 0 | sized by its strings |
-| `line`, `spline` | `linewid` × `lineht` (0.5 × 0.5) | |
+| `line`, `spline` | `linewid` × `lineht` (0.5 × 0.5) | a spline: a smooth curve through each point of its path, as PowerPoint's Curve draws one |
 | `arrow` | as `line` | with a right arrowhead |
 | `move` | `movewid` × `lineht` | draws nothing |
 | `arc` | `arcrad` (0.25) | one curve, no `then`: alone, `arcrad` ahead and as far to the side; between two points, bowed out a quarter of their distance |
@@ -512,7 +512,9 @@ dashing), `invis` (hide it) and `dashed`/`dotted` with an optional length
 (see *Text*); `cw`/`ccw` set which way an arc turns (`ccw` by default); `<-`/`->`/`<->` add arrowheads,
 and `start`/`end` set the kind and size of the one at that end, over them;
 `fit` sizes the object to its text; `chop` shortens a line's ends to the
-outlines of the objects it joins; `attach` attaches a line's ends to the
+objects it joins: to where it crosses a circle's, an ellipse's or an
+oval's outline, and to the compass point facing it on any other object
+([spec.md](spec.md) §3.2); `attach` attaches a line's ends to the
 objects they lie on, and `path` picks the form of its connector; `close` closes a path; `behind X` places
 the object immediately below `X` in z-order.
 

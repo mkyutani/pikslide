@@ -24,7 +24,8 @@ Outlines are convex polygons: a circle or an ellipse as one, a diamond as
 its four corners, a `text` object as its strings, and anything else, a
 preset shape too, as its bounding box, a turned one's turned with it, and
 its strings too (`rotate`, turn()). A line is the points it is drawn
-through, an arc its curve in short straight pieces. Where a string goes
+through, an arc's or a spline's curve in short straight pieces
+(line_points()). Where a string goes
 is the renderer's to say, so callers pass `text_rects`: each of a
 shape's strings' rectangles, as drawn."""
 

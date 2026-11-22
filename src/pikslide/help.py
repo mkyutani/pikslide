@@ -165,8 +165,9 @@ ENTRIES: tuple[Entry, ...] = (
           "A line with an arrowhead at its end (`->`); `<-` or `<->` change the heads, "
           "`start` and `end` their kinds.",
           ("linewid", "lineht", "arrowht", "arrowwid"), 'arrow "request" above from A to B chop'),
-    _line(("spline",), "a curve through its points (drawn as a polyline)",
-          "A curve through its path's points; drawn as straight segments in v1.",
+    _line(("spline",), "a smooth curve through its points",
+          "A smooth curve through each point of its path, as PowerPoint's Curve draws "
+          "one: a person can move each point (Edit Points). Two points draw a straight line.",
           ("linewid", "lineht"), "spline right then up then right"),
     _line(("arc",), "a quarter circle arc",
           "Turns left, or right with `cw`; the next object goes the way it turned.",
@@ -279,7 +280,7 @@ ENTRIES: tuple[Entry, ...] = (
           group="attribute", see=("edges", "at")),
     Entry(("from", "to"), "a line's start and end points", synopsis=("from POSITION", "to POSITION"),
           body="Where a line starts and (another segment) ends. Naming an object "
-               "(`to B`) means its center; with `chop`, its outline.",
+               "(`to B`) means its center; with `chop`, its edge facing the line.",
           example="arrow from A.e to B.w", group="attribute", see=("chop", "then")),
     Entry(("then",), "starts a new segment of a line's path",
           synopsis=("then", "then [N] heading A", "then [N] EDGE"),
@@ -300,9 +301,13 @@ ENTRIES: tuple[Entry, ...] = (
           example="line down until even with B then right", group="attribute"),
     Entry(("close",), "closes a line's path back to its start", group="attribute",
           example="line right then up then left close"),
-    Entry(("chop",), "trims a line's ends to the outlines of the objects it joins",
-          body="Ends a line at the outline of the object named by its `from`/`to`, not "
-               "at its center.", example="arrow from A to B chop", group="attribute"),
+    Entry(("chop",), "trims a line's ends to the edges of the objects it joins",
+          body="Ends a line at the object named by its `from`/`to`, not at its center: "
+               "where it crosses a circle's, an ellipse's or an oval's outline; on any "
+               "other object, a diamond or a preset shape too, at the compass point facing "
+               "it (.n .ne .e ...), which may be off its outline. To end on such an "
+               "outline, `attach` the line.",
+          example="arrow from A to B chop", group="attribute", see=("attach",)),
     Entry(("attach", "path"), "attaches a line's ends to the objects they're on",
           synopsis=("attach [path straight|elbow|curved]",),
           body="Writes the line as a connector whose ends follow the objects they're on "
@@ -913,7 +918,7 @@ variable with a lowercase one (gap = 0.3, then Web.e + (gap, 0)).
 Placement. Each object goes after the previous one, edge to edge, in the
 current direction (right, to start with); a line starts where the previous
 object ends. `at P` or `with .EDGE at P` place an object explicitly;
-`from P to Q` and `then` shape a line; `chop` ends a line at the outlines of
+`from P to Q` and `then` shape a line; `chop` ends a line at the edges of
 the objects it joins. P is a point: an edge A.n .ne .e .se .s .sw .w .nw
 .center, (1, 2), A.e + (0.5, 0), 0.5 below A.s, 1/2 between A and B, a line's
 A.start, A.end.
@@ -1033,7 +1038,8 @@ _LLM_BODIES = {
              "names via its label (Outer.Inner). Draws nothing itself.",
     "line": "From the previous object's exit, in the current direction, unless its path says otherwise.",
     "arrow": "Line, head at end (->); <- / <-> move heads; start/end set their kinds.",
-    "spline": "Curve through its path's points; drawn as straight segments in v1.",
+    "spline": "Smooth curve through each point of its path, as PowerPoint's Curve; points editable. Two points "
+              "= straight.",
     "arc": "Turns left, right with cw; next object goes the way it turned.",
     "move": "Invisible line: moves where the next object goes.",
     "width": "Width in inches; N% = percent of current.",
@@ -1061,10 +1067,11 @@ _LLM_BODIES = {
     "center": "String attribute: centered, on the center line. As an edge: object's center.",
     "small": "The three text sizes; last on a string wins. As variables: the sizes, in points.",
     "from": "Where a line starts and (another segment) ends. An object (to B) = its center; with chop, its "
-            "outline.",
+            "edge facing the line.",
     "up": "Alone: changes current direction (objects chain edge to edge). On a line: moves its path that way. "
           "In a position: N left of P = N inches left of P.",
-    "chop": "Ends a line at its from/to object's outline, not center.",
+    "chop": "Ends a line at its from/to object, not center: circle, ellipse, oval where it crosses the "
+            "outline; else at the compass point facing it (.ne, ...), maybe off the outline (attach to end on it).",
     "attach": "Line → connector; ends follow objects when moved. End attaches at a site (box .n .e .s .w; "
               "circle's 8 compass points) of its from/to object, else the one there; can't → warning. path "
               "elbow: right angles, as PowerPoint; path curved: curves along that route.",
@@ -1112,7 +1119,7 @@ Name: CLASS ...  labeled object: refer as Name, Name.e, ...
 right | down | left | up  direction objects chain in
 name = value  variable: boxwid = 1, fill = accent2
 Names: label starts uppercase (Web: box → Web.e); variable lowercase (gap = 0.3 → Web.e + (gap, 0)).
-Placement: each object follows the previous, edge to edge, in the current direction (initially right); a line starts where the previous object ends. at P / with .EDGE at P place explicitly; from P to Q and then shape a line; chop ends a line at the joined objects' outlines. P: edge A.n .ne .e .se .s .sw .w .nw .center, (1, 2), A.e + (0.5, 0), 0.5 below A.s, 1/2 between A and B, a line's A.start, A.end. Sizes, coordinates: A.wid, A.ht, A.rad, P.x, P.y.
+Placement: each object follows the previous, edge to edge, in the current direction (initially right); a line starts where the previous object ends. at P / with .EDGE at P place explicitly; from P to Q and then shape a line; chop ends a line at the joined objects' edges. P: edge A.n .ne .e .se .s .sw .w .nw .center, (1, 2), A.e + (0.5, 0), 0.5 below A.s, 1/2 between A and B, a line's A.start, A.end. Sizes, coordinates: A.wid, A.ht, A.rad, P.x, P.y.
 Text: strings = lines of text, in order: box "Title" bold "note" small; "say \\"hi\\"" = a quote, "\\\\" = a backslash. A string attribute (bold, small, above, color C, ...) applies to the string just before it; object attributes (ljust, at, fill, ...) go before, between or after strings. fit sizes the object to its text. A line's strings sit at its middle: above/below a level line; beside an upright one, right with ljust, left with rjust.
 Lines: stroke sets line/outline: box stroke accent2 thick dashed.
 Colors: theme colors follow the deck: accent1..accent6, text1, text2, bg1, bg2, with lighter N% / darker N%; CSS names (steelblue, ...) fixed.

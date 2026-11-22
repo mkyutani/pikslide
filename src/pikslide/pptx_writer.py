@@ -58,6 +58,7 @@ from .pik.layout import (
     rasterize_svg,
     resolve_layout,
     slot_step,
+    spline_curves,
     string_color,
     turn,
 )
@@ -865,7 +866,9 @@ def _add_line_shape(container, shape: Shape, tf: _Transform, name: str):
         drawn = connector
     else:
         if shape.kind == "arc":
-            freeform = _add_arc_freeform(container, shape, tf)
+            freeform = _add_curve_freeform(container, shape, tf, [_arc_curve(shape)])
+        elif shape.kind == "spline":
+            freeform = _add_curve_freeform(container, shape, tf, spline_curves(shape.path))
         else:
             x0, y0 = points[0]
             builder = container.shapes.build_freeform(Inches(x0), Inches(y0))
@@ -959,22 +962,29 @@ def _add_elbow_connector(container, points: list[tuple[float, float]], curved: b
     return connector
 
 
-def _add_arc_freeform(container, shape: Shape, tf: _Transform):
-    """An arc as a freeform whose path is one curve, so that it stays a
-    curve for a person editing the slide; PowerPoint points its
-    arrowheads along it. The curve is pikchr's quadratic Bezier
-    (arc_control_point()), written as the cubic one (`a:cubicBezTo`) that
-    PowerPoint's own Curve tool writes: the same curve, its two control
-    points two thirds of the way from each end to the quadratic's.
-    python-pptx's freeform builder draws only straight segments, so it
-    builds the shape on the box round the curve, and the path is
-    rewritten. The control points can lie outside that box: PowerPoint
-    draws a path beyond its frame."""
+def _arc_curve(shape: Shape) -> tuple[tuple[float, float], ...]:
+    """An arc's curve, pikchr's quadratic Bezier (arc_control_point()), as
+    the cubic one (start, control, control, end) PowerPoint's own Curve
+    tool writes: the same curve, its two control points two thirds of the
+    way from each end to the quadratic's."""
     assert shape.path is not None
     start, end = shape.path
     qx, qy = arc_control_point(start, end, shape.cw)
     c1 = (start[0] + 2 / 3 * (qx - start[0]), start[1] + 2 / 3 * (qy - start[1]))
     c2 = (end[0] + 2 / 3 * (qx - end[0]), end[1] + 2 / 3 * (qy - end[1]))
+    return (start, c1, c2, end)
+
+
+def _add_curve_freeform(container, shape: Shape, tf: _Transform, curves: list[tuple[tuple[float, float], ...]]):
+    """A line drawn as `curves`, cubic Beziers end to end, as a freeform
+    whose path is those curves (`a:cubicBezTo`), closed if the line is:
+    an arc's one curve (_arc_curve()), or a spline's through each of its
+    points (spline_curves()). So it stays a curve for a person editing
+    the slide, each point one they can move (Edit Points), and PowerPoint
+    points its arrowheads along it. python-pptx's freeform builder draws
+    only straight segments, so it builds the shape on the box round the
+    curve, and the path is rewritten. The control points can lie outside
+    that box: PowerPoint draws a path beyond its frame."""
     xs, ys = zip(*(tf.point(p) for p in line_points(shape)))
     left, top = Inches(min(xs)), Inches(min(ys))
     builder = container.shapes.build_freeform(left, top)
@@ -994,8 +1004,11 @@ def _add_arc_freeform(container, shape: Shape, tf: _Transform):
     path = freeform._element.spPr.find(qn("a:custGeom")).find(qn("a:pathLst"))[0]
     for el in list(path):
         path.remove(el)
-    path.append(command("a:moveTo", start))
-    path.append(command("a:cubicBezTo", c1, c2, end))
+    path.append(command("a:moveTo", curves[0][0]))
+    for _start, c1, c2, end in curves:
+        path.append(command("a:cubicBezTo", c1, c2, end))
+    if shape.closed:
+        path.append(OxmlElement("a:close"))
     return freeform
 
 

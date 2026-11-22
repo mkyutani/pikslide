@@ -27,7 +27,7 @@ import math
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
-from functools import lru_cache
+from functools import lru_cache, wraps
 from importlib import resources
 from typing import Protocol
 
@@ -304,7 +304,52 @@ def slot_step(slot: str) -> int:
 
 
 class LayoutError(Exception):
-    pass
+    """A diagram that can't be laid out (docs/spec.md SS5). Once the layout
+    knows it, `where` is where in the source the statement, name or
+    expression it is about starts (ast.Where), and `line`, `pos` and
+    `file` are its, as a PikSyntaxError has them; all None for an error
+    about no one place in the source, such as a template's."""
+
+    text = ""
+    """A PikSyntaxError's token near the error: a layout error has none."""
+
+    def __init__(self, message: str, where: ast.Where | None = None):
+        super().__init__(message)
+        self.message = message
+        self.where = where
+
+    @property
+    def line(self) -> int | None:
+        return self.where.line if self.where else None
+
+    @property
+    def pos(self) -> int | None:
+        return self.where.pos if self.where else None
+
+    @property
+    def file(self) -> str | None:
+        return self.where.file if self.where else None
+
+
+def _locate(err: LayoutError, node) -> None:
+    """Say that `err` is about `node`, a tree node or a Shape, unless
+    something inside it already said where."""
+    if err.where is None:
+        err.where = getattr(node, "where", None)
+
+
+def _locating(fn):
+    """`fn`, whose errors are about its first argument, a tree node."""
+
+    @wraps(fn)
+    def locating(node, *args, **kwargs):
+        try:
+            return fn(node, *args, **kwargs)
+        except LayoutError as e:
+            _locate(e, node)
+            raise
+
+    return locating
 
 
 @dataclass(frozen=True)
@@ -474,6 +519,9 @@ class Shape:
     """An attached line's start and end: each the object it attached to,
     and which of its connection sites (connection_sites(), numbered as a
     connector numbers them), or None (_attach_lines())."""
+    where: ast.Where | None = field(default=None, compare=False, repr=False)
+    """Where its statement starts, for an error found after the layout
+    (_attach_lines())."""
 
     def offset(self, edge: str | None) -> tuple[float, float]:
         return _edge_offset(self, edge)
@@ -800,7 +848,7 @@ def _prelude_document() -> ast.Document:
     global _prelude_document_cache
     if _prelude_document_cache is None:
         text = resources.files("pikslide").joinpath("prelude.pik").read_text(encoding="utf-8")
-        _prelude_document_cache = parse(text)
+        _prelude_document_cache = parse(text, file="<prelude>")
     return _prelude_document_cache
 
 
@@ -848,7 +896,7 @@ def _load_prelude(ctx: "_Ctx") -> None:
         _eval_assignment(stmt, ctx)
 
 
-def _load_settings(ctx: "_Ctx", settings_text: str, settings_base_dir: str) -> None:
+def _load_settings(ctx: "_Ctx", settings_text: str, settings_base_dir: str, settings_file: str) -> None:
     """Run a template's settings file's own assignments into `ctx.vars`,
     after the prelude and before the program (docs/spec.md SS3.8): the
     same "definitions only" format as an included file (SS3.6). This is a
@@ -857,15 +905,20 @@ def _load_settings(ctx: "_Ctx", settings_text: str, settings_base_dir: str) -> N
     `include` inside the program is, so there's no circular-import
     constraint here forcing a token-shape scan the way `include`'s
     `_validate_definitions_only()` needs; `define` and `include` both work
-    inside it, resolved against `settings_base_dir` (its own directory)."""
-    doc = parse(settings_text, base_dir=settings_base_dir)
+    inside it, resolved against `settings_base_dir` (its own directory).
+    Its errors are in `settings_file`, its path, not the program."""
+    doc = parse(settings_text, base_dir=settings_base_dir, file=settings_file)
     for stmt in doc.statements:
         if not isinstance(stmt, ast.AssignStatement):
             raise LayoutError(
                 "a settings file must contain definitions only: "
-                f"found a {type(stmt).__name__}"
+                f"found a {type(stmt).__name__}", stmt.where
             )
-        _eval_assignment(stmt, ctx)
+        try:
+            _eval_assignment(stmt, ctx)
+        except LayoutError as e:
+            _locate(e, stmt)
+            raise
 
 
 def default_text_sizes() -> dict[str, float]:
@@ -888,6 +941,7 @@ class _Ctx:
         settings_text: str | None = None,
         settings_base_dir: str = ".",
         template_defaults: dict[str, PikValue] | None = None,
+        settings_file: str = "<settings>",
     ) -> None:
         self.vars: dict[str, PikValue] = {}
         self.scope_stack: list[dict[str, Shape]] = [{}]
@@ -908,7 +962,7 @@ class _Ctx:
         # prelude's, under the settings file's.
         self.vars.update(template_defaults or {})
         if settings_text is not None:
-            _load_settings(self, settings_text, settings_base_dir)
+            _load_settings(self, settings_text, settings_base_dir, settings_file)
         self._layout_assignment_allowed = False
 
     def lookup_name(self, path: list[str]) -> Shape | None:
@@ -945,6 +999,7 @@ _PROP_GETTERS = {
 }
 
 
+@_locating
 def eval_expr(e: ast.Expr, ctx: _Ctx) -> PikValue | None:
     """Evaluate any value expression -- a number, a color, `None` (the
     `none`/`off` "no color" value), or a string (ext) -- to whatever it
@@ -1110,6 +1165,7 @@ def rasterize_svg(svg_path: str) -> bytes:
     return result.stdout
 
 
+@_locating
 def eval_place(place: ast.Place, ctx: _Ctx) -> tuple[float, float]:
     if isinstance(place, ast.ObjectEdge):
         shape = resolve_object(place.obj, ctx)
@@ -1127,6 +1183,7 @@ def _rect_corners(shape: Shape) -> list[tuple[float, float]]:
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
+@_locating
 def eval_position(pos: ast.Position, ctx: _Ctx) -> tuple[float, float]:
     if isinstance(pos, ast.Coord):
         return (_as_number(eval_expr(pos.x, ctx)), _as_number(eval_expr(pos.y, ctx)))
@@ -1194,6 +1251,7 @@ def _named_object(pos: ast.Position, ctx: _Ctx) -> Shape | None:
         return None
 
 
+@_locating
 def resolve_object(ref: ast.ObjectRef, ctx: _Ctx) -> Shape:
     if isinstance(ref, ast.ThisRef):
         if ctx.current is None:
@@ -1869,6 +1927,7 @@ def string_color(shape: Shape, i: int) -> Color | None:
     return own if own is not None else shape.text_color
 
 
+@_locating
 def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _Ctx) -> None:
     if isinstance(attr, ast.LeadingDirection):
         length = _resolve_rel(attr.amount, ctx.vars["linewid"], ctx)
@@ -2328,45 +2387,11 @@ def _layout_statements(
             pool.insert(_index_by_identity(pool, behind_target), shape)
 
     for stmt in statements:
-        if isinstance(stmt, ast.DirectionStatement):
-            direction = _DIR_CODE[stmt.direction]
-            if prev is not None:
-                _set_exit(prev, direction)
-            continue
-        if isinstance(stmt, ast.AssignStatement):
-            _eval_assignment(stmt, ctx)
-            continue
-        if isinstance(stmt, ast.LabelPosition):
-            pt = eval_position(stmt.position, ctx)
-            shape = Shape(kind="point", name=stmt.label, cx=pt[0], cy=pt[1], w=0.0, h=0.0,
-                          enter=pt, exit=pt, in_dir=direction, out_dir=direction)
-            _place(shape, None)
-            ctx.scope_stack[-1][stmt.label] = shape
-            prev = shape
-            continue
-        if isinstance(stmt, ast.ObjectStatement):
-            shape, behind_target = _layout_object(stmt, direction, prev, ctx)
-            # Counts every object of this kind, labeled or not (matching
-            # NthRef's own pool-filter-by-kind in resolve_object() above),
-            # so a default name's ordinal always agrees with what "Nth
-            # <class>" would address, even with labeled objects in between.
-            class_counts[shape.kind] = class_counts.get(shape.kind, 0) + 1
-            if stmt.label:
-                shape.name = stmt.label
-                ctx.scope_stack[-1][stmt.label] = shape
-            else:
-                shape.name = f"{shape.kind} {class_counts[shape.kind]}"
-            if is_drawn(shape) or shape.group:
-                shape.name = _unique_name(shape.name, ctx)
-            shape.behind = behind_target
-            _resolve_handles(shape, ctx)
-            _check_text_overflow(shape, shape.name if stmt.label else None, ctx)
-            _check_unoutlined(shape, ctx)
-            _place(shape, behind_target)
-            prev = shape
-            direction = shape.out_dir
-            continue
-        raise LayoutError(f"unsupported statement: {type(stmt).__name__}")
+        try:
+            prev, direction = _layout_statement(stmt, direction, prev, ctx, _place, class_counts)
+        except LayoutError as e:
+            _locate(e, stmt)
+            raise
 
     if shapes:
         x0 = min(s.bbox[0] for s in shapes)
@@ -2377,6 +2402,51 @@ def _layout_statements(
     else:
         bbox = (0.0, 0.0, 0.0, 0.0)
     return shapes, direction, bbox
+
+
+def _layout_statement(
+    stmt: ast.Statement, direction: int, prev: Shape | None, ctx: _Ctx, place, class_counts: dict[str, int]
+) -> tuple[Shape | None, int]:
+    """One statement of _layout_statements(), which gives its `place` for
+    a new object and its `class_counts`: the object before the next
+    statement, and the direction then."""
+    if isinstance(stmt, ast.DirectionStatement):
+        direction = _DIR_CODE[stmt.direction]
+        if prev is not None:
+            _set_exit(prev, direction)
+        return prev, direction
+    if isinstance(stmt, ast.AssignStatement):
+        _eval_assignment(stmt, ctx)
+        return prev, direction
+    if isinstance(stmt, ast.LabelPosition):
+        pt = eval_position(stmt.position, ctx)
+        shape = Shape(kind="point", name=stmt.label, cx=pt[0], cy=pt[1], w=0.0, h=0.0,
+                      enter=pt, exit=pt, in_dir=direction, out_dir=direction)
+        place(shape, None)
+        ctx.scope_stack[-1][stmt.label] = shape
+        return shape, direction
+    if isinstance(stmt, ast.ObjectStatement):
+        shape, behind_target = _layout_object(stmt, direction, prev, ctx)
+        shape.where = stmt.where
+        # Counts every object of this kind, labeled or not (matching
+        # NthRef's own pool-filter-by-kind in resolve_object() above),
+        # so a default name's ordinal always agrees with what "Nth
+        # <class>" would address, even with labeled objects in between.
+        class_counts[shape.kind] = class_counts.get(shape.kind, 0) + 1
+        if stmt.label:
+            shape.name = stmt.label
+            ctx.scope_stack[-1][stmt.label] = shape
+        else:
+            shape.name = f"{shape.kind} {class_counts[shape.kind]}"
+        if is_drawn(shape) or shape.group:
+            shape.name = _unique_name(shape.name, ctx)
+        shape.behind = behind_target
+        _resolve_handles(shape, ctx)
+        _check_text_overflow(shape, shape.name if stmt.label else None, ctx)
+        _check_unoutlined(shape, ctx)
+        place(shape, behind_target)
+        return shape, shape.out_dir
+    raise LayoutError(f"unsupported statement: {type(stmt).__name__}")
 
 
 def _unique_name(name: str, ctx: _Ctx) -> str:
@@ -2546,7 +2616,7 @@ def _attach_lines(shapes: list[Shape], ctx: _Ctx) -> None:
                 continue
             attached[i] = (obj, idx)
         if not on_an_object:
-            raise LayoutError(f"'attach' on {line.name}: neither of its ends is on an object")
+            raise LayoutError(f"'attach' on {line.name}: neither of its ends is on an object", line.where)
         if line.connector_path in ("elbow", "curved") and not line.routed:
             ctx.warnings.append(LayoutWarning(
                 f"{line.name} isn't a route {_a(line.connector_path)} connector can take, with a slanted segment "
@@ -2641,6 +2711,7 @@ def resolve_layout(
     settings_text: str | None = None,
     settings_base_dir: str = ".",
     template_defaults: dict[str, PikValue] | None = None,
+    settings_file: str = "<settings>",
 ) -> LayoutResult:
     """Resolve a parsed pik :class:`~pikslide.pik.ast.Document` into concrete,
     ready-to-render geometry. See the module docstring for what this
@@ -2660,13 +2731,13 @@ def resolve_layout(
     SS3.8), read after the prelude and before `doc` itself, so its
     definitions override the prelude's and the program's override its in
     turn; `settings_base_dir` is the directory its own `include`s (if any)
-    resolve against.
+    resolve against, and `settings_file` its path, for its errors.
 
     `template_defaults`, if given, are variables a `--template` itself sets
     (docs/spec.md SS3.8: its theme's default shape's text insets, as
     `margin`/`vmargin`), assigned after the prelude and before the
     settings file."""
-    ctx = _Ctx(metrics, image_metrics, base_dir, settings_text, settings_base_dir, template_defaults)
+    ctx = _Ctx(metrics, image_metrics, base_dir, settings_text, settings_base_dir, template_defaults, settings_file)
     ctx.warnings.extend(LayoutWarning(message) for message in doc.warnings)
     shapes, _direction, _bbox = _layout_statements(doc.statements, DIR_RIGHT, ctx)
     flat = flatten_shapes(shapes)

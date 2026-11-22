@@ -160,16 +160,17 @@ class _State:
 
 
 def expand_macros(
-    text: str, base_dir: str = ".", include_paths: list[str] | None = None
+    text: str, base_dir: str = ".", include_paths: list[str] | None = None, file: str | None = None
 ) -> tuple[list[Token], list[MacroDefinition], list[str]]:
     """Tokenize ``text`` and expand all macro invocations and `include`
     statements (ext; docs/spec.md SS3.6). `base_dir` is the source file's
     own directory, against which an `include "path"` resolves first;
     `include_paths` (ext, for a future `--include-path`) are tried next,
     in order, if it isn't found there. Also returns the warnings about
-    calls an operator takes part of (_binding_warnings())."""
-    tokens = Lexer(text).tokenize()
-    state = _State(texts={None: text})
+    calls an operator takes part of (_binding_warnings()). `file` is the
+    text's own name for its tokens, None for the main source (parse())."""
+    tokens = Lexer(text, file=file).tokenize()
+    state = _State(texts={file: text})
     _expand(tokens, 0, len(tokens), None, state, depth=0,
             current_dir=base_dir, include_paths=include_paths or [], include_stack=())
     defs = [MacroDefinition(m.name, m.body) for m in state.macros.values()]

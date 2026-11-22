@@ -792,10 +792,14 @@ rendering engine, is used only when named.
 
 Humans and LLMs both need errors they can act on.
 
-- Every error carries `file:line:column`, the source line, and a caret; the
-  file is the included one when the error is inside an `include` (§3.6).
-  An error inside a macro's expansion points at the macro's body, in its
-  `define`.
+- Every error carries `file:line:column`, the source line, and a caret: a
+  layout error's at the statement, name or expression it is about. The
+  file is the included one when the error is inside an `include` (§3.6),
+  and the settings file when it is in that (§3.8). An error inside a
+  macro's expansion points at the macro's body, in its `define`, or at
+  the call, when what it is about came in an argument. An error about no
+  place in the source, such as a `--layout` the template hasn't, carries
+  none.
 - Using the built-in theme because none was supplied is a **warning** (§3.3).
 - Text wider than a fixed-size object's text area is a **warning** (§3.3).
 - A preset's handle longer than the preset draws it is a **warning** (§3.4).
@@ -898,7 +902,10 @@ Humans and LLMs both need errors they can act on.
   bigger than the template slide's content area, or on a placeholder it
   keeps, isn't a warning: where it goes is the caller's.
 
-  Errors are `pikslide.PikSyntaxError` and `pikslide.LayoutError`. These,
+  Errors are `pikslide.PikSyntaxError` and `pikslide.LayoutError`, each
+  with its `message`, and its `line`, `file` (None for the source parsed)
+  and `pos`, a character offset into that file's text; a LayoutError's
+  are None when it is about no place in the source. These,
   `pikslide.Layout` and the three functions are the whole library; the
   rest of the package can change between versions.
 - **`pikslide --help TOPIC`** answers from the installed package, so a

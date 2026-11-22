@@ -10,6 +10,7 @@ see comments at each such spot.
 
 from __future__ import annotations
 
+import functools
 import re
 
 from . import ast
@@ -904,13 +905,47 @@ class Parser:
         return ast.NameRef(path)
 
 
-def parse(text: str, base_dir: str = ".", include_paths: list[str] | None = None) -> ast.Document:
+def _located(method):
+    """`method`, which returns a tree node, recording where the node starts
+    (ast.Where): at the token the method began at, unless a method it
+    called already recorded it -- the one for its first part, which starts
+    there too."""
+
+    def located(self: Parser, *args, **kwargs):
+        tok = self.peek()
+        node = method(self, *args, **kwargs)
+        if tok is not None and getattr(node, "where", ()) is None:
+            node.where = ast.Where(tok.line, tok.pos, tok.file)
+        return node
+
+    return functools.wraps(method)(located)
+
+
+# The methods that return a statement, an expression, a reference, a place,
+# a position or an attribute, each whole from its first token.
+for _name in (
+    "parse_statement", "parse_basetype", "_parse_text", "_try_parse_attribute", "_parse_go_direction",
+    "_parse_move_heading", "parse_expr", "parse_unary", "parse_atom", "parse_relexpr", "parse_optrelexpr",
+    "parse_value", "parse_color_value", "_parse_color_base", "parse_position", "_parse_paren_position",
+    "_parse_expr_led_position", "_parse_place_led_position", "parse_place", "parse_place2", "parse_object",
+    "parse_nth", "parse_objectname",
+):
+    setattr(Parser, _name, _located(getattr(Parser, _name)))
+
+
+def parse(
+    text: str, base_dir: str = ".", include_paths: list[str] | None = None, file: str | None = None
+) -> ast.Document:
     """Parse diagram source text into a :class:`pikslide.pik.ast.Document` tree.
 
     `base_dir` is the source file's own directory (docs/spec.md SS3.6): an
     `include "path"` resolves against it first, then against each of
-    `include_paths` in order (ext, for a future `--include-path`)."""
-    tokens, macros, warnings = expand_macros(text, base_dir, include_paths)
+    `include_paths` in order (ext, for a future `--include-path`).
+
+    `file` names the text for its errors and its nodes' `where`, when it
+    isn't the main source: a template's settings file, say. None, the
+    main source, is what a caller formats an error against."""
+    tokens, macros, warnings = expand_macros(text, base_dir, include_paths, file=file)
     doc = Parser(tokens).parse_document()
     doc.macros = macros
     doc.warnings = warnings

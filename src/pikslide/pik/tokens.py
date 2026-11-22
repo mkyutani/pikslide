@@ -333,7 +333,9 @@ def format_syntax_error(err: PikSyntaxError, main_path: str, main_text: str) -> 
     column, the source line, and a caret; the file is the included one
     when the error is inside an include". `err.file`, when set, is read
     again here for its own source line -- not cached anywhere, since a
-    diagnostic is the rare path, not a hot one.
+    diagnostic is the rare path, not a hot one. A LayoutError that knows
+    where it is (its `where`) has the same `message`, `line`, `pos`,
+    `file` and `text`, and is formatted the same.
 
     `main_path` is only a display name for `err.file is None`."""
     if err.file is None:

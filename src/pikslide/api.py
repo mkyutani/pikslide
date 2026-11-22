@@ -68,6 +68,7 @@ def layout(
         raise ValueError("slide_layout names a slide layout of template, so it needs template")
     settings_text = None
     settings_base_dir = "."
+    settings_path = None
     if template is not None or settings is not None:
         settings_path = find_settings_file(template or settings, explicit=settings)
         if settings_path is not None:
@@ -76,7 +77,8 @@ def layout(
             settings_base_dir = os.path.dirname(os.path.abspath(settings_path))
     result = resolve_for_pptx(
         doc, base_dir=doc.base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir,
-        template_path=template, layout_name=slide_layout, own_slide=False,
+        settings_file=settings_path or "<settings>", template_path=template, layout_name=slide_layout,
+        own_slide=False,
     )
     warnings = [LayoutWarning(s) for s in result.stand_ins] + result.warnings
     if template is None:
@@ -170,6 +172,7 @@ def build(
 
     settings_text = None
     settings_base_dir = "."
+    settings_path = None
     try:
         if template is not None or settings is not None:
             settings_path = find_settings_file(template or input_path, explicit=settings)
@@ -180,10 +183,12 @@ def build(
                 settings_base_dir = os.path.dirname(os.path.abspath(settings_path))
         result = resolve_for_pptx(
             doc, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir,
-            template_path=template, layout_name=layout_name,
+            settings_file=settings_path or "<settings>", template_path=template, layout_name=layout_name,
         )
+    except PikSyntaxError as e:  # in the settings file
+        raise _syntax_error(e, input_path, text) from None
     except LayoutError as e:
-        raise _layout_error(e) from None
+        raise _layout_error(e, input_path, text) from None
 
     # --strict (docs/spec.md SS5): a stand-in for what the deck will really
     # have is an error; a problem with the diagram itself stays a warning.
@@ -196,7 +201,7 @@ def build(
         try:
             slide = slide_frame(result, template, slide_layout)
         except LayoutError as e:
-            raise _layout_error(e) from None
+            raise _layout_error(e, input_path, text) from None
         built.check = {"slide": slide, "objects": object_list(flatten_shapes(result.shapes))}
         return built
 
@@ -207,7 +212,7 @@ def build(
         try:
             write_pptx_from_template(result, template, output, layout_name=slide_layout)
         except LayoutError as e:
-            raise _layout_error(e) from None
+            raise _layout_error(e, input_path, text) from None
     else:
         # No --template (docs/spec.md SS3.3 rule 2): the built-in Office
         # theme stands in for a real one, which --strict makes fatal
@@ -248,16 +253,27 @@ def _try_read(path: str) -> str | None:
 def _syntax_error(err: PikSyntaxError, main_path: str, main_text: str) -> BuildError:
     """With the help topics for the statement it's in (help.py), so a
     person or an LLM stuck on the syntax knows where to look it up."""
+    return _located(err, lambda source_line: syntax_error_topics(source_line, err.text), main_path, main_text)
+
+
+def _layout_error(err: LayoutError, main_path: str, main_text: str) -> BuildError:
+    """A LayoutError (docs/spec.md SS5: undefined names and the like),
+    where in which file the statement, name or expression it is about is,
+    as a syntax error is; with no position for one about no place in the
+    source, such as a template's."""
+    topics = layout_error_topics(err.message)
+    if err.where is None:
+        return BuildError(err.message, topics)
+    return _located(err, lambda _source_line: topics, main_path, main_text)
+
+
+def _located(err: PikSyntaxError | LayoutError, topics, main_path: str, main_text: str) -> BuildError:
+    """`err`, at its `line` and `pos` in its `file` (the main source,
+    `main_text` read from `main_path`, if None), with `topics(its source
+    line)` to read."""
     text = main_text if err.file is None else (_try_read(err.file) or "")
     lines = text.splitlines()
     source_line = lines[err.line - 1] if 0 < err.line <= len(lines) else ""
     column = column_at(text, err.pos) if text else None
-    return BuildError(err.message, syntax_error_topics(source_line, err.text), file=err.file or main_path,
+    return BuildError(err.message, topics(source_line), file=err.file or main_path,
                       line=err.line, column=column, shown=format_syntax_error(err, main_path, main_text))
-
-
-def _layout_error(err: LayoutError) -> BuildError:
-    """A LayoutError (docs/spec.md SS5: undefined names and the like)
-    carries no file position: unlike a PikSyntaxError, it isn't tied to
-    one token."""
-    return BuildError(str(err), layout_error_topics(str(err)))

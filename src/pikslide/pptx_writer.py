@@ -381,6 +381,7 @@ def resolve_for_pptx(
     layout_name: str | None = None,
     font_index: FontIndex | None = None,
     own_slide: bool = True,
+    settings_file: str = "<settings>",
 ) -> LayoutResult:
     """resolve_layout(), measuring "fit" text with the fonts the deck
     will actually be drawn in (PilFontMetrics), so objects are sized to
@@ -404,29 +405,25 @@ def resolve_for_pptx(
 
     `base_dir` is the source file's own directory, against which an
     `image` object's path resolves (docs/spec.md SS3.5). `settings_text`/
-    `settings_base_dir` are a template's settings file (docs/spec.md
-    SS3.8), if any -- see find_settings_file()."""
+    `settings_base_dir`/`settings_file` are a template's settings file
+    (docs/spec.md SS3.8), if any, and its path -- see find_settings_file()."""
+    settings = {"settings_text": settings_text, "settings_base_dir": settings_base_dir, "settings_file": settings_file}
     if template_path is None:
         metrics = PilFontMetrics(theme_fonts=default_theme_fonts(), font_index=font_index)
-        result = resolve_layout(
-            doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text, settings_base_dir=settings_base_dir
-        )
+        result = resolve_layout(doc, metrics=metrics, base_dir=base_dir, **settings)
         result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_rects(s, metrics))
     else:
         if layout_name is None:
             # `layout` can only be set by the prelude or the settings file,
             # never the program, so resolving those alone gives its value.
-            layout_name = resolve_layout(
-                ast.Document(statements=[]), settings_text=settings_text, settings_base_dir=settings_base_dir
-            ).layout_name
+            layout_name = resolve_layout(ast.Document(statements=[]), **settings).layout_name
         prs, tmp_path = _open_template_base(template_path)
         try:
             layout = _resolve_template_layout(prs, layout_name)
             master = layout.slide_master
             metrics = PilFontMetrics(theme_fonts=_master_theme_fonts(master), font_index=font_index)
             result = resolve_layout(
-                doc, metrics=metrics, base_dir=base_dir, settings_text=settings_text,
-                settings_base_dir=settings_base_dir,
+                doc, metrics=metrics, base_dir=base_dir, **settings,
                 template_defaults=template_defaults_from_xml(_master_theme_xml(master)),
             )
             result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_rects(s, metrics))

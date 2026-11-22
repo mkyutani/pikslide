@@ -16,6 +16,22 @@ pipeline, not part of the tree-building stage.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import NamedTuple
+
+
+class Where(NamedTuple):
+    """Where in the source a node starts (docs/spec.md SS5): its `line`,
+    and `pos` and `file` as its first token has them -- a character
+    offset into that file's text, and the file, None for the main source.
+
+    The parser sets it on each statement, expression, reference, place,
+    position and attribute, as `node.where`: not a dataclass field, so a
+    tree compares and dumps the same wherever it was written. A node the
+    parser didn't make has None, its class's."""
+
+    line: int
+    pos: int
+    file: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -25,6 +41,8 @@ from dataclasses import dataclass, field
 
 class Expr:
     """Base class for arithmetic expression nodes."""
+
+    where = None
 
 
 @dataclass
@@ -137,6 +155,8 @@ class StrLit(Expr):
 class ObjectRef:
     """Base class for ways of referring to a previously-defined object."""
 
+    where = None
+
 
 @dataclass
 class ThisRef(ObjectRef):
@@ -158,6 +178,8 @@ class NthRef(ObjectRef):
 class Place:
     """Base class for a 2-D place reference used inside a Position."""
 
+    where = None
+
 
 @dataclass
 class ObjectEdge(Place):
@@ -173,6 +195,8 @@ class NthVertex(Place):
 
 class Position:
     """Base class for a symbolic 2-D position expression."""
+
+    where = None
 
 
 @dataclass
@@ -238,6 +262,8 @@ class HeadingOffset(Position):
 class Attribute:
     """Base class for one item in an object's attribute list."""
 
+    where = None
+
 
 @dataclass
 class RelExpr:
@@ -245,6 +271,7 @@ class RelExpr:
 
     abs: Expr | None = None
     percent: Expr | None = None
+    where = None  # not a field: see Where
 
 
 @dataclass
@@ -457,9 +484,13 @@ class Same(Attribute):
 class Statement:
     """Base class for a single top-level or block-level statement."""
 
+    where = None
+
 
 class Basetype:
     """Base class for the un-labeled, un-attributed core of a statement."""
+
+    where = None
 
 
 @dataclass

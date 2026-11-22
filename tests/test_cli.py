@@ -307,11 +307,12 @@ def test_check_syntax_error_has_file_line_column(monkeypatch, capsys, tmp_path):
     assert isinstance(err["column"], int)
 
 
-def test_check_layout_error_has_no_position(monkeypatch, capsys, tmp_path):
+def test_check_layout_error_has_its_position(monkeypatch, capsys, tmp_path):
+    # Where the name it is about is (issue #40).
     src = _write(tmp_path, "d.pik", "box fill nosuchcolor\n")
     with pytest.raises(SystemExit):
         _run(monkeypatch, [str(src), "--check"])
     payload = json.loads(capsys.readouterr().out)
     err = payload["errors"][0]
-    assert err["line"] is None
+    assert (err["file"], err["line"], err["column"]) == (str(src), 1, 10)
     assert "nosuchcolor" in err["message"]

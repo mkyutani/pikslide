@@ -579,7 +579,12 @@ define card { rad 8px stroke text1 }
   and `A-2` (§3.1), and `A` then means the second. See
   [grammar.md](grammar.md), *Macros*.
 - **Resolution.** The path is relative to the file containing the `include`,
-  then to each `--include-path DIR`.
+  then to each `--include-path DIR`, and last to the files pikslide ships.
+  One is `figures.pik`: macros for diagrams whose shape is the point
+  (cycles, chevrons, pyramids, funnels, Venn diagrams, a two-by-two matrix,
+  a hub and its items), each drawing a block whose parts are named in it
+  (`P: cycle4("Plan", "Do", "Check", "Act")`, then `P.S1`), at the size
+  `figwid` and `fight` give; `pikslide --help figures` lists them.
 - **Local and contained.** Only local files are read, never URLs. The
   resolved path must lie under the including file's directory or under an
   `--include-path` directory: absolute paths and `..` escapes are rejected.
@@ -867,7 +872,9 @@ Humans and LLMs both need errors they can act on.
   other than the ones at its ends, or through an object's text. An
   overlap that is meant doesn't warn: an object wholly inside another (a
   frame round a group, a pin on a map), an object drawn `behind` another
-  (that one only, §3.1), and a line's ends on the objects they join. A
+  (that one, or one it is behind in turn, §3.1: three circles of a Venn
+  diagram, each behind the one before), and a line's ends on the objects
+  they join. A
   circle or an ellipse is taken as its outline, a diamond as its four
   corners, a `text` object as its strings, and any other object, preset
   shapes too, as its bounding box. What isn't drawn doesn't count: a

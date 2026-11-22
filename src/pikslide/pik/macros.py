@@ -52,10 +52,15 @@ def _prelude_variable_names() -> frozenset[str]:
     return _prelude_var_names_cache
 
 
+BUNDLED_INCLUDES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "includes")
+"""The files pikslide ships for `include`, such as figures.pik (issue #38)."""
+
+
 def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[str], path_tok: Token) -> str:
     """Resolve an `include "path"` (docs/spec.md SS3.6): relative to
     `current_dir` (the including file's own directory) first, then to
-    each `include_paths` entry in order.
+    each `include_paths` entry in order, and last to the files pikslide
+    ships (BUNDLED_INCLUDES).
 
     Rejects an absolute path, and any resolution that escapes its own
     base directory: a diagram may be written by an LLM, and must not be
@@ -71,7 +76,7 @@ def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[s
     if os.path.isabs(raw_path) or raw_path.startswith("~"):
         raise PikSyntaxError(f"include path must be relative, not {raw_path!r}", line, raw_path, pos=pos, file=file)
     tried = []
-    for base_dir in (current_dir, *include_paths):
+    for base_dir in (current_dir, *include_paths, BUNDLED_INCLUDES):
         base = os.path.realpath(base_dir)
         resolved = os.path.realpath(os.path.join(base, raw_path))
         if os.path.commonpath([base, resolved]) != base:
@@ -79,7 +84,7 @@ def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[s
             continue
         if os.path.isfile(resolved):
             return resolved
-        tried.append(base_dir)
+        tried.append("pikslide's own" if base_dir == BUNDLED_INCLUDES else base_dir)
     raise PikSyntaxError(
         f"include file not found: {raw_path!r} (tried: {', '.join(tried)})", line, raw_path, pos=pos, file=file
     )

@@ -412,8 +412,9 @@ ENTRIES: tuple[Entry, ...] = (
                   'define pair { [ A: box "a"; B: box "b" ] }\nP: pair\narrow from P.B.e right'),
     Entry(("include",), "reads definitions from another file", synopsis=('include "PATH"',),
           body="Reads variables and macros from PATH (relative to the file, or a "
-               "--include-path directory). An included file can't draw anything.",
-          example='include "house.pik"'),
+               "--include-path directory, or else one pikslide ships: figures.pik). An included file "
+               "can't draw anything.",
+          example='include "house.pik"', see=("figures",)),
     Entry(("as",), "names the object `same` copies", synopsis=("same as OBJECT",), see=("same",)),
 )
 
@@ -483,6 +484,54 @@ def prelude_values() -> dict[str, str]:
         if m:
             values[m.group(1)] = m.group(2)
     return values
+
+
+# ---------------------------------------------------------------------------
+# The figures: macros pikslide bundles (includes/figures.pik, issue #38)
+# ---------------------------------------------------------------------------
+
+
+def figures_text() -> str:
+    return resources.files("pikslide").joinpath("includes", "figures.pik").read_text(encoding="utf-8")
+
+
+@functools.cache
+def figure_entries() -> tuple[Entry, ...]:
+    """Each family's entry, from its `#:` comment in figures.pik: its names
+    and summary (`cycle3 cycle4 | ...`), its synopsis, its description,
+    and after EXAMPLE, its example (scripts/gen_figures.py writes them)."""
+    entries, block = [], []
+    for line in figures_text().splitlines() + [""]:
+        if line.startswith("#:"):
+            block.append(line[3:])
+            continue
+        if block:
+            names, summary = block[0].split(" | ")
+            cut = block.index("EXAMPLE")
+            entries.append(Entry(
+                names=tuple(names.split()), summary=summary, synopsis=(block[1],), body=" ".join(block[2:cut]),
+                example="\n".join(block[cut + 1:]), see=("figures", "include", "define"), group="figure"))
+            block = []
+    return tuple(entries)
+
+
+def _figure_sizes() -> dict[str, str]:
+    return dict(re.findall(r"(?m)^(figwid|fight) = (\S+)$", figures_text()))
+
+
+def _figure_names(entry: Entry) -> str:
+    return entry.names[0] if len(entry.names) == 1 else f"{entry.names[0]}..{entry.names[-1]}"
+
+
+def _figure_list(style: _Style) -> str:
+    sizes = _figure_sizes()
+    note = (f'Macros for diagrams whose shape is the point, in a file pikslide ships: include "figures.pik" '
+            f"first. Each draws a block whose parts are named in it (P.S1, P.C); each argument is a part's "
+            f"strings and attributes, written last, so that they win (\"Check\" fill emphasis). figwid and "
+            f"fight ({sizes['figwid']} and {sizes['fight']}) are the size a figure fits in: assign them after the "
+            f"include to change it. pikslide --help NAME describes one.")
+    rows = [(_figure_names(e), e.summary) for e in figure_entries()]
+    return _format_list('Figures  (include "figures.pik")', rows, style) + "\n" + _wrap(note, style.width, 2) + "\n"
 
 
 def _css_colors() -> dict[str, int]:
@@ -1105,8 +1154,8 @@ _LLM_BODIES = {
     "define": "Macro; $1..$9 in BODY = arguments. Name: lowercase first, not an existing variable. An "
               "argument or body that is an expression = one value, as in parentheses: `5 - $1` with `1 + 1` → 3; "
               "else pasted as text. Body labels objects → write them in a block: P: pair labels it, P.A = its A.",
-    "include": "Reads variables and macros from PATH (relative to the file, or an --include-path directory). "
-               "An included file can't draw.",
+    "include": "Reads variables and macros from PATH (relative to the file, or an --include-path directory, "
+               "or else one pikslide ships: figures.pik). An included file can't draw.",
 }
 
 # The intro and the opening as --help llm gives them: a line a paragraph,
@@ -1182,6 +1231,11 @@ def llm_text() -> str:
         "",
         "TEMPLATE",
         "Drawing on a --template's slide (layout, content area, settings file): pikslide --help template",
+        "",
+        "FIGURES",
+        'Macros for a diagram whose shape is the point, after include "figures.pik": '
+        + ", ".join(_figure_names(e) for e in figure_entries())
+        + ". pikslide --help figures, then --help NAME; look for one before drawing such a shape by hand.",
         "",
     ])
 
@@ -1289,6 +1343,7 @@ _LISTS = {
     "shapes": "PowerPoint preset shapes, for `shape NAME`, and what each looks like",
     "variables": "the built-in variables and their defaults",
     "prelude": "the prelude itself: every built-in definition",
+    "figures": 'macros for cycles, chevrons, pyramids, funnels, Venn diagrams, a matrix, hubs: include "figures.pik"',
 }
 _PAGES = {"intro": "start here: the language in one page, with an example",
             "template": "drawing on a --template's slide: layout, content area, settings file",
@@ -1328,6 +1383,11 @@ def render(topic: str, style: _Style) -> str | None:
         return llm_text()
     if key == "prelude":
         return prelude_text()
+    if key == "figures":
+        return _figure_list(style)
+    figures = {name: e for e in figure_entries() for name in e.names}
+    if key in figures:
+        return _format_entry(figures[key], style)
     if key == "colors":
         return style.bold("Colors") + "  (fill COLOR, color COLOR)\n\n" + _color_list(style) + "\n"
     if key == "shapes":
@@ -1352,7 +1412,8 @@ def render(topic: str, style: _Style) -> str | None:
 
 
 def _all_topics() -> list[str]:
-    return list(dict.fromkeys([*_PAGES, *_LISTS, *_entry_index(), *prelude_values(), *PRESET_NAMES]))
+    figures = [name for e in figure_entries() for name in e.names]
+    return list(dict.fromkeys([*_PAGES, *_LISTS, *_entry_index(), *figures, *prelude_values(), *PRESET_NAMES]))
 
 
 def show(topic: str | None) -> int:

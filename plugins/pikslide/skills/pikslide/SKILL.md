@@ -42,6 +42,10 @@ Otherwise run the `pikslide` command:
 
 ## Writing it
 
+- A cycle, a row of chevrons, a pyramid, a funnel, a Venn diagram, a
+  two-by-two matrix or a hub with items round it is one macro call,
+  after `include "figures.pik"`: `pikslide --help figures` lists them.
+  Use one rather than drawing the shape by hand.
 - Lengths are in inches, and the diagram is drawn at the size it is
   written, never scaled. With no template, the slide is sized to it; on
   a template's slide, it goes at the content area's top left (a 16:9

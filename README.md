@@ -114,6 +114,9 @@ so neither you nor an LLM needs this repository to write a diagram:
 - `pikslide --help box`: a keyword's synopsis, attributes and defaults
 - `pikslide --help colors`, `shapes`, `keywords`, …: the lists
 - `pikslide --help template`: drawing on a template's slide
+- `pikslide --help figures`: macros pikslide ships for cycles, chevrons,
+  pyramids, funnels, Venn diagrams, a two-by-two matrix and hubs, after
+  `include "figures.pik"`
 - `pikslide --help llm`: the reference in one text, for an LLM to read
   once: short enough to come back whole from one command, and the same
   bytes from the same version, so a prompt that holds it can be cached

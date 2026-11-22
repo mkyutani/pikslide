@@ -16,7 +16,8 @@ Warns about:
 
 Overlaps that are meant don't warn: an object wholly inside another (a
 frame round a group, a pin on a map), an object drawn `behind` another,
-and a line's ends on the objects they join. Touching isn't overlapping:
+directly or behind one that is behind it, and a line's ends on the
+objects they join. Touching isn't overlapping:
 everything here allows `TOLERANCE`. What isn't drawn doesn't count: an
 `invis` line, and an `invis` object with no fill but for its text.
 
@@ -146,7 +147,20 @@ def _whose(shape: Shape, text: str) -> str:
 
 
 def _meant(a: Shape, b: Shape) -> bool:
-    return a.behind is b or b.behind is a
+    """Whether one of `a` and `b` is drawn `behind` the other: directly, or
+    behind one that is behind it (S3 behind S2, and S2 behind S1), as the
+    three circles of a Venn diagram are."""
+    return _behind(a, b) or _behind(b, a)
+
+
+def _behind(a: Shape, b: Shape) -> bool:
+    seen = set()
+    while a.behind is not None and id(a) not in seen:
+        seen.add(id(a))
+        a = a.behind
+        if a is b:
+            return True
+    return False
 
 
 def _near(labels: list[tuple[str, _Convex]]) -> _Convex:

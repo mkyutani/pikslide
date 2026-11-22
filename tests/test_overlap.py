@@ -55,6 +55,13 @@ def test_an_object_drawn_behind_another_doesnt_warn_about_it():
     assert overlaps("A: box\nC: box at A + (0.6, -0.6)\nB: box at A + (0.3, -0.2) behind A\n") == [("B", "C")]
 
 
+def test_behind_one_that_is_behind_another_is_behind_that_too():
+    # Three circles of a Venn diagram, each behind the one before.
+    venn = "A: circle rad 0.5\nB: circle rad 0.5 at A + (0.6, 0) behind A\nC: circle rad 0.5 at A + (0.3, -0.5) behind B\n"
+    assert overlaps(venn) == []
+    assert sorted(overlaps(venn.replace(" behind B", ""))) == [("A", "C"), ("B", "C")]
+
+
 def test_text_on_text_warns():
     # The frame's text is under the inner box's, which is wholly inside it.
     assert overlaps('F: box "Frame" wid 2 ht 1\nbox "Inner" at F\n') == [("F", "box 2")]

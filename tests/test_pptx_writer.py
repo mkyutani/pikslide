@@ -747,7 +747,7 @@ def _make_svg(tmp_path: pathlib.Path, name: str = "icon.svg", w: int = 200, h: i
     return path
 
 
-def test_svg_renders_as_a_picture_sized_by_aspect_ratio(tmp_path: pathlib.Path):
+def test_svg_renders_as_a_picture_sized_by_aspect_ratio(tmp_path: pathlib.Path, rsvg_convert):
     _make_svg(tmp_path, w=400, h=200)
     prs = render('image "icon.svg" width 2\n', tmp_path)
     picture = prs.slides[0].shapes[0]
@@ -756,7 +756,7 @@ def test_svg_renders_as_a_picture_sized_by_aspect_ratio(tmp_path: pathlib.Path):
     assert picture.height.inches == pytest.approx(1.0)  # 400x200, aspect preserved
 
 
-def test_svg_has_a_real_blip_and_the_svg_extension(tmp_path: pathlib.Path):
+def test_svg_has_a_real_blip_and_the_svg_extension(tmp_path: pathlib.Path, rsvg_convert):
     _make_svg(tmp_path)
     prs = render('image "icon.svg" width 1\n', tmp_path)
     picture = prs.slides[0].shapes[0]
@@ -773,7 +773,7 @@ def test_svg_has_a_real_blip_and_the_svg_extension(tmp_path: pathlib.Path):
     assert svg_part.blob.startswith(b"<svg") or b"<svg" in svg_part.blob[:100]
 
 
-def test_svg_alt_text_is_the_actual_saved_description(tmp_path: pathlib.Path):
+def test_svg_alt_text_is_the_actual_saved_description(tmp_path: pathlib.Path, rsvg_convert):
     _make_svg(tmp_path)
     prs = render('image "icon.svg" alt "A circle"\n', tmp_path)
     picture = prs.slides[0].shapes[0]

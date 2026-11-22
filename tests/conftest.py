@@ -4,11 +4,15 @@ has them, a Linux CI runner doesn't. A test about the theme or `--strict`
 shouldn't hinge on that, so where one of those fonts isn't installed it
 is found as the substitute `fit` would measure with anyway. Any other
 font is looked up as usual, so a missing one (`typeface "NoSuchFontXyz"`)
-is still missing."""
+is still missing.
+
+Also `rsvg_convert`, for the tests an SVG image needs rsvg-convert for:
+they skip where it isn't installed (Windows, in CI)."""
 
 from __future__ import annotations
 
 import dataclasses
+import shutil
 
 import pytest
 
@@ -34,3 +38,9 @@ def office_fonts(monkeypatch):
     families = {f for f in dataclasses.astuple(pptx_writer.default_theme_fonts()) if f}
     index = _WithOfficeFonts(pptx_writer.installed_fonts(), families, pptx_writer._find_measure_font())
     monkeypatch.setattr(pptx_writer, "installed_fonts", lambda: index)
+
+
+@pytest.fixture
+def rsvg_convert():
+    if shutil.which("rsvg-convert") is None:
+        pytest.skip("rsvg-convert (librsvg) not installed")

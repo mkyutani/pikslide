@@ -924,7 +924,7 @@ def test_svg_with_both_dimensions_given_needs_no_rasterization(tmp_path: pathlib
     assert (result.shapes[0].w, result.shapes[0].h) == pytest.approx((1.0, 2.0))
 
 
-def test_svg_image_sizes_by_aspect_ratio_via_rasterization(tmp_path: pathlib.Path):
+def test_svg_image_sizes_by_aspect_ratio_via_rasterization(tmp_path: pathlib.Path, rsvg_convert):
     _make_svg(tmp_path, w=400, h=200)  # 2:1 aspect ratio
     result = resolve_layout(parse('image "icon.svg" width 2\n'), base_dir=str(tmp_path))
     assert (result.shapes[0].w, result.shapes[0].h) == pytest.approx((2.0, 1.0))

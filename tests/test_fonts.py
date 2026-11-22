@@ -229,9 +229,10 @@ def test_which_fonts_powerpoint_draws_with(monkeypatch):
     from pikslide.fonts import powerpoint_sees
 
     monkeypatch.setattr(pikslide.fonts, "on_windows", lambda: True)
-    monkeypatch.setattr(sys, "platform", "linux")  # WSL
-    assert powerpoint_sees("/mnt/c/Windows/Fonts/arial.ttf")
-    assert not powerpoint_sees("/usr/share/fonts/truetype/bizud-mincho/BIZUDMincho-Regular.ttf")
+    if os.name == "posix":  # WSL's paths, which Windows' os.path takes for its own
+        monkeypatch.setattr(sys, "platform", "linux")  # WSL
+        assert powerpoint_sees("/mnt/c/Windows/Fonts/arial.ttf")
+        assert not powerpoint_sees("/usr/share/fonts/truetype/bizud-mincho/BIZUDMincho-Regular.ttf")
     monkeypatch.setattr(sys, "platform", "win32")  # Windows: not pikslide's own directory
     monkeypatch.setenv("LOCALAPPDATA", "/users/u/AppData/Local")
     assert not powerpoint_sees("/users/u/AppData/Local/pikslide/fonts/MyFont.ttf")

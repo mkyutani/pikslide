@@ -10,18 +10,31 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.12", "3.13", "3.14"]
+        # Windows and macOS find fonts in other folders, write paths
+        # differently and have other fonts: one Python version each.
+        include:
+          - os: windows-latest
+            python-version: "3.14"
+          - os: macos-latest
+            python-version: "3.14"
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
+      # On Windows there is none to install: the tests that need it skip.
       - name: Install rsvg-convert, for the SVG image tests
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+      - name: Install rsvg-convert, for the SVG image tests
+        if: runner.os == 'macOS'
+        run: brew install librsvg
       - run: uv run --locked pytest
       - name: Test pikslide-mcp, in its own environment
         run: uv run --locked --package pikslide-mcp --group dev pytest pikslide-mcp/tests

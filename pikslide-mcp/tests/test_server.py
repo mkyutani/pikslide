@@ -4,6 +4,7 @@ connected in-process (issue #33)."""
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import tomllib
 
@@ -53,7 +54,9 @@ def test_render_writes_the_deck_and_returns_its_picture(tmp_path):
     result = call(tmp_path, "render", {"out": "out/d.pptx", "source": 'box "Web"\narrow\nbox "API"\n',
                                        "renderer": "direct"})
     written = json.loads(result.content[0].text)
-    assert written["wrote"] == [{"path": "out/d.pptx"}, {"path": "out/d.png", "drawn_by": "pikslide"}]
+    # In the platform's own form: out\d.pptx on Windows.
+    deck, picture = os.path.join("out", "d.pptx"), os.path.join("out", "d.png")
+    assert written["wrote"] == [{"path": deck}, {"path": picture, "drawn_by": "pikslide"}]
     assert any("no --template" in w["message"] for w in written["warnings"])
     assert result.content[1].type == "image" and result.content[1].mime_type == "image/png"
     assert (tmp_path / "out" / "d.pptx").exists() and (tmp_path / "out" / "d.png").exists()

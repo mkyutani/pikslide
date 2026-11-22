@@ -43,6 +43,8 @@ def test_in_a_macro_at_the_body_or_the_argument_it_comes_from():
     # As a syntax error does: the place of the token itself.
     assert where("define m {\n  box at B.e\n}\nm()\n")[:2] == (2, 10)
     assert where("define m {\n  box at $1.e\n}\nm(B)\n")[:2] == (4, 3)
+    # An argument put in parentheses (issue #45) is still where it was.
+    assert where("define m { 1 + $1 }\nbox wid m(nosuch + 1)\n")[:2] == (2, 11)
 
 
 def test_the_library_gives_where_too():

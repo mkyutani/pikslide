@@ -527,6 +527,17 @@ define card { rad 8px stroke text1 }
   visible from the `include` line onward, exactly as if written there.
 - **House colors are variables** holding colors (§3.3); macros are for
   bundles of attributes such as `card`.
+- **A macro's expression is one value.** An argument or a body that is
+  an expression with an operator outside parentheses is pasted in as if
+  in parentheses: with `define row { 5 - $1 }`, `row(1 + 1)` is
+  `5 - (1 + 1)`, 3, not the `5 - 1 + 1`, 5, of pikchr's pasted text.
+  Anything else, attributes such as `fill red`, is pasted in as text.
+- **A macro that labels objects is a block**: `define m { [ A: box … ] }`
+  keeps its names in it, and `P: m()` labels the block, so `P.A` is its
+  `A`, however many times `m` is called. Labeled outside a block, a
+  body's objects join the caller's names: called twice, its `A` is `A`
+  and `A-2` (§3.1), and `A` then means the second. See
+  [grammar.md](grammar.md), *Macros*.
 - **Resolution.** The path is relative to the file containing the `include`,
   then to each `--include-path DIR`.
 - **Local and contained.** Only local files are read, never URLs. The
@@ -843,9 +854,6 @@ Humans and LLMs both need errors they can act on.
   ignored: a diagram written with one would look as if it worked. Each
   can come back later, doing what it says, without breaking a diagram
   ([grammar.md](grammar.md), *Reserved words*).
-- An operator that takes only part of a macro's argument or body, pasted
-  in as text (`5 - $1` with `1 + 1`), is a **warning** naming the call;
-  see [grammar.md](grammar.md), *Macros*.
 - `--check` lays the source out without writing anything and prints the
   result as JSON, for an LLM or a tool to read: the errors; the warnings,
   each a `message` and the `objects` it names, by the names in the object

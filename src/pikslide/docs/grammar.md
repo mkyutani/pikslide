@@ -108,13 +108,22 @@ macro-call       ::= ID [ "(" [ macro-arg { "," macro-arg } ] ")" ]
   Substitution doesn't reach inside `STRING` tokens: an already-tokenized
   string is opaque to macro expansion, so `$1` written inside a quoted
   string stays literal text, not a substitution.
-- An argument is pasted in as text, not evaluated first, and so is the
-  body, as in pikchr: with `define row { 5 - $1 }`, `row(1 + 1)` is
-  `5 - 1 + 1`, which is 5. Write `($1)` in the body, and an expression
-  body in parentheses. An operator beside `$N`, or beside a call, that
-  takes only part of the expression pasted there is a **warning** naming
-  the call, since a diagram may be written by an LLM, and the misplaced
-  object it makes says nothing of the macro.
+- **An expression is one value.** An argument that is an `expr` with an
+  operator outside parentheses is pasted in as if in parentheses, and so
+  is a body that is one alone: with `define row { 5 - $1 }`, `row(1 + 1)`
+  is `5 - (1 + 1)`, which is 3, and with `define gap { 0.5 + 0.5 }`,
+  `5 - gap` is 4. pikchr pastes both in as text, making the first
+  `5 - 1 + 1`, 5: a diagram written by an LLM easily has such a call,
+  and the misplaced object it makes says nothing of the macro. An
+  argument or a body that isn't an `expr`, such as attributes
+  (`fill red`, `wid 1 + 1`) or a position, is pasted in as text.
+- **A macro that labels objects writes them in a block**,
+  `define m { [ A: box … ] }`: their names stay in it, a block being a
+  name scope of its own, and a labeled call labels the block, so after `P: m()`, `P.A` is its `A`,
+  however many times `m` is called. Labeled outside a block, a body's
+  objects join the caller's names: called twice, its `A` is `A` and
+  `A-2` on the slide ([spec.md](spec.md) §3.1), and `A` then means the
+  second.
 - The body replaces the call without its leading and trailing newlines
   (or `;`), so it joins the call's own statement however it's laid out:
   `P: pair` labels the first statement of `pair`, even when the body

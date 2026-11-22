@@ -394,9 +394,13 @@ ENTRIES: tuple[Entry, ...] = (
     # --- statements -----------------------------------------------------
     Entry(("define",), "defines a macro", synopsis=("define NAME { BODY }", "NAME(ARG, ...)"),
           body="Defines a macro; `$1` ... `$9` in BODY are its arguments. The name must "
-               "start with a lowercase letter and not already be a variable. An argument is "
-               "pasted in as text: `5 - $1` with `1 + 1` is `5 - 1 + 1`, so write `($1)`.",
-          example='define card { box $1 fill accent1 fit }\ncard("Web")'),
+               "start with a lowercase letter and not already be a variable. An argument or "
+               "a body that is an expression is one value, as if in parentheses: `5 - $1` "
+               "with `1 + 1` is 3. Anything else, such as attributes, is pasted in as text. "
+               "A macro that labels objects writes them in a block, so that its names stay "
+               "in it: `P: pair` labels the block, and `P.A` is its `A`.",
+          example='define card { box $1 fill accent1 fit }\ncard("Web")\n'
+                  'define pair { [ A: box "a"; B: box "b" ] }\nP: pair\narrow from P.B.e right'),
     Entry(("include",), "reads definitions from another file", synopsis=('include "PATH"',),
           body="Reads variables and macros from PATH (relative to the file, or a "
                "--include-path directory). An included file can't draw anything.",
@@ -1085,8 +1089,9 @@ _LLM_BODIES = {
              "previous = object just before.",
     "functions": "cos, sin take degrees; atan2 gives them: angle from (0, 0) to (X, Y), -180 to 180, "
                  "counterclockwise from right. A line's: atan2(B.y - A.y, B.x - A.x).",
-    "define": "Macro; $1..$9 in BODY = arguments. Name: lowercase first, not an existing variable. Arguments "
-              "pasted as text: `5 - $1` with `1 + 1` → `5 - 1 + 1`; write ($1).",
+    "define": "Macro; $1..$9 in BODY = arguments. Name: lowercase first, not an existing variable. An "
+              "argument or body that is an expression = one value, as in parentheses: `5 - $1` with `1 + 1` → 3; "
+              "else pasted as text. Body labels objects → write them in a block: P: pair labels it, P.A = its A.",
     "include": "Reads variables and macros from PATH (relative to the file, or an --include-path directory). "
                "An included file can't draw.",
 }

@@ -955,9 +955,8 @@ def parse(
     `file` names the text for its errors and its nodes' `where`, when it
     isn't the main source: a template's settings file, say. None, the
     main source, is what a caller formats an error against."""
-    tokens, macros, warnings = expand_macros(text, base_dir, include_paths, file=file)
+    tokens, macros = expand_macros(text, base_dir, include_paths, file=file)
     doc = Parser(tokens).parse_document()
     doc.macros = macros
-    doc.warnings = warnings
     doc.base_dir = base_dir
     return doc

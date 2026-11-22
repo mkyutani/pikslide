@@ -393,7 +393,7 @@ def test_macro_invocation_requires_adjacent_parens():
     # A space before '(' means "invoke with no args": arguments are only
     # parsed from text immediately following the macro name token, so "(...)" with a preceding space is left as
     # ordinary tokens rather than being consumed as the argument list.
-    tokens, _, _ = expand_macros("define one { box } one (ignored)\n")
+    tokens, _ = expand_macros("define one { box } one (ignored)\n")
     kinds = [t.type for t in tokens]
     assert kinds == [
         TokType.CLASSNAME,  # 'box', from expanding 'one'
@@ -434,52 +434,47 @@ def test_recursive_macro_raises():
 def test_string_literal_dollar_is_not_substituted():
     # A STRING token is opaque to macro expansion,
     # so "$1" typed inside quotes is never substituted.
-    tokens, _, _ = expand_macros('define m { box "$1" }\nm(hello)\n')
+    tokens, _ = expand_macros('define m { box "$1" }\nm(hello)\n')
     doc = Parser(tokens).parse_document()
     assert doc.statements[0].attributes[0].text == "$1"
 
 
 # ---------------------------------------------------------------------------
-# A macro is pasted in as text, as in pikchr (issue #28): a warning when an
-# operator next to it takes only part of an argument, or of a body.
+# An argument or a body that is an expression is one value, as if in
+# parentheses (issue #45), not text as in pikchr; anything else is text.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    ("text", "warning"),
+    ("text", "meaning"),
     [
-        ("define row { 5 - $1 }\nbox at (0, row(1 + 1))\n",
-         "line 2: row(1 + 1): the '-' before $1 in row's body takes only part of 1 + 1, "
-         "pasted in as text; write ($1) there"),
-        ("define twice { $1 * 2 }\nbox ht twice(A.ht + 0.1)\n",
-         "line 2: twice(A.ht + 0.1): the '*' after $1 in twice's body takes only part of A.ht + 0.1, "
-         "pasted in as text; write ($1) there"),
-        ("define half { 6 / $1 }\nbox ht half(2 * 3)\n", "the '/' before $1 in half's body"),
-        ("define neg { -$1 }\nbox ht neg(1 + 1)\n", "the '-' before $1 in neg's body"),
-        ("define gap { 0.5 + 0.5 }\nbox ht 5 - gap\n",
-         "line 2: the '-' before gap takes only part of its body, 0.5 + 0.5, pasted in as text; "
-         "put the body in parentheses"),
+        ("define row { 5 - $1 }\nv = row(1 + 1)\n", "v = 5 - (1 + 1)\n"),
+        ("define twice { $1 * 2 }\nv = twice(A.ht + 0.1)\n", "v = (A.ht + 0.1) * 2\n"),
+        ("define half { 6 / $1 }\nv = half(2 * 3)\n", "v = 6 / (2 * 3)\n"),
+        ("define neg { -$1 }\nv = neg(1 + 1)\n", "v = -(1 + 1)\n"),
+        ("define gap { 0.5 + 0.5 }\nv = 5 - gap\n", "v = 5 - (0.5 + 0.5)\n"),
+        ("define row { 5 - $1 }\nv = row(1 + 1) * 2\n", "v = (5 - (1 + 1)) * 2\n"),
+        ("define one { $1 + 1 }\ndefine two { 2 * one($1) }\nv = 6 / two(3 - 1)\n",
+         "v = 6 / (2 * ((3 - 1) + 1))\n"),
+        ("define at2 { at ($1, -$2) }\nbox at2(1, 1 + 1)\n", "box at (1, -(1 + 1))\n"),
     ],
 )
-def test_an_operator_that_takes_part_of_a_pasted_expression_warns(text: str, warning: str):
-    [message] = parse(text).warnings
-    assert warning in message
+def test_an_expression_pasted_in_is_one_value(text: str, meaning: str):
+    assert parse(text).statements == parse(meaning).statements
 
 
 @pytest.mark.parametrize(
-    "text",
+    ("text", "meaning"),
     [
-        "define row { 5 - ($1) }\nbox at (0, row(1 + 1))\n",
-        "define row { 5 + $1 - 1 }\nbox at (0, row(1 - 1))\n",
-        "define twice { 2 * $1 }\nbox ht twice(3 / 4)\n",
-        "define neg { -$1 }\nbox ht neg(2 * 3)\n",
-        "define at2 { at ($1, -$2) }\nbox at2(1, -1)\n",
-        "define gap { (0.5 + 0.5) }\nbox ht 5 - gap\n",
-        'define card { box $1 fill accent1 fit }\ncard("Web")\n',
+        ('define card { box $1 fill accent1 fit }\ncard("Web" bold)\n', 'box "Web" bold fill accent1 fit\n'),
+        ("define sized { box $1 }\nsized(wid 1 + 1 ht 2)\n", "box wid 1 + 1 ht 2\n"),
+        ("define wide { box wid $1 }\nwide(10 + 40%)\n", "box wid 10 + 40%\n"),
+        ("define near { box at $1 }\nnear(A.e + (0.5, 0))\n", "box at A.e + (0.5, 0)\n"),
+        ("define size { wid 1 + 1 }\nbox size\n", "box wid 1 + 1\n"),
     ],
 )
-def test_an_expression_that_means_what_it_reads_as_does_not_warn(text: str):
-    assert parse(text).warnings == []
+def test_what_is_not_an_expression_is_pasted_in_as_text(text: str, meaning: str):
+    assert parse(text).statements == parse(meaning).statements
 
 
 # ---------------------------------------------------------------------------

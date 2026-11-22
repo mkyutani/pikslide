@@ -130,7 +130,7 @@ def test_llm_holds_every_entry_and_shape_once():
     assert all(name in text for name in PRESET_NAMES.values())
     # the classes' shared ATTRIBUTES once, the rest pointing to them
     assert text.count('text  "string" [flag ...] ...  ljust  rjust (lines of text') == 1
-    assert text.count('text  "string" [flag ...] ...  ljust  rjust (labels') == 1
+    assert text.count('text  "string" [flag ...] ...  ljust  rjust  aligned (labels') == 1
     assert "\nattributes: as BOX\n" in text and "\nattributes: as LINE\n" in text
     # the CSS names and the template page are one line each, pointing to their help
     assert text.count("Named colors") == 1 and f"all {len(_css_colors())} CSS color names" in text

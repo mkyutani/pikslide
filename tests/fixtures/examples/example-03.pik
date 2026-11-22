@@ -28,20 +28,20 @@ TC: box "Test Code" same
 
     box ht (In.n.y-VM.s.y)+$margin wid In.wid+$margin \
        at CP fill 0xd8ecd0 behind In
-    line "Core" italic stroke invis \
+    line "Core" italic aligned stroke invis \
         from 0.25*$margin east of last.sw up last.ht
 
     box ht (BT.n.y-OS.s.y)+$margin wid In.wid+$margin \
        at Pager fill 0xd0ece8 behind In
-    line "Backend" italic stroke invis \
+    line "Backend" italic aligned stroke invis \
        from 0.25*$margin east of last.sw up last.ht
 
     box ht (Tokenizer.n.y-CG.s.y)+$margin wid In.wid+$margin \
        at 1/2<Tokenizer.n,CG.s> fill 0xe8d8d0 behind In
-    line "SQL Compiler" italic stroke invis \
+    line "SQL Compiler" italic aligned stroke invis \
        from 0.25*$margin west of last.se up last.ht
 
     box ht (UT.n.y-TC.s.y)+$margin wid In.wid+$margin \
        at 1/2<UT,TC> fill 0xe0ecc8 behind In
-    line "Accessories" italic stroke invis \
+    line "Accessories" italic aligned stroke invis \
       from 0.25*$margin west of last.se up last.ht

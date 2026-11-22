@@ -1072,3 +1072,37 @@ def test_a_variable_named_like_a_point_lays_out_beside_the_point():
     result = layout("w = 0.5\nA: box at (0, 0)\nB: box with .e at A.w - (w, 0)\n")
     a, b = result.shapes[0], result.shapes[1]
     assert b.cx + b.w / 2 == pytest.approx(a.cx - a.w / 2 - 0.5)
+
+
+# ---------------------------------------------------------------------------
+# aligned: a straight line's labels turned to its direction (issue #54)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("to", "angle"), [
+    ("(1, 0)", 0.0), ("(1, 1)", 45.0), ("(-1, 0)", 0.0), ("(0, 1)", 90.0), ("(0, -1)", 90.0),
+    ("(-1, -1)", 45.0), ("(-1, 1)", -45.0), ("(1, -1)", -45.0),
+])
+def test_an_aligned_lines_labels_turn_to_its_direction_never_upside_down(to: str, angle: float):
+    from pikslide.pik.layout import label_angle
+
+    line = layout(f'line "a" from (0, 0) to {to} aligned\n').shapes[0]
+    assert label_angle(line) == pytest.approx(angle)
+
+
+def test_a_line_that_isnt_aligned_has_level_labels():
+    from pikslide.pik.layout import label_angle
+
+    assert label_angle(layout('line "a" from (0, 0) to (1, 1)\n').shapes[0]) == 0.0
+
+
+@pytest.mark.parametrize(("src", "message"), [
+    ('box "a" aligned\n', "it's only valid on a line, an arrow or a move, not a box"),
+    ('arc "a" aligned\n', "not an arc"),
+    ('spline "a" right then up aligned\n', "not a spline"),
+    ('line "a" right then up aligned\n', "this one has 2 segments"),
+    ('line "a" right then up then left close aligned\n', "this one has 4 segments"),
+])
+def test_aligned_on_anything_but_a_straight_line_is_an_error(src: str, message: str):
+    with pytest.raises(LayoutError, match=re.escape(message)):
+        layout(src)

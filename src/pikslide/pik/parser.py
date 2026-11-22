@@ -33,6 +33,7 @@ _NUMPROP_NAME = {
 }
 
 _BOOLPROP_NAME = {
+    TokType.ALIGNED: "aligned",
     TokType.CW: "cw",
     TokType.CCW: "ccw",
     TokType.GROUP: "group",
@@ -76,10 +77,9 @@ _STRING_ATTR_NAME = {
 _JUSTIFY_NAME = {TokType.LJUST: "ljust", TokType.RJUST: "rjust"}
 
 # Reserved words no rule uses, each an error wherever an attribute can
-# stand (docs/grammar.md, Reserved words): reserved, so that either can
-# come back, doing what it says, without breaking a diagram.
+# stand (docs/grammar.md, Reserved words): reserved, so that it can come
+# back, doing what it says, without breaking a diagram.
 _UNSUPPORTED = {
-    TokType.ALIGNED: "text isn't turned to a line's direction",
     TokType.MONO: "there's no monospace text",
 }
 

@@ -13,6 +13,7 @@ comments below.
 from __future__ import annotations
 
 import io
+import math
 import os
 import tempfile
 import zipfile
@@ -53,6 +54,7 @@ from .pik.layout import (
     drawn_size,
     flatten_shapes,
     is_drawn,
+    label_angle,
     line_points,
     preset_of,
     rasterize_svg,
@@ -61,6 +63,7 @@ from .pik.layout import (
     spline_curves,
     string_color,
     turn,
+    turn_about,
 )
 from .pik.overlap import TOLERANCE, find_overlaps
 from .pik.preset_text_rects import ADJUST_VALUES
@@ -464,7 +467,7 @@ def resolve_for_pptx(
     if template_path is None:
         metrics = PilFontMetrics(theme_fonts=default_theme_fonts(), font_index=font_index)
         result = resolve_layout(doc, metrics=metrics, base_dir=base_dir, **settings)
-        result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_rects(s, metrics))
+        result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_outlines(s, metrics))
     else:
         if layout_name is None:
             # `layout` can only be set by the prelude or the settings file,
@@ -479,7 +482,7 @@ def resolve_for_pptx(
                 doc, metrics=metrics, base_dir=base_dir, **settings,
                 template_defaults=template_defaults_from_xml(_master_theme_xml(master)),
             )
-            result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_rects(s, metrics))
+            result.warnings += find_overlaps(flatten_shapes(result.shapes), lambda s: _text_outlines(s, metrics))
             if own_slide:
                 result.warnings += _content_area_overflow(prs, layout, result)
                 result.warnings += _on_kept_placeholders(prs, layout, layout_name, result, metrics)
@@ -1102,6 +1105,8 @@ def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, flo
     # ljust/rjust (docs/spec.md SS3.1): the labels start at the line's left
     # end (end at its right end) instead, `margin` in from it, as a
     # string sits `margin` in from a box's side.
+    if shape.aligned:
+        return _aligned_label_rects(shape, box_w, label_box_h, label_step)
     if shape.just == "ljust":
         lx0 = bx0 + shape.text_margin
     elif shape.just == "rjust":
@@ -1114,6 +1119,58 @@ def _line_label_rects(shape: Shape) -> list[tuple[tuple[float, float, float, flo
         y = cy + dy
         out.append(((lx0, y - label_box_h / 2, lx0 + box_w, y + label_box_h / 2), text, flags))
     return out
+
+
+def _aligned_label_rects(shape: Shape, box_w: float, box_h: float,
+                         step: float) -> list[tuple[tuple[float, float, float, float], str, list[str]]]:
+    """An `aligned` line's labels (issue #54), each its box unturned,
+    centered where the box goes: placed as a level line's are, but along
+    the line and across it, read in its direction (label_angle()). Each is
+    drawn turned by that angle about its center."""
+    assert shape.path is not None
+    (x0, y0), (x1, y1) = shape.path[0], shape.path[-1]
+    angle = math.radians(label_angle(shape))
+    ux, uy = math.cos(angle), math.sin(angle)
+    vx, vy = -uy, ux
+    length = math.dist((x0, y0), (x1, y1))
+    if shape.just == "ljust":
+        along = -length / 2 + shape.text_margin + box_w / 2
+    elif shape.just == "rjust":
+        along = length / 2 - shape.text_margin - box_w / 2
+    else:
+        along = 0.0
+    mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+    out = []
+    for (text, flags), slot in zip(shape.texts, assign_text_slots(shape.texts)):
+        across = slot_step(slot) * step
+        cx, cy = mx + along * ux + across * vx, my + along * uy + across * vy
+        out.append(((cx - box_w / 2, cy - box_h / 2, cx + box_w / 2, cy + box_h / 2), text, flags))
+    return out
+
+
+def _label_corners(shape: Shape, box: tuple[float, float, float, float],
+                   rect: tuple[float, float, float, float] | None = None) -> list[tuple[float, float]]:
+    """The corners of `rect` (default: the label's `box` itself), in a
+    line's label box `box`, as drawn: turned about the box's center by an
+    `aligned` line's label_angle()."""
+    x0, y0, x1, y1 = rect or box
+    center = ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
+    return turn_about(center, label_angle(shape), [(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+
+
+def _bounds(points: list[tuple[float, float]]) -> tuple[float, float, float, float]:
+    xs, ys = [x for x, _y in points], [y for _x, y in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _text_outlines(shape: Shape, metrics: PilFontMetrics) -> list[list[tuple[float, float]]]:
+    """Each of `shape.texts` as drawn: its rectangle (_text_rects()), as
+    four corners, turned with a turned shape (turn()), or about its own
+    label box's center on an `aligned` line (_label_corners())."""
+    rects = _text_rects(shape, metrics)
+    if shape.kind in LINE_LIKE and label_angle(shape):
+        return [_label_corners(shape, box, rect) for rect, (box, _t, _f) in zip(rects, _line_label_rects(shape))]
+    return [turn(shape, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]) for x0, y0, x1, y1 in rects]
 
 
 def _text_rects(shape: Shape, metrics: PilFontMetrics) -> list[tuple[float, float, float, float]]:
@@ -1209,6 +1266,9 @@ def _add_line_text(container, shape: Shape, tf: _Transform, name: str) -> None:
         run.font.italic = "italic" in flags
         run.font.size = _font_size(flags, shape.text_sizes)
         _apply_color(run.font.color, string_color(shape, i - 1) or Color(rgb=0))
+        angle = label_angle(shape)
+        if angle:
+            textbox.rotation = -angle  # clockwise, about the box's center
 
 
 def _label_name(name: str, k: int) -> str:
@@ -1217,21 +1277,14 @@ def _label_name(name: str, k: int) -> str:
     return f"{name} text {k}"
 
 
-def _turned_rect(shape: Shape, rect: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    """`rect`, in a turned shape's own box, as the box round it drawn
-    turned (turn())."""
-    x0, y0, x1, y1 = rect
-    xs, ys = zip(*turn(shape, [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]))
-    return min(xs), min(ys), max(xs), max(ys)
-
-
 def _drawn_extent(shape: Shape) -> tuple[float, float, float, float]:
     """shape.bbox, expanded to also cover what is drawn outside it: a
     line's labels -- a line's own bbox is just its path, so a label
     floating above/below it (see _line_label_rects()) can stick out past
     it -- and a callout's tip or leader line (callout_points())."""
     x0, y0, x1, y1 = shape.bbox
-    rects = [rect for rect, _text, _flags in _line_label_rects(shape)] if shape.kind in LINE_LIKE else []
+    rects = [_bounds(_label_corners(shape, rect)) for rect, _t, _f in _line_label_rects(shape)] \
+        if shape.kind in LINE_LIKE else []
     rects += [(x, y, x, y) for x, y in callout_points(shape)]
     for rx0, ry0, rx1, ry1 in rects:
         x0, y0, x1, y1 = min(x0, rx0), min(y0, ry0), max(x1, rx1), max(y1, ry1)
@@ -1258,7 +1311,10 @@ def _geometry(shape: Shape) -> dict:
         obj["text"] = [text for text, _flags in shape.texts]
     if shape.path is not None:
         obj["points"] = [[round(x, 2), round(y, 2)] for x, y in shape.path]
-        labels = [_box(*rect) for rect, _text, _flags in _line_label_rects(shape)]
+        angle = label_angle(shape)
+        labels = [_box(*_bounds(_label_corners(shape, rect))) for rect, _text, _flags in _line_label_rects(shape)]
+        if angle:
+            labels = [{**label, "angle": round(angle, 2)} for label in labels]
         if labels:
             obj["labels"] = labels
         attached = {which: end[0].name for which, end in zip(("start", "end"), shape.attached) if end is not None}
@@ -1565,7 +1621,7 @@ def _on_kept_placeholders(
             outline = []
         else:
             outline = [shape.bbox]
-        texts = [_turned_rect(shape, rect) for rect in _text_rects(shape, metrics)]
+        texts = [_bounds(outline) for outline in _text_outlines(shape, metrics)]
         rects = [(*tf.point((x0, y1)), *tf.point((x1, y0))) for x0, y0, x1, y1 in outline + texts]
         drawn.append((shape.name or "", rects))
     warnings = []

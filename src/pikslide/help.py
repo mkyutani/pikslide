@@ -66,7 +66,7 @@ place    at P  with .EDGE at P  same [as X]  behind X
 edges    .n .ne .e .se .s .sw .w .nw .c  (.top .bottom .left .right .center)"""
 
 _LINE_ATTRIBUTES = """\
-text     "string" [flag ...] ...  ljust  rjust
+text     "string" [flag ...] ...  ljust  rjust  aligned
          (labels, among the rest: --help flags)
 path     [N]  up|down|left|right [N]  go N heading A  from P  to P  then
          right until even with P  close  chop
@@ -265,7 +265,12 @@ ENTRIES: tuple[Entry, ...] = (
     Entry(("bold", "italic"), "bold or italic text", synopsis=('"string" bold', '"string" italic'),
           group="flag", example='box "Title" bold "subtitle" italic', see=("flags",)),
     Entry(("mono", "monospace"), "reserved, not supported: an error (there's no monospace text)"),
-    Entry(("aligned",), "reserved, not supported: an error (text isn't turned to a line's direction)"),
+    Entry(("aligned",), "turns a straight line's labels to its direction",
+          synopsis=('LINE "string" ... aligned',),
+          body="A line's attribute, for all its labels at once: each turns to the line's direction, never "
+               "upside down, `above` and `below` putting it on either side of the line, `ljust` and `rjust` "
+               "from the line's ends along it. Only on a line, an arrow or a move of one segment.",
+          example='arrow "request" above from A.ne to B.w aligned', group="attribute", see=("ljust", "above")),
     Entry(("small", "medium", "large", "big"), "text size; as variables, the three sizes",
           synopsis=('"string" small', '"string" large', "small = 9pt"),
           body="Text flags for the three sizes (`big` is `large`); the last one on a "
@@ -1117,6 +1122,9 @@ _LLM_BODIES = {
     "none": "No color: no fill, or no stroke.",
     "above": "String attribute: string above (below) object's center or the line, stacking with others there. "
              "In a position: that far above (below) a point.",
+    "aligned": "Line's attribute, all labels: each turned to the line's direction, never upside down; above/below "
+               "on either side of the line, ljust/rjust from its ends along it. Only a line, arrow or move of one "
+               "segment.",
     "ljust": "Object attribute, all strings: aligned on left (right) edges, margin in from a closed shape's "
              "left (right) side or a line's left (right) end. On a text, at P = its left (right) edge at P. Not "
              "both.",

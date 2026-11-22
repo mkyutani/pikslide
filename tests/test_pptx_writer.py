@@ -1210,3 +1210,35 @@ def test_slide_frame_is_the_slide_the_diagram_is_written_on(tmp_path, layout):
     assert (1 - 0.375 - frame["left"], frame["top"] - (2 + 0.25)) == pytest.approx(
         (web.left.inches, web.top.inches), abs=1e-3)
     assert frame["placeholders"] == [p.name for p in slide.placeholders]
+
+
+# ---------------------------------------------------------------------------
+# aligned (issue #54)
+# ---------------------------------------------------------------------------
+
+
+def test_an_aligned_lines_labels_are_turned_text_boxes(tmp_path: pathlib.Path):
+    prs = render('arrow "up" above "down" below from (0, 0) to (2, 2) aligned\n', tmp_path)
+    shapes = {s.name: s for s in prs.slides[0].shapes}
+    up, down = shapes["arrow 1 text 1"], shapes["arrow 1 text 2"]
+    assert up.rotation == pytest.approx(315.0) and down.rotation == pytest.approx(315.0)
+    # Above is up and to the left of the line, below down and to the right.
+    def center(s):
+        return (s.left + s.width / 2, s.top + s.height / 2)
+    (ux, uy), (dx, dy) = center(up), center(down)
+    assert ux < dx and uy < dy
+
+
+def test_check_gives_an_aligned_labels_angle_and_the_box_round_it(tmp_path: pathlib.Path):
+    result = resolve_for_pptx(parse('line "a long label" above from (0, 0) to (0, 3) aligned\n'))
+    (label,) = object_list(flatten_shapes(result.shapes))[0]["labels"]
+    assert label["angle"] == 90.0
+    # Turned upright: taller than wide, left of the line it's above.
+    assert label["ht"] > label["wid"] and label["x"] < 0
+    assert label["y"] == pytest.approx(1.5)
+
+
+def test_aligned_ljust_starts_at_the_lines_end_along_it(tmp_path: pathlib.Path):
+    result = resolve_for_pptx(parse('line "a" above ljust from (0, 0) to (3, 3) aligned\n'))
+    (label,) = object_list(flatten_shapes(result.shapes))[0]["labels"]
+    assert label["x"] < 0.75 and label["y"] < 0.9  # near the start, not the middle (1.5, 1.5)

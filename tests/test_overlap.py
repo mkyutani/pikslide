@@ -164,3 +164,12 @@ def test_cookbook_and_tutorial_dont_overlap(path: pathlib.Path):
     result = resolve_for_pptx(parse(path.read_text(encoding="utf-8"), base_dir=str(path.parent)),
                               base_dir=str(path.parent))
     assert [w.message for w in result.warnings if "overflows" not in w.message] == []
+
+
+def test_an_aligned_label_above_a_slanted_line_is_off_it():
+    # issue #54: turned with the line, above stays clear of it; level, the
+    # same label at its middle would sit across the slope.
+    assert alone('arrow "request" above from (0, 0) to (2, 1.5) aligned\n') == []
+    assert alone('arrow "request" from (0, 0) to (2, 1.5) aligned\n') == [
+        'arrow 1\'s label "request" is on the line itself: make it above or below, or beside a vertical line, '
+        'ljust or rjust']

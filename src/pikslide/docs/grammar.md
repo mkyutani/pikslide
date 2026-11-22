@@ -6,7 +6,7 @@ syntax in BNF/EBNF, and a short account of what the constructs mean. For
 [spec.md](spec.md).
 
 This document describes the target language. Every rule here is
-implemented. Three reserved words, `aligned`, `mono` and `monospace`, are
+implemented. Two reserved words, `mono` and `monospace`, are
 used by no rule (see [Reserved words](#reserved-words)).
 
 ## Notation
@@ -262,6 +262,7 @@ attribute       ::= numprop relexpr
                    | "to" position
                    | boolprop
                    | "ljust" | "rjust"
+                   | "aligned"                       (* a line of one segment *)
                    | arrowdir
                    | ( "start" | "end" ) arrowhead [ "small" | "large" ]   (* lines only *)
                    | "at" position
@@ -441,11 +442,10 @@ names. Written as one, a reserved word is an error that says so:
 | `lighter`, `darker` | color modifiers |
 | `none`, `off` | the *no color* value |
 
-`aligned`, `mono` and `monospace` are reserved too, and used by no rule:
-pikslide doesn't turn text to a line's direction, and has no monospace
-text. Each is an error that says it isn't supported, wherever it's
-written, so either can come back later, doing what it says, without
-breaking a diagram.
+`mono` and `monospace` are reserved too, and used by no rule: pikslide
+has no monospace text, which would need a font the theme doesn't name.
+Each is an error that says it isn't supported, wherever it's written, so
+it can come back later, doing what it says, without breaking a diagram.
 
 Semantic constraints the grammar cannot express (each is an error):
 
@@ -458,6 +458,8 @@ Semantic constraints the grammar cannot express (each is an error):
   ([spec.md](spec.md) §3.4);
 - a second `at` on one object;
 - both `ljust` and `rjust` on one object;
+- `aligned` on anything but a `line`, an `arrow` or a `move` of one
+  segment;
 - a second `color` on one string;
 - `stroke` on an object that draws no line (`text`, `image`, `move`, a
   `[ … ]` block), and an empty `stroke`;
@@ -554,6 +556,12 @@ center.
 the object's strings: `ljust` aligns them left, `margin` in from the
 object's left side (a line's: from its left end), and on a `text` with
 `at P` puts the text's left edge at P; `rjust` mirrors it.
+
+`aligned`, on a line of one segment, turns all of its labels to its
+direction, about each label's center, never upside down (between -90
+and 90 degrees, so a vertical line's read upward). The labels are placed
+as a level line's are, but in the line's own frame: `above` and `below`
+on either side of it, `ljust` and `rjust` from its ends along it.
 
 **Why some words are reserved and others aren't.** A word is reserved
 exactly when the grammar needs it as a literal token somewhere — an object

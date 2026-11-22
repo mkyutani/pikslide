@@ -521,6 +521,9 @@ class Shape:
     """`group` (issue #36): a block written as a PowerPoint group of its
     objects, so that they move together; otherwise its objects are
     written one by one (docs/spec.md SS3.1)."""
+    aligned: bool = False
+    """`aligned` (issue #54): a straight line's labels turned to its
+    direction (label_angle())."""
     vertical: bool = False
     """`vertical` (issue #36): its text set vertically, as PowerPoint's
     East Asian vertical text (`eaVert`): each string a column, the first
@@ -1807,6 +1810,38 @@ def callout_points(shape: Shape) -> list[tuple[float, float]]:
     ])
 
 
+# The lines `aligned` turns the labels of: those of one straight segment.
+_ALIGNED_KINDS = {"line", "arrow", "move"}
+
+
+def label_angle(shape: Shape) -> float:
+    """The angle an `aligned` line's labels are turned to (issue #54), in
+    degrees counterclockwise: the line's direction from its start to its
+    end, never upside down (-90 < angle <= 90). 0 for any other shape."""
+    if not shape.aligned or not shape.path or len(shape.path) < 2:
+        return 0.0
+    (x0, y0), (x1, y1) = shape.path[0], shape.path[-1]
+    if (x0, y0) == (x1, y1):
+        return 0.0
+    angle = math.degrees(math.atan2(y1 - y0, x1 - x0))
+    if angle > 90:
+        angle -= 180
+    elif angle <= -90:
+        angle += 180
+    return angle
+
+
+def turn_about(center: tuple[float, float], degrees: float,
+               points: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """`points` turned counterclockwise by `degrees` about `center`."""
+    if not degrees:
+        return points
+    angle = math.radians(degrees)
+    cos, sin = math.cos(angle), math.sin(angle)
+    cx, cy = center
+    return [(cx + (x - cx) * cos - (y - cy) * sin, cy + (x - cx) * sin + (y - cy) * cos) for x, y in points]
+
+
 def turn(shape: Shape, points: list[tuple[float, float]], back: bool = False) -> list[tuple[float, float]]:
     """Where `points`, in the box of a preset shape turned or flipped
     (issue #26), are drawn: mirrored in the box, then turned clockwise
@@ -2072,6 +2107,11 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
             if shape.kind != "block":
                 raise LayoutError(f"'group' is only valid on a block ([ ... ]), not {_a(shape.kind)}")
             shape.group = True
+        elif attr.name == "aligned":
+            if shape.kind not in _ALIGNED_KINDS:
+                raise LayoutError(f"'aligned' turns a straight line's labels to its direction: it's only valid on "
+                                  f"a line, an arrow or a move, not {_a(shape.kind)}")
+            shape.aligned = True
         elif attr.name == "vertical":
             if shape.kind not in _FRAMED_TEXT_KINDS and shape.kind != "text":
                 raise LayoutError(f"'vertical' is only valid on an object with text in it (a box, a shape, a text, "
@@ -2436,6 +2476,9 @@ def _layout_object(stmt: ast.ObjectStatement, direction: int, prev: Shape | None
             build.path = _elbow_path(build.path, (build.from_named, build.seg_named[-1] if build.seg_named else None),
                                      ctx)
             shape.routed = _is_elbow(build.path)
+        if shape.aligned and len(build.path) != 2:
+            raise LayoutError(f"'aligned' turns a straight line's labels to its direction, and this one has "
+                              f"{len(build.path) - 1} segments: draw it as one, or leave 'aligned' out")
         shape.label_width = max(
             (ctx.metrics.text_width(text, flags, shape.text_sizes, shape.typeface, shape.lang)
              for text, flags in shape.texts),

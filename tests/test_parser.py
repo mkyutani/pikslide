@@ -859,8 +859,6 @@ def test_misplaced_or_conflicting_attributes_are_errors(src: str, message: str):
     ('box "a" mono\n', "mono"),
     ('"a" monospace bold\n', "monospace"),
     ('box "a" mono width 1\n', "mono"),
-    ('line "a" above aligned\n', "aligned"),
-    ("arrow from (0, 0) to (1, 1) aligned\n", "aligned"),
 ])
 def test_an_unsupported_word_is_an_error_that_says_so(src: str, word: str):
     # issue #46: accepted and ignored, it would look as if it worked
@@ -961,3 +959,9 @@ def test_a_reserved_word_as_a_variable_in_an_included_file(tmp_path):
 def test_an_included_file_can_set_stroke(tmp_path):
     (tmp_path / "defs.pik").write_text("stroke = red\n", encoding="utf-8")
     parse('include "defs.pik"\nbox\n', base_dir=str(tmp_path))
+
+
+def test_aligned_is_an_attribute():
+    # issue #54
+    doc = parse('arrow "a" above from (0, 0) to (1, 1) aligned\n')
+    assert doc.statements[0].attributes[-1] == ast.BoolProperty("aligned")

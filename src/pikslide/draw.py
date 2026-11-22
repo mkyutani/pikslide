@@ -38,6 +38,7 @@ from .pik.layout import (
     assign_text_slots,
     drawn_size,
     flatten_shapes,
+    label_angle,
     line_points,
     preset_of,
     string_color,
@@ -324,16 +325,31 @@ class _Painter:
             if len(points) > 1:
                 self._line_with_heads(shape, points)
         # Each label in a text box of its own, as pptx_writer._add_line_text()
-        # draws it: one line, top-anchored, no insets, aligned in the box.
+        # draws it: one line, top-anchored, no insets, aligned in the box;
+        # an aligned line's turned about the box's center.
         draw = ImageDraw.Draw(self.canvas)
+        angle = label_angle(shape)
         for i, ((x0, y0, x1, y1), text, flags) in enumerate(_line_label_rects(shape)):
-            left, top = self.tf.point((x0, y1))
             label = Shape(kind="text", name=None, cx=0.0, cy=0.0, w=0.0, h=0.0, texts=[(text, flags)],
                           text_colors=[string_color(shape, i)], text_sizes=shape.text_sizes, typeface=shape.typeface,
                           lang=shape.lang)
-            for line in self._layout_text(label, (left, top, left + (x1 - x0), top + (y1 - y0)), wrap=False,
-                                          anchor_top=True):
-                line.draw(draw, self._px)
+            w, h = x1 - x0, y1 - y0
+            if not angle:
+                left, top = self.tf.point((x0, y1))
+                for line in self._layout_text(label, (left, top, left + w, top + h), wrap=False, anchor_top=True):
+                    line.draw(draw, self._px)
+                continue
+            # Drawn level in a tile of its own, centered on the box's center, then turned.
+            half = math.hypot(w, h) / 2 + 2 * self.ss / self.scale
+            size = max(1, math.ceil(2 * half * self.scale))
+            tile = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+            left, top = size / 2 / self.scale - w / 2, size / 2 / self.scale - h / 2
+            tile_draw = ImageDraw.Draw(tile)
+            for line in self._layout_text(label, (left, top, left + w, top + h), wrap=False, anchor_top=True):
+                line.draw(tile_draw, self._px)
+            tile = tile.rotate(angle, resample=Image.Resampling.BICUBIC, center=(size / 2, size / 2))
+            cx, cy = self._px(self.tf.point(((x0 + x1) / 2, (y0 + y1) / 2)))
+            self.canvas.paste(tile, (round(cx - size / 2), round(cy - size / 2)), tile)
 
     def _px(self, p: Point) -> Point:
         return (p[0] * self.scale, p[1] * self.scale)

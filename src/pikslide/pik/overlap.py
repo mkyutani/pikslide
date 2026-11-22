@@ -27,8 +27,9 @@ preset shape too, as its bounding box, a turned one's turned with it, and
 its strings too (`rotate`, turn()). A line is the points it is drawn
 through, an arc's or a spline's curve in short straight pieces
 (line_points()). Where a string goes
-is the renderer's to say, so callers pass `text_rects`: each of a
-shape's strings' rectangles, as drawn."""
+is the renderer's to say, so callers pass `text_outlines`: each of a
+shape's strings as drawn, its rectangle's corners, turned with a turned
+shape or an `aligned` line's labels."""
 
 from __future__ import annotations
 
@@ -52,15 +53,14 @@ _ELLIPSE_PRESETS = {"ellipse", "flowChartConnector"}
 _DIAMOND_PRESETS = {"diamond", "flowChartDecision"}
 
 
-def find_overlaps(shapes: list[Shape], text_rects: Callable[[Shape], list[Rect]]) -> list[LayoutWarning]:
+def find_overlaps(shapes: list[Shape], text_outlines: Callable[[Shape], list[Polygon]]) -> list[LayoutWarning]:
     """The overlaps among `shapes`, the drawn ones (flatten_shapes()), and
     the lines whose labels are on them or off them, in source order; each
     pair of things is named once."""
     lines = [s for s in shapes if s.kind in LINE_LIKE and s.path and len(s.path) > 1]
     drawn = [line for line in lines if line.sw >= 0]
     objects = [s for s in shapes if s.kind not in LINE_LIKE]
-    strings = {id(s): [(t, _Convex(turn(s, _corners(r)))) for (t, _f), r in zip(s.texts, text_rects(s))]
-               for s in shapes}
+    strings = {id(s): [(t, _Convex(p)) for (t, _f), p in zip(s.texts, text_outlines(s))] for s in shapes}
     outline = {id(o): _outline(o, [r for _t, r in strings[id(o)]]) for o in objects}
     points = {id(line): line_points(line) for line in lines}
     paths = {id(line): _Convex(points[id(line)]) for line in lines}

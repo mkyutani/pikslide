@@ -128,6 +128,14 @@ Goal: the Selection Pane in PowerPoint reads like the source.
   | lines and arrows | the labels start `margin` in from the line's left end |
 
   Without either, a line's labels are centered on the line.
+- **`aligned`** turns a straight line's labels to its direction, as
+  pikchr's does: each label's text box is turned about its center to the
+  line's angle, never upside down (between -90 and 90 degrees), and
+  placed in the line's own frame, `above` and `below` on either side of
+  it, `ljust` and `rjust` from its ends along it. It is valid on a
+  `line`, an `arrow` or a `move` of one segment, an error on anything
+  else; a bent line, an arc or a spline has no one direction to turn to.
+  The overlap warnings (§5) take the labels as turned.
 
 ### 3.2 Lines and arrows
 
@@ -913,10 +921,10 @@ Humans and LLMs both need errors they can act on.
 - A reserved word written as a variable's or a macro's name is an
   **error** that says so (`'path' is a reserved word: a variable needs
   another name`), not a bare "unexpected token".
-- A reserved word that isn't supported, `aligned`, `mono` or
-  `monospace`, is an **error** that says so, not a word accepted and
-  ignored: a diagram written with one would look as if it worked. Each
-  can come back later, doing what it says, without breaking a diagram
+- A reserved word that isn't supported, `mono` or `monospace`, is an
+  **error** that says so, not a word accepted and ignored: a diagram
+  written with one would look as if it worked. It can come back later,
+  doing what it says, without breaking a diagram
   ([grammar.md](grammar.md), *Reserved words*).
 - `--check` lays the source out without writing anything and prints the
   result as JSON, for an LLM or a tool to read: the errors; the warnings,
@@ -928,7 +936,8 @@ Humans and LLMs both need errors they can act on.
   and a callout's `tip`, which is often outside them, and its `leader`
   line's points, tip last, whose bends can be too; or a line's `points`,
   and its `labels`, each an `x`, `y`, `wid` and `ht`, which can stick out
-  past it. The box round all of these is all that is drawn. Without
+  past it, and for an `aligned` line's, the `angle` it is turned to, with
+  `wid` and `ht` the box round it turned. The box round all of these is all that is drawn. Without
   `--check`, diagnostics are plain text.
 - An error names the help topics that explain it (`see: pikslide --help
   box`; in JSON, each error's `help` list): the syntax error's statement

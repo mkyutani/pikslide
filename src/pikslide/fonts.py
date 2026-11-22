@@ -6,7 +6,8 @@ A family name -- a theme's `<a:latin typeface="Calibri"/>`, or the
 is looked up in the fonts installed on this machine, read from each font
 file's own `name` table (every language's family names, so a Japanese
 name finds its file too). On WSL the Windows fonts are searched as well,
-since those are the ones PowerPoint draws with.
+since those are the ones PowerPoint draws with; on Windows and WSL, so
+are the cloud fonts Office downloads, which it draws with too.
 """
 
 from __future__ import annotations
@@ -28,15 +29,23 @@ from lxml import etree
 
 _FONT_EXTENSIONS = (".ttf", ".ttc", ".otf", ".otc")
 
+# Where in %LOCALAPPDATA%\Microsoft Office keeps the cloud fonts it
+# downloads, a folder for each family.
+_CLOUD_FONTS = ("FontCache", "4", "CloudFonts")
+
 
 def _font_dirs() -> list[str]:
     home = os.path.expanduser("~")
+    local = os.environ.get("LOCALAPPDATA")
     dirs = [
-        # Windows (native, then under WSL)
+        # Windows (native, then under WSL): the system's fonts, the user's,
+        # and the cloud fonts Office downloads for the documents that use
+        # them, which PowerPoint draws with too
         os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),
-        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "Windows", "Fonts"),
+        *(os.path.join(local, "Microsoft", *sub) for sub in (("Windows", "Fonts"), _CLOUD_FONTS) if local),
         "/mnt/c/Windows/Fonts",
         *glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts"),
+        *glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/" + "/".join(_CLOUD_FONTS)),
         # macOS
         "/System/Library/Fonts",
         "/Library/Fonts",
@@ -244,11 +253,11 @@ def _format4(cmap: bytes, at: int):
 
 def powerpoint_sees(path: str) -> bool:
     """Whether PowerPoint on this machine draws with the font at `path`,
-    as far as pikslide can tell: on Windows, one installed in Windows, not
-    one --install-font put in pikslide's own directory; under WSL, one in
-    Windows (under /mnt), not one in WSL's own directories. Elsewhere,
-    any: PowerPoint for Mac uses the user's fonts, and on Linux there is
-    no PowerPoint to tell about."""
+    as far as pikslide can tell: on Windows, one installed in Windows or
+    one of Office's cloud fonts, not one --install-font put in pikslide's
+    own directory; under WSL, one in Windows (under /mnt), not one in
+    WSL's own directories. Elsewhere, any: PowerPoint for Mac uses the
+    user's fonts, and on Linux there is no PowerPoint to tell about."""
     if sys.platform == "win32":
         own = os.path.normcase(os.path.abspath(user_font_dir()))
         return not os.path.normcase(os.path.abspath(path)).startswith(own)

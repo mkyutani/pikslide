@@ -309,7 +309,10 @@ Japanese (`Jpan`) choice. `bold` and `italic` use those faces.
 
 - **Fonts are found by name** among the fonts installed on the machine,
   including a localized name such as `游ゴシック`. Under WSL the Windows
-  fonts are searched too, since PowerPoint draws with those. The names are
+  fonts are searched too, since PowerPoint draws with those. On Windows and
+  under WSL, so are the cloud fonts Office downloads for the documents that
+  use them (`%LOCALAPPDATA%\Microsoft\FontCache\4\CloudFonts`), which
+  PowerPoint draws with as it does with installed ones. The names are
   read from the font files once and cached (`~/.cache/pikslide/fonts.json`).
 - **A font that is not installed** is measured with a substitute, with a
   warning naming it; the object may then come out too wide or too narrow.

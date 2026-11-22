@@ -232,8 +232,47 @@ def test_which_fonts_powerpoint_draws_with(monkeypatch):
     if os.name == "posix":  # WSL's paths, which Windows' os.path takes for its own
         monkeypatch.setattr(sys, "platform", "linux")  # WSL
         assert powerpoint_sees("/mnt/c/Windows/Fonts/arial.ttf")
+        assert powerpoint_sees("/mnt/c/Users/u/AppData/Local/Microsoft/FontCache/4/CloudFonts/Aptos/1.ttf")
         assert not powerpoint_sees("/usr/share/fonts/truetype/bizud-mincho/BIZUDMincho-Regular.ttf")
     monkeypatch.setattr(sys, "platform", "win32")  # Windows: not pikslide's own directory
     monkeypatch.setenv("LOCALAPPDATA", "/users/u/AppData/Local")
     assert not powerpoint_sees("/users/u/AppData/Local/pikslide/fonts/MyFont.ttf")
     assert powerpoint_sees("/windows/fonts/arial.ttf")
+    assert powerpoint_sees("/users/u/AppData/Local/Microsoft/FontCache/4/CloudFonts/Aptos/1.ttf")
+
+
+# ---------------------------------------------------------------------------
+# Office's cloud fonts (issue #43)
+# ---------------------------------------------------------------------------
+
+
+def test_offices_cloud_fonts_are_searched(monkeypatch, tmp_path: pathlib.Path):
+    # PowerPoint draws with the fonts Office downloads for a document, in
+    # %LOCALAPPDATA%\Microsoft\FontCache\4\CloudFonts on Windows; under
+    # WSL, in the Windows user's.
+    import pikslide.fonts
+
+    local = tmp_path / "Local"
+    cloud = local / "Microsoft" / "FontCache" / "4" / "CloudFonts"
+    cloud.mkdir(parents=True)
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    assert str(cloud) in pikslide.fonts._font_dirs()
+
+    monkeypatch.delenv("LOCALAPPDATA")
+    wsl = tmp_path / "mnt" / "c" / "Users" / "u" / "AppData" / "Local" / "Microsoft" / "FontCache" / "4" / "CloudFonts"
+    wsl.mkdir(parents=True)
+    real_glob = pikslide.fonts.glob.glob
+
+    def glob(pattern: str) -> list[str]:  # /mnt/c, as it is here
+        return real_glob(str(tmp_path) + pattern) if pattern.startswith("/mnt/c/") else real_glob(pattern)
+
+    monkeypatch.setattr(pikslide.fonts.glob, "glob", glob)
+    assert str(wsl) in map(os.path.normpath, pikslide.fonts._font_dirs())
+
+
+def test_a_cloud_font_is_found_by_its_family(dejavu_dir: pathlib.Path, tmp_path: pathlib.Path):
+    # A folder for each family, its files named by number.
+    family = tmp_path / "CloudFonts" / "DejaVu Sans"
+    family.mkdir(parents=True)
+    shutil.copy(dejavu_dir / "DejaVuSans.ttf", family / "30876484867.ttf")
+    assert FontIndex(dirs=[str(tmp_path / "CloudFonts")]).find("DejaVu Sans").path == str(family / "30876484867.ttf")

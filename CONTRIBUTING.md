@@ -41,10 +41,12 @@ git switch main && git pull --ff-only
 git tag v0.8.0 && git push origin v0.8.0
 ```
 
-[release.yml](.github/workflows/release.yml) tests and builds it,
-publishes pikslide and pikslide-mcp to TestPyPI and then, once a
-reviewer approves the `pypi` environment, to PyPI, and makes the GitHub
-release.
+[release.yml](.github/workflows/release.yml) checks that the tag is on a
+commit on `main`, tests and builds it, publishes pikslide and
+pikslide-mcp to TestPyPI and then, once a reviewer approves the `pypi`
+environment, to PyPI, and makes the GitHub release. A `v*` tag, once
+pushed, can't be deleted or moved: a ruleset keeps it where the release
+was made from.
 
 ## Claude Code
 

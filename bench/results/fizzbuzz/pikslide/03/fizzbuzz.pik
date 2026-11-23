@@ -1,41 +1,50 @@
-diamondwid = 1.7
-diamondht = 0.7
-gap = 0.35
+# FizzBuzz flowchart
+diamondwid = 1.8
+diamondht = 0.65
+boxwid = 1.0
+boxht = 0.4
+ovalwid = 0.8
+ovalht = 0.4
+pwid = 1.6
+pht = 0.4
+# a parallelogram's slanted side, at mid-height, sits this far in from its box
+pin = pht * 0.25 / 2
 
+# main column
 down
-Start: oval "Start" fit
-arrow gap
-Init: box "i = 1" fit
-arrow gap
+Start: oval "Start"
+arrow 0.3
+Init: box "i = 1"
+arrow 0.3
 Loop: diamond "i <= 100"
-arrow gap "yes" ljust
+arrow 0.45 "yes" ljust
 D15: diamond "i % 15 == 0"
-arrow gap "no" ljust
+arrow 0.45 "no" ljust
 D3: diamond "i % 3 == 0"
-arrow gap "no" ljust
+arrow 0.45 "no" ljust
 D5: diamond "i % 5 == 0"
-arrow gap "no" ljust
-PI: shape flowChartInputOutput "print i" fit
-arrow gap
-Inc: box "i = i + 1" fit
+arrow 0.45 "no" ljust
+PI: shape parallelogram "print i" width pwid height pht
+arrow 0.3
+Inc: box "i = i + 1"
 
-PFB: shape flowChartInputOutput "print \"FizzBuzz\"" fit with .w at D15.e + (0.7, 0)
-PF: shape flowChartInputOutput "print \"Fizz\"" width PFB.wid height PFB.ht with .w at D3.e + (0.7, 0)
-PB: shape flowChartInputOutput "print \"Buzz\"" width PFB.wid height PFB.ht with .w at D5.e + (0.7, 0)
-End: oval "End" fit at (PFB.x, Loop.y)
+# right column
+px = D15.e.x + 0.7 + pwid / 2
+End: oval "End" at (px, Loop.y)
+arrow from Loop.e to End.w "no" above
+PFB: shape parallelogram "print \"FizzBuzz\"" width pwid height pht at (px, D15.y)
+PF: shape parallelogram "print \"Fizz\"" width pwid height pht at (px, D3.y)
+PB: shape parallelogram "print \"Buzz\"" width pwid height pht at (px, D5.y)
+arrow from D15.e to PFB.w + (pin, 0) "yes" above
+arrow from D3.e to PF.w + (pin, 0) "yes" above
+arrow from D5.e to PB.w + (pin, 0) "yes" above
 
-slant = PFB.wid / 10
-rx = PFB.e.x + 0.3
-lx = Loop.w.x - 0.3
+# the prints join into one line down the right side
+bus = PFB.e.x + 0.35
+arrow from PFB.e - (pin, 0) right until even with (bus, 0) then down until even with Inc then left until even with Inc.e
+line from PF.e - (pin, 0) right until even with (bus, 0)
+line from PB.e - (pin, 0) right until even with (bus, 0)
 
-arrow "no" above from Loop.e to End.w
-arrow "yes" above from D15.e to (PFB.w.x + slant, D15.y)
-arrow "yes" above from D3.e to (PF.w.x + slant, D3.y)
-arrow "yes" above from D5.e to (PB.w.x + slant, D5.y)
-
-line from (PFB.e.x - slant, PFB.y) to (rx, PFB.y)
-line from (PF.e.x - slant, PF.y) to (rx, PF.y)
-line from (PB.e.x - slant, PB.y) to (rx, PB.y)
-arrow from (rx, PFB.y) to (rx, Inc.y) then to Inc.e
-
-arrow from Inc.w to (lx, Inc.y) then to (lx, Loop.y) then to Loop.w
+# loop back round the left side
+back = D15.w.x - 0.4
+arrow from Inc.w left until even with (back, 0) then up until even with Loop then right until even with Loop.w

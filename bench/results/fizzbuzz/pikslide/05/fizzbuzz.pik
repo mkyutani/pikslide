@@ -1,0 +1,51 @@
+// FizzBuzz flowchart
+dw = 1.7          // diamond width
+dh = 0.8          // diamond height
+pw = 2.0          // print (parallelogram) width
+ph = 0.45         // print height
+gap = 0.35        // vertical arrow length
+hgap = 0.8        // horizontal "yes" arrow length
+
+down
+Start: oval "Start" width 1.0 height 0.4
+arrow down gap
+Init: box "i = 1" width 1.0 height 0.4
+arrow down gap
+Cond: diamond "i <= 100" width dw height dh
+arrow down gap "yes" ljust
+D15: diamond "i % 15 == 0" width dw height dh
+arrow down gap "no" ljust
+D3: diamond "i % 3 == 0" width dw height dh
+arrow down gap "no" ljust
+D5: diamond "i % 5 == 0" width dw height dh
+arrow down gap "no" ljust
+PI: shape flowChartInputOutput "print i" width pw height ph
+arrow down gap
+Inc: box "i = i + 1" width 1.0 height 0.4
+
+// prints to the right of the three test diamonds
+px = D15.e.x + hgap + pw / 2
+FB: shape flowChartInputOutput "print \"FizzBuzz\"" width pw height ph at (px, D15.y)
+FZ: shape flowChartInputOutput "print \"Fizz\"" width pw height ph at (px, D3.y)
+BZ: shape flowChartInputOutput "print \"Buzz\"" width pw height ph at (px, D5.y)
+
+// End to the right of the loop test
+End: oval "End" width 1.0 height 0.4 at (px, Cond.y)
+arrow from Cond.e to End.w "no" above
+
+// "yes" branches, ending on the parallelograms' slanted left sides
+slant = pw / 10
+arrow from D15.e to FB.w + (slant, 0) "yes" above
+arrow from D3.e to FZ.w + (slant, 0) "yes" above
+arrow from D5.e to BZ.w + (slant, 0) "yes" above
+
+// the prints join into one line down the right side
+busx = FB.e.x + 0.35
+line from FB.e - (slant, 0) right until even with (busx, 0)
+line from FZ.e - (slant, 0) right until even with (busx, 0)
+line from BZ.e - (slant, 0) right until even with (busx, 0)
+arrow from (busx, FB.y) down until even with Inc then left until even with Inc.e
+
+// loop back round the left side
+loopx = D15.w.x - 0.4
+arrow from Inc.w left until even with (loopx, 0) then up until even with Cond then right until even with Cond.w

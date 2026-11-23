@@ -1,245 +1,220 @@
 """Write fizzbuzz.pptx: a single slide holding a FizzBuzz flowchart."""
 
+from lxml import etree
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.oxml.ns import qn
-from pptx.util import Emu, Pt
+from pptx.util import Emu, Inches, Pt
 
-SLIDE_W, SLIDE_H = 13.333, 7.5  # inches
+SLIDE_W, SLIDE_H = 13.333, 7.5
 
-FONT = "Calibri"
-TEXT_PT = 14
-LABEL_PT = 12
-INK = RGBColor(0x26, 0x32, 0x38)
-LINE_PT = 1.5
-
+INK = RGBColor(0x20, 0x20, 0x20)
 FILL = {
-    "oval": RGBColor(0xC8, 0xE6, 0xC9),
-    "rect": RGBColor(0xBB, 0xDE, 0xFB),
-    "diamond": RGBColor(0xFF, 0xF3, 0xC4),
-    "para": RGBColor(0xE1, 0xBE, 0xE7),
+    "oval": RGBColor(0xD9, 0xEA, 0xD3),
+    "rect": RGBColor(0xCF, 0xE2, 0xF3),
+    "diamond": RGBColor(0xFF, 0xF2, 0xCC),
+    "para": RGBColor(0xFC, 0xE5, 0xCD),
 }
-GEOM = {
+KIND = {
     "oval": MSO_SHAPE.OVAL,
     "rect": MSO_SHAPE.RECTANGLE,
     "diamond": MSO_SHAPE.DIAMOND,
     "para": MSO_SHAPE.PARALLELOGRAM,
 }
 
-# Shape sizes (inches).
-SIZE = {
-    "oval": (1.4, 0.48),
-    "rect": (1.5, 0.48),
-    "diamond": (2.3, 0.66),
-    "para": (1.6, 0.48),
-}
-PRINT_W = 2.3  # width of the three prints on the right
+FONT = "Consolas"
+SHAPE_PT = 14
+LABEL_PT = 12
+LINE_PT = 1.25
 
-GAP_PLAIN = 0.27  # vertical gap between shapes with an unlabeled arrow
-GAP_LABEL = 0.40  # vertical gap between shapes with a labeled arrow
-YES_ARROW = 1.0  # length of the horizontal arrows out of the diamonds
-TRUNK_GAP = 0.45  # prints' right edge to the joining line
-LOOP_GAP = 0.5  # diamonds' left vertex to the loop-back line
+# Sizes (inches)
+H_BOX = 0.44     # ovals, rectangles, parallelograms
+H_DIA = 0.72     # diamonds
+W_DIA = 2.8
+W_RECT = 1.8
+W_OVAL = 1.6
+W_PRINT_I = 1.8
+W_PRINT = 2.6    # the three prints on the right
+GAP_PLAIN = 0.28     # vertical gap for unlabeled arrows
+GAP_LABEL = 0.36     # vertical gap for labeled arrows
+TOP = 0.25
+DIA_TO_PRINT = 0.8   # horizontal gap: diamond's right vertex to print's left
+PRINT_TO_BUS = 0.4   # horizontal gap: print's right to the joining line
+LOOP_MARGIN = 0.45   # horizontal gap: diamond's left vertex to loop line
 
-
-def E(inches):
-    return Emu(int(round(inches * 914400)))
-
-
-class Box:
-    """A placed shape: kind, center and size, in inches."""
-
-    def __init__(self, kind, text, cx, cy, w=None):
-        self.kind, self.text = kind, text
-        dw, self.h = SIZE[kind]
-        self.w = w if w is not None else dw
-        self.cx, self.cy = cx, cy
-
-    @property
-    def top(self):
-        return self.cy - self.h / 2
-
-    @property
-    def bottom(self):
-        return self.cy + self.h / 2
-
-    @property
-    def left(self):
-        """x of the outline's leftmost point at mid-height."""
-        x = self.cx - self.w / 2
-        if self.kind == "para":
-            # The slanted edge is offset by 25% of the shorter side.
-            x += min(self.w, self.h) * 0.25 / 2
-        return x
-
-    @property
-    def right(self):
-        """x of the outline's rightmost point at mid-height."""
-        return 2 * self.cx - self.left
+prs = Presentation()
+prs.slide_width = Inches(SLIDE_W)
+prs.slide_height = Inches(SLIDE_H)
+slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank: no placeholders
+shapes = slide.shapes
 
 
-def style_text(tf, size, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE):
-    tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+def para_offset(w, h):
+    """Horizontal slant of the preset parallelogram (default adj 25000)."""
+    return 0.25 * min(w, h)
+
+
+def style_text(tf, text, size, align=PP_ALIGN.CENTER):
     tf.word_wrap = False
     tf.auto_size = MSO_AUTO_SIZE.NONE
-    tf.vertical_anchor = anchor
+    tf.margin_left = tf.margin_right = 0
+    tf.margin_top = tf.margin_bottom = 0
+    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     p = tf.paragraphs[0]
     p.alignment = align
-    for run in p.runs:
-        run.font.name = FONT
-        run.font.size = Pt(size)
-        run.font.color.rgb = INK
+    run = p.add_run()
+    run.text = text
+    run.font.name = FONT
+    run.font.size = Pt(size)
+    run.font.color.rgb = INK
 
 
-def draw_box(shapes, b):
-    s = shapes.add_shape(
-        GEOM[b.kind], E(b.cx - b.w / 2), E(b.top), E(b.w), E(b.h)
+def node(kind, text, cx, cy, w, h):
+    shp = shapes.add_shape(
+        KIND[kind], Inches(cx - w / 2), Inches(cy - h / 2), Inches(w), Inches(h)
     )
-    s.fill.solid()
-    s.fill.fore_color.rgb = FILL[b.kind]
-    s.line.color.rgb = INK
-    s.line.width = Pt(LINE_PT)
-    s.shadow.inherit = False
-    s.text_frame.text = b.text
-    style_text(s.text_frame, TEXT_PT)
+    shp.fill.solid()
+    shp.fill.fore_color.rgb = FILL[kind]
+    shp.line.color.rgb = INK
+    shp.line.width = Pt(LINE_PT)
+    shp.shadow.inherit = False
+    style_text(shp.text_frame, text, SHAPE_PT)
+    return dict(cx=cx, cy=cy, w=w, h=h, kind=kind,
+                top=cy - h / 2, bottom=cy + h / 2,
+                left=cx - w / 2, right=cx + w / 2)
 
 
-def style_line(line, head):
+def edge_left(n):
+    """x where a horizontal line at the shape's mid-height meets its left outline."""
+    if n["kind"] == "para":
+        return n["left"] + para_offset(n["w"], n["h"]) / 2
+    return n["left"]
+
+
+def edge_right(n):
+    if n["kind"] == "para":
+        return n["right"] - para_offset(n["w"], n["h"]) / 2
+    return n["right"]
+
+
+def finish_line(line, arrow):
     line.color.rgb = INK
     line.width = Pt(LINE_PT)
-    if head:
-        ln = line._get_or_add_ln()
-        ln.append(
-            ln.makeelement(
-                qn("a:tailEnd"), {"type": "triangle", "w": "med", "len": "med"}
-            )
+    ln = line._get_or_add_ln()
+    etree.SubElement(ln, qn("a:round"))
+    if arrow:
+        etree.SubElement(ln, qn("a:tailEnd"), type="triangle", w="med", len="med")
+
+
+def path(points, arrow=True):
+    """A line through `points` (inches); arrowhead at the last point."""
+    if len(points) == 2:
+        (x1, y1), (x2, y2) = points
+        shp = shapes.add_connector(
+            MSO_CONNECTOR.STRAIGHT, Inches(x1), Inches(y1), Inches(x2), Inches(y2)
         )
+    else:
+        emu = [(Inches(x), Inches(y)) for x, y in points]
+        fb = shapes.build_freeform(emu[0][0], emu[0][1], scale=1.0)
+        fb.add_line_segments(emu[1:], close=False)
+        shp = fb.convert_to_shape()
+        shp.fill.background()
+        shp.shadow.inherit = False
+    finish_line(shp.line, arrow)
+    return shp
 
 
-def segment(shapes, p1, p2, head=True):
-    c = shapes.add_connector(
-        MSO_CONNECTOR.STRAIGHT, E(p1[0]), E(p1[1]), E(p2[0]), E(p2[1])
-    )
-    style_line(c.line, head)
-    c.shadow.inherit = False
+def label(text, x, y, w, h, align=PP_ALIGN.CENTER):
+    tb = shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+    style_text(tb.text_frame, text, LABEL_PT, align)
 
 
-def polyline(shapes, points, head=True):
-    fb = shapes.build_freeform(E(points[0][0]), E(points[0][1]), scale=1.0)
-    fb.add_line_segments([(E(x), E(y)) for x, y in points[1:]], close=False)
-    s = fb.convert_to_shape()
-    s.fill.background()
-    style_line(s.line, head)
-    s.shadow.inherit = False
+# ---- horizontal placement: center the whole drawing on the slide ----------
+# Offsets from the column's center line cx:
+loop_dx = -(W_DIA / 2 + LOOP_MARGIN)
+print_left_dx = W_DIA / 2 + DIA_TO_PRINT
+bus_dx = print_left_dx + W_PRINT + PRINT_TO_BUS
+cx = SLIDE_W / 2 - (loop_dx + bus_dx) / 2
+x_loop = cx + loop_dx
+x_bus = cx + bus_dx
+px = cx + print_left_dx + W_PRINT / 2  # center of the right-hand prints
+
+# ---- vertical placement of the main column --------------------------------
+column = [
+    ("oval", "Start", W_OVAL, H_BOX),
+    ("rect", "i = 1", W_RECT, H_BOX),
+    ("diamond", "i <= 100", W_DIA, H_DIA),
+    ("diamond", "i % 15 == 0", W_DIA, H_DIA),
+    ("diamond", "i % 3 == 0", W_DIA, H_DIA),
+    ("diamond", "i % 5 == 0", W_DIA, H_DIA),
+    ("para", "print i", W_PRINT_I, H_BOX),
+    ("rect", "i = i + 1", W_RECT, H_BOX),
+]
+gaps = [GAP_PLAIN, GAP_PLAIN, GAP_LABEL, GAP_LABEL, GAP_LABEL, GAP_LABEL,
+        GAP_PLAIN]
+total = sum(h for *_, h in column) + sum(gaps)
+y = (SLIDE_H - total) / 2
+nodes = []
+for i, (kind, text, w, h) in enumerate(column):
+    nodes.append(node(kind, text, cx, y + h / 2, w, h))
+    y += h + (gaps[i] if i < len(gaps) else 0)
+
+start, init, cond, d15, d3, d5, print_i, incr = nodes
+
+# ---- column arrows ----------------------------------------------------------
+LABEL_W, LABEL_H = 0.42, 0.24
+for a, b, text in [
+    (start, init, None),
+    (init, cond, None),
+    (cond, d15, "yes"),
+    (d15, d3, "no"),
+    (d3, d5, "no"),
+    (d5, print_i, "no"),
+    (print_i, incr, None),
+]:
+    path([(cx, a["bottom"]), (cx, b["top"])])
+    if text:
+        mid = (a["bottom"] + b["top"]) / 2
+        label(text, cx + 0.09, mid - LABEL_H / 2, LABEL_W, LABEL_H,
+              align=PP_ALIGN.LEFT)
 
 
-def label(shapes, text, left, top, w, h, align, anchor):
-    tb = shapes.add_textbox(E(left), E(top), E(w), E(h))
-    tb.text_frame.text = text
-    style_text(tb.text_frame, LABEL_PT, align, anchor)
+def right_arrow(src, dst, text):
+    """Labeled horizontal arrow from a diamond's right vertex to `dst`."""
+    x1, x2 = src["right"], edge_left(dst)
+    path([(x1, src["cy"]), (x2, src["cy"])])
+    label(text, (x1 + x2) / 2 - LABEL_W / 2, src["cy"] - LABEL_H - 0.03,
+          LABEL_W, LABEL_H)
 
 
-LABEL_W, LABEL_H = 0.45, 0.24
+# ---- End, to the right of the loop test -------------------------------------
+end = node("oval", "End", px, cond["cy"], W_OVAL, H_BOX)
+right_arrow(cond, end, "no")
 
+# ---- the three prints on the right -----------------------------------------
+prints = []
+for d, text in [(d15, 'print "FizzBuzz"'), (d3, 'print "Fizz"'),
+                (d5, 'print "Buzz"')]:
+    p = node("para", text, px, d["cy"], W_PRINT, H_BOX)
+    right_arrow(d, p, "yes")
+    prints.append(p)
 
-def label_beside(shapes, text, x, y_top, y_bottom):
-    """Label to the right of a vertical arrow at x."""
-    y = (y_top + y_bottom) / 2
-    label(shapes, text, x + 0.07, y - LABEL_H / 2, LABEL_W, LABEL_H,
-          PP_ALIGN.LEFT, MSO_ANCHOR.MIDDLE)
+# The prints join one line down the right side, into i = i + 1.
+fizzbuzz, fizz, buzz = prints
+path([(edge_right(fizzbuzz), fizzbuzz["cy"]),
+      (x_bus, fizzbuzz["cy"]),
+      (x_bus, incr["cy"]),
+      (incr["right"], incr["cy"])])
+for p in (fizz, buzz):
+    path([(edge_right(p), p["cy"]), (x_bus, p["cy"])], arrow=False)
 
+# ---- loop back round the left side into the loop test -----------------------
+path([(incr["left"], incr["cy"]),
+      (x_loop, incr["cy"]),
+      (x_loop, cond["cy"]),
+      (cond["left"], cond["cy"])])
 
-def label_above(shapes, text, x_left, x_right, y):
-    """Label above a horizontal arrow at y."""
-    x = (x_left + x_right) / 2
-    label(shapes, text, x - LABEL_W / 2, y - 0.04 - LABEL_H, LABEL_W, LABEL_H,
-          PP_ALIGN.CENTER, MSO_ANCHOR.BOTTOM)
-
-
-def main():
-    prs = Presentation()
-    prs.slide_width, prs.slide_height = E(SLIDE_W), E(SLIDE_H)
-    slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
-    shapes = slide.shapes
-
-    # Horizontal extent: loop line on the left, joining line on the right.
-    dia_half = SIZE["diamond"][0] / 2
-    left_span = dia_half + LOOP_GAP
-    right_span = dia_half + YES_ARROW + PRINT_W + TRUNK_GAP
-    cx = SLIDE_W / 2 - (right_span - left_span) / 2
-
-    # The main column, top to bottom, with the gap below each shape.
-    column = [
-        ("oval", "Start", GAP_PLAIN),
-        ("rect", "i = 1", GAP_PLAIN),
-        ("diamond", "i <= 100", GAP_LABEL),
-        ("diamond", "i % 15 == 0", GAP_LABEL),
-        ("diamond", "i % 3 == 0", GAP_LABEL),
-        ("diamond", "i % 5 == 0", GAP_LABEL),
-        ("para", "print i", GAP_PLAIN),
-        ("rect", "i = i + 1", 0),
-    ]
-    total = sum(SIZE[k][1] + g for k, _, g in column)
-    y = (SLIDE_H - total) / 2
-    boxes = []
-    for kind, text, gap in column:
-        h = SIZE[kind][1]
-        boxes.append(Box(kind, text, cx, y + h / 2))
-        y += h + gap
-    start, init, cond, d15, d3, d5, print_i, inc = boxes
-
-    side_cx = cx + dia_half + YES_ARROW + PRINT_W / 2
-    end = Box("oval", "End", 0, cond.cy)
-    end.cx = cx + dia_half + YES_ARROW + end.w / 2
-    prints = [
-        Box("para", 'print "FizzBuzz"', side_cx, d15.cy, PRINT_W),
-        Box("para", 'print "Fizz"', side_cx, d3.cy, PRINT_W),
-        Box("para", 'print "Buzz"', side_cx, d5.cy, PRINT_W),
-    ]
-
-    for b in boxes + [end] + prints:
-        draw_box(shapes, b)
-
-    # Down the column.
-    for upper, lower in zip(boxes, boxes[1:]):
-        segment(shapes, (cx, upper.bottom), (cx, lower.top))
-    label_beside(shapes, "yes", cx, cond.bottom, d15.top)
-    for upper, lower in [(d15, d3), (d3, d5), (d5, print_i)]:
-        label_beside(shapes, "no", cx, upper.bottom, lower.top)
-
-    # i <= 100 --no--> End
-    segment(shapes, (cond.right, cond.cy), (end.left, end.cy))
-    label_above(shapes, "no", cond.right, end.left, cond.cy)
-
-    # Each divisibility test --yes--> its print.
-    for d, p in zip([d15, d3, d5], prints):
-        segment(shapes, (d.right, d.cy), (p.left, p.cy))
-        label_above(shapes, "yes", d.right, p.left, d.cy)
-
-    # The prints join one line down the right side, into i = i + 1.
-    trunk_x = prints[0].right + TRUNK_GAP
-    polyline(shapes, [
-        (prints[0].right, prints[0].cy),
-        (trunk_x, prints[0].cy),
-        (trunk_x, inc.cy),
-        (inc.right, inc.cy),
-    ])
-    for p in prints[1:]:
-        segment(shapes, (p.right, p.cy), (trunk_x, p.cy), head=False)
-
-    # i = i + 1 loops round the left side, back into i <= 100.
-    loop_x = cond.cx - dia_half - LOOP_GAP
-    polyline(shapes, [
-        (inc.left, inc.cy),
-        (loop_x, inc.cy),
-        (loop_x, cond.cy),
-        (cond.left, cond.cy),
-    ])
-
-    prs.save("fizzbuzz.pptx")
-
-
-if __name__ == "__main__":
-    main()
+prs.save("fizzbuzz.pptx")
+print("wrote fizzbuzz.pptx")

@@ -1,0 +1,40 @@
+gap = 0.3
+side = 0.7
+
+down
+Start: oval "Start" fit
+arrow gap
+Init: box "i = 1" fit
+arrow gap
+Cond: diamond "i <= 100" fit
+arrow gap "yes" ljust
+D15: diamond "i % 15 == 0" fit
+arrow gap "no" ljust
+D3: diamond "i % 3 == 0" same as D15
+arrow gap "no" ljust
+D5: diamond "i % 5 == 0" same as D15
+arrow gap "no" ljust
+PI: shape parallelogram "print i" fit
+arrow gap
+Inc: box "i = i + 1" fit
+
+End: oval "End" same as Start with .w at Cond.e + (side, 0)
+arrow from Cond.e to End.w "no" above
+
+PFB: shape parallelogram "print \"FizzBuzz\"" fit with .w at D15.e + (side, 0)
+PF: shape parallelogram "print \"Fizz\"" same as PFB with .w at D3.e + (side, 0)
+PB: shape parallelogram "print \"Buzz\"" same as PFB with .w at D5.e + (side, 0)
+
+# a parallelogram's slanted sides meet mid-height this far inside its box
+sl = PFB.ht * 0.25 / 2
+arrow from D15.e to PFB.w + (sl, 0) "yes" above
+arrow from D3.e to PF.w + (sl, 0) "yes" above
+arrow from D5.e to PB.w + (sl, 0) "yes" above
+
+rx = PFB.e.x + 0.3
+arrow from PFB.e - (sl, 0) to (rx, PFB.y) then to (rx, Inc.y) then to Inc.e
+line from PF.e - (sl, 0) to (rx, PF.y)
+line from PB.e - (sl, 0) to (rx, PB.y)
+
+lx = D15.w.x - 0.3
+arrow from Inc.w to (lx, Inc.y) then to (lx, Cond.y) then to Cond.w

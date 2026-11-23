@@ -1,45 +1,47 @@
 // FizzBuzz flowchart
-dw = 1.8          // diamond width
-dh = 0.6          // diamond height
-pw = 1.6          // parallelogram width
-ph = 0.36         // parallelogram height
-inset = ph / 8    // parallelogram slant at mid-height: min(pw, ph) / 4 / 2
-gap = 0.6         // diamond tip to print
-lineht = 0.35
+gap = 0.32          // length of the arrows down the column
+side = 0.7          // length of the "yes" arrows out to the prints
+diamondwid = 1.7
+diamondht = 0.62
 
 down
-Start: oval "Start" width 0.9 height 0.36
-arrow
-Init: box "i = 1" width 0.9 height 0.36
-arrow
-Test: diamond "i <= 100" width dw height dh
-arrow "yes" ljust
-D15: diamond "i % 15 == 0" width dw height dh
-arrow "no" ljust
-D3: diamond "i % 3 == 0" width dw height dh
-arrow "no" ljust
-D5: diamond "i % 5 == 0" width dw height dh
-arrow "no" ljust
-PI: shape parallelogram "print i" width pw height ph
-arrow
-Inc: box "i = i + 1" width 0.9 height 0.36
+Start: oval "Start" fit
+arrow down gap
+Init: box "i = 1" fit
+arrow down gap
+Cond: diamond "i <= 100"
+arrow down gap "yes" ljust
+D15: diamond "i % 15 == 0"
+arrow down gap "no" ljust
+D3: diamond "i % 3 == 0"
+arrow down gap "no" ljust
+D5: diamond "i % 5 == 0"
+arrow down gap "no" ljust
+PI: shape flowChartInputOutput "print i" fit
+arrow down gap
+Inc: box "i = i + 1" fit
 
-End: oval "End" width 0.9 height 0.36 with .w at Test.e + (gap, 0)
-arrow "no" above from Test.e to End.w
+// End, to the right of the loop test
+End: oval "End" fit with .w at Cond.e + (side, 0)
+arrow from Cond.e to End.w "no" above
 
-P15: shape parallelogram "print \"FizzBuzz\"" width pw height ph with .w at D15.e + (gap, 0)
-P3: shape parallelogram "print \"Fizz\"" width pw height ph with .w at D3.e + (gap, 0)
-P5: shape parallelogram "print \"Buzz\"" width pw height ph with .w at D5.e + (gap, 0)
-arrow "yes" above from D15.e to (P15.w.x + inset, P15.y)
-arrow "yes" above from D3.e to (P3.w.x + inset, P3.y)
-arrow "yes" above from D5.e to (P5.w.x + inset, P5.y)
+// The three prints, each to the right of its test
+PFB: shape flowChartInputOutput "print \"FizzBuzz\"" fit with .w at D15.e + (side, 0)
+PF: shape flowChartInputOutput "print \"Fizz\"" same as PFB with .w at D3.e + (side, 0)
+PB: shape flowChartInputOutput "print \"Buzz\"" same as PFB with .w at D5.e + (side, 0)
 
-// the prints merge into one line down the right side
-xr = P15.e.x + 0.3
-line from (P15.e.x - inset, P15.y) to (xr, P15.y) then to (xr, P3.y)
-line from (P3.e.x - inset, P3.y) to (xr, P3.y) then to (xr, P5.y)
-arrow from (P5.e.x - inset, P5.y) to (xr, P5.y) then to (xr, Inc.y) then to Inc.e
+// A parallelogram's slanted side, at mid-height, is a tenth of its width in
+inset = PFB.wid / 10
+arrow from D15.e to (PFB.w.x + inset, D15.y) "yes" above
+arrow from D3.e to (PF.w.x + inset, D3.y) "yes" above
+arrow from D5.e to (PB.w.x + inset, D5.y) "yes" above
 
-// back round the left side
-xl = D15.w.x - 0.3
-arrow from Inc.w to (xl, Inc.y) then to (xl, Test.y) then to Test.w
+// The prints join into one line down the right side, into i = i + 1
+jx = PFB.e.x + 0.35
+line from (PFB.e.x - inset, PFB.y) to (jx, PFB.y) then down until even with Inc then left until even with Inc.e ->
+line from (PF.e.x - inset, PF.y) to (jx, PF.y)
+line from (PB.e.x - inset, PB.y) to (jx, PB.y)
+
+// Round the left side, back to the loop test
+lx = D15.w.x - 0.35
+arrow from Inc.w left until even with (lx, 0) then up until even with Cond then right until even with Cond.w

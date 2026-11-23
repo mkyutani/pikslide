@@ -3,7 +3,7 @@ run's run.json: per method, what a run took -- input tokens, cache
 writes, cache reads, output tokens and their total, the cost, turns,
 renders and minutes -- as mean, sd, median, min and max; how many runs
 finished; and each thing a run shouldn't have done, or that went wrong
-round it (a render that fell back to LibreOffice)."""
+round it (a render PowerPoint didn't make)."""
 
 from __future__ import annotations
 

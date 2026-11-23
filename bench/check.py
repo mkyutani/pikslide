@@ -28,7 +28,13 @@ _A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 
 def kind(shape) -> str | None:
     geometry = shape._element.find(f".//{_A}prstGeom")
-    return None if geometry is None else KINDS.get(geometry.get("prst"), geometry.get("prst"))
+    if geometry is None:
+        return None
+    prst = geometry.get("prst")
+    # a pill, a box with round ends: an oval as pikslide draws it
+    if prst == "roundRect" and geometry.find(f"{_A}avLst/{_A}gd[@fmla='val 50000']") is not None:
+        return "oval"
+    return KINDS.get(prst, prst)
 
 
 def check(pptx: Path) -> list[str]:

@@ -33,8 +33,12 @@ uv run --locked --package pikslide-mcp --group dev pytest pikslide-mcp/tests
 ## Releasing
 
 A release is a change like the others: an issue, a branch that bumps the
-version, and its pull request. Once that is merged, tag the commit on
-`main` and push the tag:
+version, and its pull request. Which number it bumps follows README's
+*Versions*: a patch for fixes alone, a minor release for what it lets a
+minor release do, a major one for anything else. The bump's commit
+message, the release's notes, says which, and lists what a diagram may
+find changed. Once that is merged, tag the commit on `main` and push the
+tag:
 
 ```sh
 git switch main && git pull --ff-only

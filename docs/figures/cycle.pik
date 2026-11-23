@@ -1,0 +1,3 @@
+include "figures.pik"
+P: cycle4("Plan", "Do", "Check" fill emphasis lighter 60%, "Act")
+text "Improve" bold at P.C

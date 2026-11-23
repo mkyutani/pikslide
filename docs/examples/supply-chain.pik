@@ -1,5 +1,5 @@
 Supplier: ellipse "Supplier" fit
-arrow "materials" "" fit
+arrow 1.25 "materials" ""
 
 Procurement: box "Procurement" fit
 arrow
@@ -7,7 +7,7 @@ Production: box "Production" same
 arrow
 Warehouse: box "Warehouse" same
 
-arrow "products" "" fit
+arrow 1.25 "products" ""
 Distributor: ellipse "Distributor" fit
 arrow "delivery" "" fit
 Consumer: ellipse "Consumer" fit

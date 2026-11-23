@@ -1,0 +1,48 @@
+# How an expense claim is approved: a swimlane diagram
+
+laneht = 1.6
+lanewid = 11.05
+headwid = 0.45
+boxwid = 1.3
+boxht = 0.6
+linewid = 0.45
+
+text "How an expense claim is approved" bold large ljust at (0, 0.3)
+
+# The lanes, top to bottom, each named at its left end
+Emp: box wid lanewid ht laneht with .nw at (0, 0) stroke text2 lighter 40%
+Mgr: box same as Emp with .nw at Emp.sw
+Fin: box same as Emp with .nw at Mgr.sw
+EmpH: box "Employee" bold vertical wid headwid ht laneht with .nw at Emp.nw fill text2 lighter 80% stroke text2 lighter 40%
+MgrH: box "Manager" bold vertical same as EmpH with .nw at Mgr.nw
+FinH: box "Finance" bold vertical same as EmpH with .nw at Fin.nw
+
+# Employee: enter the claim, attach the receipts, submit it
+right
+Start: circle rad 0.14 fill accent1 stroke accent1 at (EmpH.e.x + 0.45, Emp.y - 0.1)
+arrow
+Enter: box "Enter claim" rad 0.08 fill accent1 lighter 80% stroke accent1
+arrow
+Attach: box "Attach receipts" same as Enter
+arrow
+Submit: box "Submit" same as Enter
+
+# Manager: check it, then approve it or send it back
+Check: box "Check claim" same as Enter at (Submit.x, Mgr.y)
+arrow from Submit.s to Check.n
+arrow from Check.e right linewid
+Decide: diamond "Approve?" wid 1.6 ht 0.8 fill accent6 lighter 60% stroke accent6
+
+# Finance: check the approved claim, pay it with the next salary
+FCheck: box "Check the" "approved claim" same as Enter at (Decide.x, Fin.y)
+arrow from Decide.s to FCheck.n
+text "Approve" ljust at (Decide.x + 0.08, Decide.s.y - 0.17)
+arrow from FCheck.e right linewid
+Pay: box "Pay with the" "next salary" same as Enter
+arrow
+End: circle rad 0.14 fill accent1 darker 25% stroke accent1 darker 25% thick
+
+# The send-back, over the employee's steps to the start of the claim
+sy = Enter.n.y + 0.3
+arrow from Decide.n to (Decide.x, sy) then to (Enter.x, sy) then to Enter.n stroke accent2
+text "Send back" color accent2 at ((Enter.x + Decide.x) / 2, sy + 0.13)

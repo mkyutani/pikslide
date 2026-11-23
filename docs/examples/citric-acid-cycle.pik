@@ -1,0 +1,50 @@
+# The citric acid cycle: eight intermediates clockwise round an ellipse,
+# citrate at the top, acetyl-CoA joining from outside, and what each step
+# gives off marked with a short arrow away from the ring.
+
+rx = 3.0     # the ring's half-width
+ry = 2.2     # the ring's half-height
+out = 0.4    # length of a by-product's arrow
+
+# An intermediate at angle $1 (degrees, counterclockwise from the right).
+define node { box wid 1.45 ht 0.45 rad 0.08 fill primary lighter 80% stroke primary $2 at (rx*cos($1), ry*sin($1)) }
+
+# A step along the ring, clockwise from angle $1 to angle $2.
+define step { spline -> from (rx*cos($1), ry*sin($1)) then to (rx*cos($1 + ($2 - $1)/3), ry*sin($1 + ($2 - $1)/3)) then to (rx*cos($1 + 2*($2 - $1)/3), ry*sin($1 + 2*($2 - $1)/3)) then to (rx*cos($2), ry*sin($2)) stroke primary thick }
+
+# What a step gives off, at angle $1 on the ring: a short arrow away from it.
+define gives { arrow from (rx*cos($1), ry*sin($1)) to ((rx + out)*cos($1), (ry + out)*sin($1)) stroke accent2 }
+
+Cit: node(90, "Citrate")
+Iso: node(45, "Isocitrate")
+Akg: node(0, "α-Ketoglutarate")
+Suc: node(-45, "Succinyl-CoA")
+Sca: node(-90, "Succinate")
+Fum: node(-135, "Fumarate")
+Mal: node(-180, "Malate")
+Oaa: node(-225, "Oxaloacetate")
+
+step(73, 59)
+step(33, 9)
+step(-9, -33)
+step(-59, -73)
+step(-107, -121)
+step(-147, -171)
+step(-189, -213)
+step(-239, -253)
+
+large = 16pt
+text "Citric acid cycle" bold large at (0, 0)
+
+# Acetyl-CoA comes in from outside and joins oxaloacetate to make citrate.
+Acc: box "Acetyl-CoA" wid 1.3 ht 0.45 rad 0.08 fill emphasis lighter 60% stroke emphasis at (-2.3, 3.0)
+spline -> from Acc.s then to (-1.95, 2.2) then to (rx*cos(-247), ry*sin(-247)) stroke emphasis thick
+
+# What the steps give off.
+gives(27); text "CO₂" color accent2 with .w at last arrow.end + (0.05, 0)
+gives(15); text "NADH" color accent2 with .w at last arrow.end + (0.05, 0)
+gives(-15); text "CO₂" color accent2 with .w at last arrow.end + (0.05, 0)
+gives(-27); text "NADH" color accent2 with .w at last arrow.end + (0.05, 0)
+gives(-66); text "GTP" color accent2 with .n at last arrow.end - (0, 0.03)
+gives(-114); text "FADH₂" color accent2 with .n at last arrow.end - (0, 0.03)
+gives(-201); text "NADH" color accent2 with .e at last arrow.end - (0.05, 0)

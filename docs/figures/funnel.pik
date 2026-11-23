@@ -1,0 +1,2 @@
+include "figures.pik"
+P: funnel4("Visitors", "Leads", "Trials", "Customers" bold)

@@ -1,0 +1,38 @@
+# How an on-call engineer responds when a web service goes down
+boxwid = 1.1
+boxht = 0.6
+boxrad = 0.08
+ovalwid = 1.3
+ovalht = 0.6
+linewid = 0.4
+fill = accent1 lighter 80%
+
+# Triage, left to right
+Alert: oval "Alert fires" bold fill accent2 lighter 60%
+arrow
+Ack: box "Acknowledge" "the alert"
+arrow
+Assess: box "Assess" "severity"
+arrow
+Sev: diamond "SEV1 or" "SEV2?" fill accent6 lighter 60% fit
+arrow right 1.0 "no" above
+Mit: box "Mitigate"
+
+# SEV1 or SEV2: bring in the incident commander and tell users first
+Page: box "Page the incident" "commander" fill accent2 lighter 80% width 1.3 with .s at (Sev.x, Sev.n.y + 0.45)
+Status: box "Post on the" "status page" same as Page with .s at (Mit.x, Page.s.y)
+arrow from Sev.n to Page.s "yes" ljust
+arrow from Page.e to Status.w
+arrow from Status.s to Mit.n
+
+# Recovery, down from Mitigate and back right to left
+Ok: diamond "Service" "recovered?" fill accent6 lighter 60% fit with .n at (Mit.x, Mit.s.y - 0.45)
+arrow from Mit.s to Ok.n
+Resolve: box "Resolve the" "incident" at (Sev.x, Ok.y)
+Post: box "Write the" "postmortem" at (Assess.x, Ok.y)
+arrow from Ok.w to Resolve.e "yes" above
+arrow from Resolve.w to Post.e
+
+# Not recovered yet: back to Mitigate
+arrow from Ok.e right 0.45 then up until even with Mit.e then to Mit.e
+text "no" at (Ok.e.x + 0.22, Ok.y + 0.13)

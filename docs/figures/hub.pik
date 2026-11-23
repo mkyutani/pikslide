@@ -1,0 +1,2 @@
+include "figures.pik"
+P: hub4("Customer" bold, "Sales", "Support", "Product", "Marketing")

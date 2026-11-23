@@ -55,7 +55,7 @@ arrow from Pikslide.e right 0.4in then down until even with Pptx then to Pptx.w 
 
 You: box "You" bold wid (Pptx.e.x - LLM.w.x) ht 0.45in fill bg1 darker 5% \
     with .nw at (LLM.w.x, Pptx.s.y - 0.6in)
-arrow "prompt" "e.g. “draw how Japan's capital moved”" small "or “apply my edits in the .pptx to the .pik”" small ljust stroke dashed from (LLM.x, You.n.y) to LLM.s
+arrow "prompt" "e.g. “draw the citric acid cycle”" small "or “apply my edits in the .pptx to the .pik”" small ljust stroke dashed from (LLM.x, You.n.y) to LLM.s
 wave = Pik.ht / 15
 arrow "edit in a text editor" ljust from (Pik.x, You.n.y) to Pik.s + (0, wave)
 arrow "edit in PowerPoint" rjust from (Pptx.x, You.n.y) to Pptx.s + (0, wave)

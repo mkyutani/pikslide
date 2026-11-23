@@ -1,0 +1,2 @@
+include "figures.pik"
+P: matrix2("Strengths", "Weaknesses", "Opportunities", "Threats", "", "", "External", "Internal")

@@ -1,0 +1,8 @@
+include "figures.pik"
+
+# The stages of the launch, with Launch standing out
+Stages: chevron5("Research", "Design", "Build", "Launch" bold color bg1 fill emphasis, "Grow")
+
+# The cycle the team runs in every stage
+Cycle: cycle4("Plan", "Do", "Check", "Act") with .n at 0.5 below Stages.s
+text "Every stage" bold at Cycle.C

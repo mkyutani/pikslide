@@ -125,3 +125,16 @@ def test_shape_gallery_is_current():
         assert path.read_text(encoding="utf-8") == text, f"{path} is stale: run scripts/gen_shape_gallery.py"
     expected = {p for p in files if p.parent == DOCS / "shapes"} | set(gallery.png_paths())
     assert set((DOCS / "shapes").iterdir()) == expected
+
+
+def test_figure_gallery_is_current():
+    """docs/figures.md and docs/figures/ hold what scripts/gen_figure_gallery.py
+    writes: each family's example from its --help entry, with its PNG."""
+    spec = importlib.util.spec_from_file_location("gen_figure_gallery", ROOT / "scripts" / "gen_figure_gallery.py")
+    gallery = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gallery)
+    files = gallery.expected_files()
+    for path, text in files.items():
+        assert path.read_text(encoding="utf-8") == text, f"{path} is stale: run scripts/gen_figure_gallery.py"
+    expected = {p for p in files if p.parent == DOCS / "figures"} | set(gallery.png_paths())
+    assert set((DOCS / "figures").iterdir()) == expected

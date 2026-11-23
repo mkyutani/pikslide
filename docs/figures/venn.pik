@@ -1,0 +1,2 @@
+include "figures.pik"
+P: venn3("Will", "Can", "Must", "Calling" bold)

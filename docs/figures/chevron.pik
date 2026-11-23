@@ -1,0 +1,2 @@
+include "figures.pik"
+P: chevron4("Plan", "Build", "Test", "Launch" fill emphasis lighter 60%)

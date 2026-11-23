@@ -107,11 +107,12 @@ Goal: the Selection Pane in PowerPoint reads like the source.
   Nothing attaches to it.
 - **Text color and line color are separate.** `color` is a string attribute:
   `box "alert" color accent2 "details"` colors `"alert"` only; a string
-  without one takes the `color` variable (prelude: `black`). The line or
-  outline is set with `stroke`, which groups all of its attributes:
+  without one takes the `color` variable (prelude: `text1`, the theme's
+  text color). The line or outline is set with `stroke`, which groups all
+  of its attributes:
   `stroke [COLOR] [thickness T | thick | thin | solid | invis | dashed [L] |
   dotted [L] …]`, color first. Its default color is the `stroke` variable
-  (prelude: `black`). Outside `stroke`, `thickness`, `thick`, `thin`,
+  (prelude: `text1`). Outside `stroke`, `thickness`, `thick`, `thin`,
   `solid`, `invis`, `dashed` and `dotted` are errors, and so is `stroke`
   on an object that draws no line (`text`, `image`, `move`, a `[ … ]`
   block) or with nothing after it. `A.color` is an object's text color,
@@ -659,8 +660,8 @@ boxwid     = 0.75
 linewid    = 0.5
 thickness  = 0.015
 fill       = none
-color      = black     # text
-stroke     = black     # lines and outlines
+color      = text1     # text
+stroke     = text1     # lines and outlines
 margin     = 0.1       # text to sides
 vmargin    = 0.05      # text to top and bottom
 

@@ -185,7 +185,9 @@ followed = theme "folHlink"
 # `vmargin`, the space between an object's text and its sides and its top
 # and bottom, are PowerPoint's own default text insets; a --template
 # whose theme sets its default shape's insets replaces them (docs/spec.md
-# SS3.8).
+# SS3.8). `color` and `stroke`, the text's color and the lines', are the
+# theme's text color, so that a template's, or a theme changed afterwards,
+# colors them.
 
 arcrad = 0.25
 arrowht = 0.08
@@ -196,7 +198,7 @@ boxwid = 0.75
 charht = 0.14
 charwid = 0.08
 circlerad = 0.25
-color = black
+color = text1
 cylht = 0.5
 cylrad = 0.075
 cylwid = 0.75
@@ -216,7 +218,7 @@ margin = 0.1
 movewid = 0.5
 ovalht = 0.5
 ovalwid = 1.0
-stroke = black
+stroke = text1
 textht = 0.5
 textwid = 0.75
 thickness = 0.015

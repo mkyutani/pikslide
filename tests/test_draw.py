@@ -70,6 +70,19 @@ def test_theme_colors_are_the_templates_lighter_and_darker_as_powerpoint_has_the
     assert image.getpixel((int(1.0 * 200), int(3.0 * 200))) == (0, 120, 60)
 
 
+def test_lines_are_the_templates_text_color_by_default(tmp_path: pathlib.Path):
+    # Issue #66: `stroke` is text1, so a template's dark blue text color
+    # draws the lines.
+    prs = Presentation()
+    theme = prs.slide_masters[0].part.part_related_by(RT.THEME)
+    theme._blob = re.sub(rb"<a:dk1>.*?</a:dk1>", rb'<a:dk1><a:srgbClr val="1F3864"/></a:dk1>', theme.blob, flags=re.S)
+    path = tmp_path / "blue.pptx"
+    prs.save(str(path))
+    image = _draw("box wid 1 ht 0.5 stroke thickness 0.1\n", template=str(path))
+    # The box's left side, at the content area's left, 0.5in, halfway down from its top, 1.75in.
+    assert image.getpixel((int(0.5 * 200), int(2.0 * 200))) == (0x1F, 0x38, 0x64)
+
+
 @pytest.mark.parametrize("cls", ["line", "spline"])
 def test_a_closed_line_is_filled(cls: str):
     # Issue #53: under its line, as PowerPoint fills the freeform; the

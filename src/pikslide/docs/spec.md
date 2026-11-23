@@ -878,7 +878,8 @@ picture as its PNG. It needs no program of its own (an SVG image needs
 default, `auto`, is PowerPoint, then `direct`. LibreOffice, a different
 rendering engine, is used only when named.
 
-`pikslide --version` prints the installed version (`pikslide 0.1.0`).
+`pikslide --version` prints the installed version (`pikslide 1.2.3`, for
+version 1.2.3).
 
 ## 5. Diagnostics
 

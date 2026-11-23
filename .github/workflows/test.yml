@@ -38,3 +38,19 @@ jobs:
       - run: uv run --locked pytest
       - name: Test pikslide-mcp, in its own environment
         run: uv run --locked --package pikslide-mcp --group dev pytest pikslide-mcp/tests
+
+  # Each dependency at the lowest version pyproject.toml allows, on the
+  # lowest Python: pikslide reaches into python-pptx's internals, and a
+  # user may have older ones than uv.lock's.
+  lowest-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - name: Install rsvg-convert, for the SVG image tests
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+      - run: uv run --resolution lowest-direct pytest
+      - name: Test pikslide-mcp, in its own environment
+        run: uv run --resolution lowest-direct --package pikslide-mcp --group dev pytest pikslide-mcp/tests

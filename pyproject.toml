@@ -31,6 +31,7 @@ dependencies = [
 Repository = "https://github.com/mkyutani/pikslide"
 Issues = "https://github.com/mkyutani/pikslide/issues"
 Documentation = "https://github.com/mkyutani/pikslide/tree/main/docs"
+Changelog = "https://github.com/mkyutani/pikslide/releases"
 
 [project.scripts]
 pikslide = "pikslide:main"

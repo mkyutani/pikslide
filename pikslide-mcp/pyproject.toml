@@ -26,6 +26,7 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/mkyutani/pikslide"
 Issues = "https://github.com/mkyutani/pikslide/issues"
+Changelog = "https://github.com/mkyutani/pikslide/releases"
 
 [project.scripts]
 pikslide-mcp = "pikslide_mcp:main"

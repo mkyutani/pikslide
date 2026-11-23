@@ -126,7 +126,9 @@ ENTRIES: tuple[Entry, ...] = (
     _closed(("file",), "a page with a folded corner, for a document",
             "A page with its top-right corner folded down; `radius` is the fold's size.",
             ("filewid", "fileht", "filerad"), 'file "report.md"'),
-    _closed(("dot",), "a small filled circle", "A small filled circle, e.g. to mark a point.",
+    _closed(("dot",), "a small filled circle",
+            "A small filled circle, e.g. to mark a point: width, height, radius and diameter all keep it "
+            "round, as a circle's do.",
             ("dotrad",), "dot at A.e"),
     _closed(("text",), "text alone, with no outline",
             "Text with no fill and no outline, sized by its strings. A statement that "

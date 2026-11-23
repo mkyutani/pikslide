@@ -507,7 +507,7 @@ or through a block (`Outer.Inner`), and points on them by edge (`Web.ne`,
 | `diamond` | `diamondwid` × `diamondht` (1 × 0.75) | |
 | `cylinder` | `cylwid` × `cylht` (0.75 × 0.5) | end radius `cylrad` |
 | `file` | `filewid` × `fileht` (0.5 × 0.75) | corner radius `filerad` |
-| `dot` | radius `dotrad` (0.015) | filled |
+| `dot` | radius `dotrad` (0.015) | filled; like a circle, `width`/`height`/`radius`/`diameter` all keep it round |
 | `text` | 0 × 0 | sized by its strings |
 | `line`, `spline` | `linewid` × `lineht` (0.5 × 0.5) | a spline: a smooth curve through each point of its path, as PowerPoint's Curve draws one |
 | `arrow` | as `line` | with a right arrowhead |

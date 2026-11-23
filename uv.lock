@@ -473,7 +473,7 @@ wheels = [
 
 [[package]]
 name = "pikslide"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "pillow" },
@@ -496,7 +496,7 @@ dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "pikslide-mcp"
-version = "0.7.0"
+version = "0.8.0"
 source = { editable = "pikslide-mcp" }
 dependencies = [
     { name = "mcp" },

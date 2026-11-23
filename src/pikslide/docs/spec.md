@@ -118,7 +118,12 @@ Goal: the Selection Pane in PowerPoint reads like the source.
   block) or with nothing after it. `A.color` is an object's text color,
   `A.stroke` its line color.
 - **`dot`** has no rule of its own: `fill` paints it, and its default fill
-  is its line color.
+  is its line color. In all else it is a small circle: `width`, `height`,
+  `radius` and `diameter` each set its size, and its edge points are on
+  its outline, as a circle's are (pikchr's are all at its center), so a
+  line attaches to them (§3.2). After a line, then, a dot follows the
+  line's end, as any object does; a dot meant to mark a point is placed
+  `at` it: `dot at last line.end`.
 - **`ljust` / `rjust` are object attributes**, for all of the object's
   strings at once; giving both is an error. `rjust` mirrors `ljust`:
 

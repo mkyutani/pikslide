@@ -128,7 +128,8 @@ ENTRIES: tuple[Entry, ...] = (
             ("filewid", "fileht", "filerad"), 'file "report.md"'),
     _closed(("dot",), "a small filled circle",
             "A small filled circle, e.g. to mark a point: width, height, radius and diameter all keep it "
-            "round, as a circle's do.",
+            "round, and its edges are on its outline, as a circle's are (pikchr's are all its center). "
+            "To mark a point, put the dot at it: `dot at last line.end`.",
             ("dotrad",), "dot at A.e"),
     _closed(("text",), "text alone, with no outline",
             "Text with no fill and no outline, sized by its strings. A statement that "

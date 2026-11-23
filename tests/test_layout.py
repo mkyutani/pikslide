@@ -1065,6 +1065,16 @@ def test_text_and_lines_take_the_themes_text_color_by_default():
     assert shape.text_color == shape.color == Color(theme_slot="tx1")
 
 
+@pytest.mark.parametrize("size, rad", [
+    ("", 0.015), ("rad 0.2", 0.2), ("radius 250%", 0.0375), ("diameter 0.1", 0.05),
+    ("wid 0.5", 0.25), ("ht 0.2", 0.1),
+])
+def test_a_dot_is_as_big_as_its_radius_and_stays_round(size: str, rad: float):
+    # Issue #68: as pikchr's, a dot's radius is its size; and as a circle's, its width or height is too.
+    shape = layout(f"dot {size}\n").shapes[0]
+    assert (shape.rad, shape.w, shape.h) == pytest.approx((rad, 2 * rad, 2 * rad))
+
+
 def test_dot_is_filled_with_the_default_stroke_color_unless_filled():
     plain, stroked, filled = layout("dot\ndot stroke red\ndot fill blue\n").shapes
     assert plain.fill == plain.color

@@ -2061,6 +2061,11 @@ def string_color(shape: Shape, i: int) -> Color | None:
     return own if own is not None else shape.text_color
 
 
+# The objects that stay round: width, height, radius and diameter each set
+# all of their size (issue #68: a dot, as a circle).
+_ROUND_KINDS = ("circle", "dot")
+
+
 @_locating
 def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _Ctx) -> None:
     if isinstance(attr, ast.LeadingDirection):
@@ -2075,24 +2080,25 @@ def _apply_attribute(attr: ast.Attribute, shape: Shape, build: "_Build", ctx: _C
         current = {"width": shape.w, "height": shape.h, "radius": shape.rad,
                    "diameter": shape.rad * 2, "thickness": shape.sw}[attr.name]
         value = _resolve_rel_current(attr.value, current, ctx)
+        round_ = shape.kind in _ROUND_KINDS
         if attr.name == "width":
             shape.w = value
-            if shape.kind == "circle":
+            if round_:
                 shape.h, shape.rad = value, value / 2
         elif attr.name == "height":
             shape.h = value
-            if shape.kind == "circle":
+            if round_:
                 shape.w, shape.rad = value, value / 2
         elif attr.name in ("radius", "diameter") and shape.kind == "oval":
             raise LayoutError(f"'{attr.name}' on an oval: its ends are always half circles, its radius half its "
                               f"shorter side; for other corners, draw a box with radius")
         elif attr.name == "radius":
             shape.rad = value
-            if shape.kind == "circle":
+            if round_:
                 shape.w = shape.h = value * 2
         elif attr.name == "diameter":
             shape.rad = value / 2
-            if shape.kind == "circle":
+            if round_:
                 shape.w = shape.h = value
         elif attr.name == "thickness":
             shape.sw = value

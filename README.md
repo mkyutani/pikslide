@@ -149,6 +149,45 @@ carries `pikslide-plugin-X.Y.Z.zip`, the plugin with pikslide's wheel in
 its skill: in a host's sandbox, the skill installs pikslide from it,
 needing no network. Any other MCP host runs `uvx pikslide-mcp`.
 
+## Versions
+
+From 1.0.0, a release's number says what it may break, as semantic
+versioning has it. A minor or a patch release keeps working what worked
+with an earlier one of the same major version:
+
+- **The language.** A `.pik` that laid out without an error still does,
+  into the same objects with the same names.
+- **The command.** Its options do what they did, and its exit status
+  means what it did: 0, done; 1, an error (with `--strict`, a stand-in
+  for the deck's theme or fonts too); 2, a command line it can't read.
+- **`--check`'s JSON.** Its fields keep their names and meanings.
+- **The library.** `parse()`, `layout()`, `render_into()`, `Layout`,
+  `PikSyntaxError` and `LayoutError`, as
+  [spec.md](https://github.com/mkyutani/pikslide/blob/main/src/pikslide/docs/spec.md)
+  §6 describes them. The rest of the package is not promised.
+- **pikslide-mcp's tools.** Their names and their parameters.
+
+A minor release may add to each of these: keywords, attributes,
+variables, options, fields, tools, warnings. A word it reserves may be
+one a diagram named a variable or a macro, but never a label (spec.md
+§2).
+
+A minor release may also:
+
+- **move a diagram's shapes**, where that makes the diagram lay out as
+  the docs or PowerPoint say it should. Its notes say what moves. 0.7.0
+  drawing an oval as the pill `--help` had called it, not as an ellipse,
+  is such a change;
+- **reword** a warning, an error or `--help`, and draw
+  `--renderer direct`'s pictures closer to PowerPoint's.
+
+Any other change that breaks one of these waits for the next major
+release, and is warned of first: a minor release before it gives a
+warning wherever a diagram or a call does what will change.
+
+Before 1.0.0, a minor release could break any of them, and its notes say
+where it did.
+
 ## Development
 
 ```sh

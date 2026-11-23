@@ -19,7 +19,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # all of history, so that origin/main is there to check against
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # A commit reaches main only through a pull request (CONTRIBUTING.md),
+      # and only what did is released.
+      - name: Check the tag is on a commit on main
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_REF_NAME is on a commit that isn't on main"; exit 1; }
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"

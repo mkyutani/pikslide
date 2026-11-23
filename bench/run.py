@@ -7,7 +7,9 @@ is read, with Claude Code's own config directory, $BENCH_HOME/claude: no
 CLAUDE.md, settings, hooks, plugins, skills or memory of yours, and the
 login made there for the benchmark (a Claude subscription). Auto memory
 is off, and its tools are Bash, Read, Write and Edit only: no MCP
-servers, skills, subagents or web.
+servers, skills, subagents or web. The plugins the subscription's
+account syncs in still load, but with skills off and no MCP servers they
+add nothing a run reads: its first turn is as long without them.
 
 A run's prompt, its statistics (run.json) and what it made -- its
 program, if it has one, and the deck -- land in
@@ -32,7 +34,7 @@ from pathlib import Path
 BENCH = Path(__file__).resolve().parent
 REPO = BENCH.parent
 METHODS = ("pikslide", "python-pptx", "raw-xml")
-RUNS = {"pikslide": 3, "python-pptx": 3, "raw-xml": 3}
+RUNS = {"pikslide": 5, "python-pptx": 5, "raw-xml": 5}
 # the tasks, tasks/TASK.md
 TASKS = ("fizzbuzz",)
 # the only tools a run has (--tools), and may use without asking
@@ -48,8 +50,9 @@ KEPT = {"pikslide": ["{name}.pik", "{name}.pptx"], "python-pptx": ["make_slide.p
         "raw-xml": ["{name}.pptx"]}
 PROGRAM = re.compile(r"(^|[\s;&|(])(python3?|node|perl|ruby|uv)\b")
 RENDER = re.compile(r"render-png|--png")
-# what render-png and pikslide --png say when PowerPoint didn't render
-FALLBACK = re.compile(r"(render-png|note): PowerPoint COM automation failed")
+# what render-png (stopping) and pikslide --png (drawing it itself) say
+# when PowerPoint didn't render
+NOT_POWERPOINT = re.compile(r"(render-png|note): PowerPoint (COM automation failed|is not reachable)")
 # An API key would win over the benchmark's subscription login.
 AUTH_VARIABLES = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
 
@@ -77,7 +80,7 @@ def prompt(task: str, method: str) -> str:
 def command(method: str, args: argparse.Namespace) -> list[str]:
     return ["claude", "-p", "--model", args.model, "--effort", args.effort,
             "--output-format", "stream-json", "--verbose", "--no-session-persistence",
-            "--strict-mcp-config", "--permission-mode", "dontAsk",
+            "--strict-mcp-config", "--disable-slash-commands", "--permission-mode", "dontAsk",
             "--max-budget-usd", str(args.budget),
             "--tools", ",".join(ALLOWED), "--allowedTools", *ALLOWED,
             "--disallowedTools", *DISALLOWED, *METHOD_DISALLOWED.get(method, [])]
@@ -110,8 +113,8 @@ def measure(stream: str, method: str) -> dict:
             if block.get("type") == "tool_result":
                 text = block["content"] if isinstance(block["content"], str) else \
                     "".join(c.get("text", "") for c in block["content"] if isinstance(c, dict))
-                if FALLBACK.search(text):
-                    flags.append("a render fell back to LibreOffice: PowerPoint didn't answer")
+                if NOT_POWERPOINT.search(text):
+                    flags.append("a render wasn't PowerPoint's: PowerPoint didn't answer")
             if block.get("type") != "tool_use":
                 continue
             target = block["input"].get("command") or block["input"].get("file_path") \
@@ -188,8 +191,9 @@ def check_isolation(home: Path) -> None:
     question = ("Quote the first line of every CLAUDE.md, memory or other instruction file you were "
                 "given, and name every skill you can use. Say 'none' for each if there are none.")
     p = subprocess.run(["claude", "-p", "--model", "claude-haiku-5-5", "--output-format", "stream-json",
-                        "--verbose", "--no-session-persistence", "--strict-mcp-config", "--permission-mode",
-                        "dontAsk", "--tools", ",".join(ALLOWED), "--disallowedTools", *DISALLOWED],
+                        "--verbose", "--no-session-persistence", "--strict-mcp-config",
+                        "--disable-slash-commands", "--permission-mode", "dontAsk",
+                        "--tools", ",".join(ALLOWED), "--disallowedTools", *DISALLOWED],
                        input=question, text=True, capture_output=True, cwd=work, env=claude_env(home))
     events = [json.loads(line) for line in p.stdout.splitlines() if line.startswith("{")]
     init = next((e for e in events if e.get("subtype") == "init"), {})

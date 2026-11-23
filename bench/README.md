@@ -5,7 +5,8 @@ pikslide, with python-pptx, and by writing the .pptx's XML by hand. Each
 run is a `claude -p` in a fresh directory outside `$HOME` and this
 repository, with Claude Code's own config directory for the benchmark (no
 CLAUDE.md, settings, hooks, plugins, skills or memory of yours, and auto
-memory off) and only Bash, Read, Write and Edit for tools, given
+memory off), skills off and only Bash, Read, Write and Edit for tools,
+given
 [tasks/](tasks/)`TASK.md` with [methods/](methods/)`METHOD.md` in it. It
 renders with PowerPoint, and ends when the LLM, having looked at its own
 PNG, says it's done.
@@ -19,7 +20,7 @@ each LLM decides to draw.
 sh bench/setup.sh                         # $BENCH_HOME: a venv with this pikslide, render-png;
                                           # the first time, it says how to log in for the runs
 python3 bench/run.py --check-isolation    # one short run: what a run is given
-python3 bench/run.py                      # fizzbuzz: three runs of each method
+python3 bench/run.py                      # fizzbuzz: five runs of each method
 python3 bench/summarize.py > summary.md   # the tables, from each run's run.json
 python3 bench/check.py                    # each fizzbuzz deck against the task
 ```
@@ -48,5 +49,6 @@ where the task says, the three prints joining, the loop back, no line
 crossing a shape or another line, and no text overlapping a line or
 running out of its shape.
 
-A run whose render fell back to LibreOffice, PowerPoint not answering, is
+A run that PowerPoint didn't render for, not answering (`pikslide --png`
+then draws the picture itself, and `render-png` stops with an error), is
 flagged by `summarize.py`, and is made again.

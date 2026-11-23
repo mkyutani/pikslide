@@ -1057,7 +1057,12 @@ def test_color_is_the_text_color_and_stroke_the_line_color():
     shape = layout('box "a" color red "b" stroke blue\n').shapes[0]
     assert shape.text_colors == [Color(rgb=0xFF0000), None]
     assert shape.color == Color(rgb=0x0000FF)
-    assert shape.text_color == Color(rgb=0x000000)
+    assert shape.text_color == Color(theme_slot="tx1")
+
+
+def test_text_and_lines_take_the_themes_text_color_by_default():
+    shape = layout('box "a"\n').shapes[0]
+    assert shape.text_color == shape.color == Color(theme_slot="tx1")
 
 
 def test_dot_is_filled_with_the_default_stroke_color_unless_filled():

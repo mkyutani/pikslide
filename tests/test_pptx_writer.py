@@ -110,8 +110,18 @@ def test_string_color_and_stroke_color_are_separate(tmp_path: pathlib.Path):
     shape = prs.slides[0].shapes[0]
     a, b = (p.runs[0] for p in shape.text_frame.paragraphs)
     assert a.font.color.rgb == RGBColor(0xFF, 0x00, 0x00)
-    assert b.font.color.rgb == RGBColor(0x00, 0x00, 0x00)
+    assert b.font.color.theme_color == MSO_THEME_COLOR.TEXT_1
     assert shape.line.color.rgb == RGBColor(0x00, 0x00, 0xFF)
+
+
+def test_text_and_lines_are_the_themes_text_color_by_default(tmp_path: pathlib.Path):
+    # tx1, not a fixed black: a template's text color, and a theme changed afterwards, color them.
+    prs = render('box "a"\narrow "b" above\n', tmp_path)
+    box, arrow, label = prs.slides[0].shapes
+    for run in (box.text_frame.paragraphs[0].runs[0], label.text_frame.paragraphs[0].runs[0]):
+        assert run.font.color.theme_color == MSO_THEME_COLOR.TEXT_1
+    for line in (box.line, arrow.line):
+        assert line.color.theme_color == MSO_THEME_COLOR.TEXT_1
 
 
 def test_color_and_stroke_variables_set_separate_defaults(tmp_path: pathlib.Path):

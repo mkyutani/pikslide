@@ -441,6 +441,23 @@ class PilFontMetrics:
             out.append(FontRun(run, font, face, embolden, glyphs, kern and not is_ea))
         return out
 
+    def line_faces(self, text: str, flags: list[str], typeface: str, size_px: int,
+                   lang: str = DEFAULT_LANG) -> set[tuple[str, int]]:
+        """The fonts (file and index) PowerPoint sets the lines of `text` by,
+        where their baseline goes: its Latin font, and for text with East
+        Asian characters in it, marked with their language
+        (text_language()), its East Asian font too, though a line may have
+        characters in only one of them (issue #51, checked)."""
+        latin, ea = self._families(flags, typeface, text, lang)
+        bold, italic = "bold" in flags, "italic" in flags
+        out = set()
+        for family in [latin, ea] if text_language(text, lang) else [latin]:
+            self._font(family, bold, italic, size_px)
+            face = self._faces[(family, bold, italic, size_px)]
+            if face is not None:
+                out.add(face)
+        return out
+
     def run_fonts(
         self, text: str, flags: list[str], text_sizes: dict[str, float] | None, typeface: str, size_px: int,
         lang: str = DEFAULT_LANG,

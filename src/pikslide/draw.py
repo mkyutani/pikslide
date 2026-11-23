@@ -254,8 +254,7 @@ class _Painter:
                     top = fb - length
                 else:
                     top = (ft + fb - length) / 2
-                faces = {run.face for run in column_runs if run.face is not None}
-                ratio = sum(self._ratio(face) for face in faces) / len(faces) if faces else 0.96
+                ratio = self._baseline(text, flags, shape, size_px)
                 columns.append(_TextColumn(top, length, _LINE_PITCH * size_in, ratio * size_in, column_runs, color,
                                            center))
         x = center[0] + sum(column.pitch for column in columns) / 2
@@ -289,10 +288,7 @@ class _Painter:
                     x = fr - width
                 else:
                     x = (fl + fr - width) / 2
-                # A line mixing scripts sits between its fonts' baselines
-                # (checked: Calibri's and MS PGothic's).
-                faces = {run.face for run in line_runs if run.face is not None}
-                ratio = sum(self._ratio(face) for face in faces) / len(faces) if faces else 0.96
+                ratio = self._baseline(text, flags, shape, size_px)
                 before = split if i == first_below and k == 0 else 0.0
                 lines.append(_TextLine(x, width, before, _LINE_PITCH * size_in, ratio * size_in, line_runs, color,
                                        center))
@@ -303,6 +299,13 @@ class _Painter:
             line.top = y
             y += line.pitch
         return lines
+
+    def _baseline(self, text: str, flags: list[str], shape: Shape, size_px: int) -> float:
+        """Where a line of `text` has its baseline, below its top, as a
+        multiple of its size (_line_ratio()), in the fonts PowerPoint sets
+        the line by (PilFontMetrics.line_faces())."""
+        faces = self.metrics.line_faces(text, flags, shape.typeface, size_px, shape.lang)
+        return _line_ratio([self._ratio(face) for face in faces])
 
     def _ratio(self, face: tuple[str, int]) -> float:
         if face not in self._ratios:
@@ -489,6 +492,21 @@ class _TextColumn:
                 turned = tile.rotate(-90, expand=True)
                 image.paste(turned, (round(left), round(y)), turned)
             y += run.column_length()
+
+
+def _line_ratio(ratios: list[float]) -> float:
+    """Where PowerPoint sets the baseline of a line, below its top, as a
+    multiple of its size, in fonts whose own are `ratios`
+    (fonts.baseline_ratio()): each font's line, _LINE_PITCH times the
+    size, split at its baseline, laid over the others' at the baseline,
+    and the whole scaled back to _LINE_PITCH (issue #51, checked with
+    Calibri or Arial and MS PGothic, Meiryo, Yu Gothic or BIZ UDPGothic,
+    to within half a hundredth). One font's own, for one; 0.96 for
+    Pillow's own font."""
+    if not ratios:
+        return 0.96
+    above, below = max(ratios), max(_LINE_PITCH - ratio for ratio in ratios)
+    return _LINE_PITCH * above / (above + below)
 
 
 def _column_advance(run: FontRun, text: str | None = None) -> float:

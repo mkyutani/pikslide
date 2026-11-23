@@ -119,6 +119,42 @@ def test_text_is_drawn_with_no_font_file_at_all(monkeypatch):
     assert sum(1 for v in image.get_flattened_data() if v < 128) > 100
 
 
+def test_a_lines_baseline_is_its_fonts_lines_laid_over_one_another():
+    # issue #51: each font's line split at its own baseline, laid over the
+    # others', and scaled back to 1.2 times the size -- Calibri's 0.936 and
+    # MS PGothic's 1.031 give 0.955, where PowerPoint has it (checked).
+    from pikslide.draw import _line_ratio
+
+    assert _line_ratio([0.936]) == 0.936
+    assert _line_ratio([0.936, 1.031]) == pytest.approx(0.9554, abs=1e-4)
+    assert _line_ratio([1.031, 0.936, 1.031]) == _line_ratio([0.936, 1.031])
+    assert _line_ratio([]) == 0.96
+
+
+def test_a_line_with_east_asian_text_is_set_by_both_its_fonts(tmp_path):
+    # issue #51: text with East Asian characters, marked with its language,
+    # sets its lines by its Latin font and its East Asian one, whichever
+    # its characters are in; Latin text by its Latin font alone (checked).
+    import shutil
+
+    from pikslide.fonts import FontIndex, ThemeFonts
+    from pikslide.pptx_writer import PilFontMetrics
+
+    dejavu = pathlib.Path("/usr/share/fonts/truetype/dejavu")
+    if not all((dejavu / f).exists() for f in ("DejaVuSans.ttf", "DejaVuSerif.ttf")):
+        pytest.skip("DejaVu Sans and Serif not installed")
+    for name in ("DejaVuSans.ttf", "DejaVuSerif.ttf"):
+        shutil.copy(dejavu / name, tmp_path / name)
+    theme = ThemeFonts(minor_latin="DejaVu Sans", minor_scripts={"Jpan": "DejaVu Serif"})
+    metrics = PilFontMetrics(theme_fonts=theme, font_index=FontIndex(dirs=[str(tmp_path)]))
+
+    def fonts(text: str) -> set[str]:
+        return {pathlib.Path(path).name for path, _index in metrics.line_faces(text, [], "", 80)}
+
+    assert fonts("Latin Text") == {"DejaVuSans.ttf"}
+    assert fonts("日本語のテキスト") == fonts("日本語 Text") == {"DejaVuSans.ttf", "DejaVuSerif.ttf"}
+
+
 def test_text_is_drawn_where_fit_set_it_kerned_from_12pt():
     # issue #49: each character where PowerPoint sets it, raqm or not --
     # kerned at 12pt and more, as the built-in template's text style says.

@@ -46,6 +46,10 @@ Otherwise run the `pikslide` command:
   two-by-two matrix or a hub with items round it is one macro call,
   after `include "figures.pik"`: `pikslide --help figures` lists them.
   Use one rather than drawing the shape by hand.
+- A data flow diagram's processes, data stores and external entities
+  are macros too, after `include "dfd.pik"`: `pikslide --help dfd`
+  lists them. Draw its flows as arrows, labeled with the data they
+  carry.
 - Lengths are in inches, and the diagram is drawn at the size it is
   written, never scaled. With no template, the slide is sized to it; on
   a template's slide, it goes at the content area's top left (a 16:9

@@ -117,6 +117,9 @@ so neither you nor an LLM needs this repository to write a diagram:
 - `pikslide --help figures`: macros pikslide ships for cycles, chevrons,
   pyramids, funnels, Venn diagrams, a two-by-two matrix and hubs, after
   `include "figures.pik"`
+- `pikslide --help dfd`: macros for a data flow diagram's processes, data
+  stores and external entities, in DeMarco/Yourdon or Gane-Sarson
+  notation, after `include "dfd.pik"`
 - `pikslide --help llm`: the reference in one text, for an LLM to read
   once: short enough to come back whole from one command, and the same
   bytes from the same version, so a prompt that holds it can be cached

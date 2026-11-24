@@ -1,0 +1,4 @@
+include "dfd.pik"
+Take: dfdprocess("1", "Take" "order")
+arrow "order" above right 150%
+Ship: dfdprocess("2", "Ship" "order" fill accent1 lighter 80%)

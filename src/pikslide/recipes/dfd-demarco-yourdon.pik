@@ -1,5 +1,5 @@
-# Data flow diagrams (DFD): a recipe, to copy and adapt (pikslide --help
-# dfd).
+# Data flow diagrams (DFD) in DeMarco/Yourdon notation: a recipe, to copy
+# and adapt (pikslide --help dfd).
 #
 # A data flow diagram shows where data comes from, which processes
 # transform it, where it's kept and where it goes. This one is a level-1
@@ -13,7 +13,8 @@
 # external entity: a box -- Customer: dfdentity("Customer")
 # data flow: an arrow, labeled with the data it carries -- arrow "order" above
 # In Gane-Sarson notation, dfdgsprocess and dfdgsstore draw a process and
-# a store instead, and the rest is the same.
+# a store instead, and the rest is the same: the Gane-Sarson recipe, after
+# this one in pikslide --help dfd, draws this diagram so.
 #
 # HOW IT'S LAID OUT
 # - Label every flow with the data it carries, off the line: `above` a

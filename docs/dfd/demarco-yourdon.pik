@@ -1,0 +1,16 @@
+include "dfd.pik"
+
+Customer: dfdentity("Customer")
+arrow "order" above right 150%
+Take: dfdprocess("1", "Take" "order")
+arrow "new order" above right 150%
+Orders: dfdstore("D1", "Orders")
+
+Ship: dfdprocess("2", "Ship" "order") with .n at 1in below Orders.s
+arrow "order details" ljust from Orders.s to Ship.n
+
+Inventory: dfdstore("D2", "Inventory") with .w at 1.2in right of Ship.e
+arrow "stock level" above from Inventory.w to Ship.e
+
+line "delivery note" above from Ship.w left until even with Customer
+arrow up to Customer.s

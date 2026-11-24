@@ -120,7 +120,9 @@ so neither you nor an LLM needs this repository to write a diagram:
   `include "figures.pik"`
 - `pikslide --help dfd`: macros for a data flow diagram's processes, data
   stores and external entities, in DeMarco/Yourdon or Gane-Sarson
-  notation, after `include "dfd.pik"`, and its recipe
+  notation, after `include "dfd.pik"`, and a recipe in each notation
+  ([docs/dfd.md](https://github.com/mkyutani/pikslide/blob/main/docs/dfd.md)
+  has their pictures)
 - `pikslide --help recipes`: a whole diagram of each kind, a flowchart, a
   system architecture and a data flow diagram, its notes in comments, to
   copy and adapt

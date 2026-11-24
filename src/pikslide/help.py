@@ -588,12 +588,16 @@ def _dfd_list(style: _Style) -> str:
 RECIPES = {
     "flowchart": "a program's steps, decisions and loops: quicksort",
     "architecture": "a system's parts and what each talks to: a Django web system",
-    "dfd": "a data flow diagram, its parts drawn with dfd.pik's macros: order handling",
+    "dfd": "a data flow diagram, with dfd.pik's macros: order handling, DeMarco/Yourdon and Gane-Sarson",
 }
+RECIPE_FILES = {"dfd": ("dfd-demarco-yourdon", "dfd-gane-sarson")}
+"""A recipe's files, in recipes/, where it isn't one by its own name. None
+is named after a file pikslide ships for `include`, such as dfd.pik: a
+recipe beside it that includes that would read it instead."""
 
 
 def recipe_text(name: str) -> str:
-    """The recipe `name`: a .pik to copy and adapt, its notes in comments."""
+    """The recipe file `name`: a .pik to copy and adapt, its notes in comments."""
     return resources.files("pikslide").joinpath("recipes", f"{name}.pik").read_text(encoding="utf-8")
 
 
@@ -1477,8 +1481,8 @@ def render(topic: str, style: _Style) -> str | None:
     if key == "recipes":
         return _recipe_list(style)
     if key == "dfd":
-        return (_dfd_list(style) + "\n" + style.bold("Recipe") + "  (a whole DFD, to copy and adapt)\n\n"
-                + recipe_text("dfd"))
+        return (_dfd_list(style) + "\n" + style.bold("Recipes") + "  (a whole DFD in each notation, to copy and "
+                "adapt)\n\n" + "\n".join(recipe_text(name) for name in RECIPE_FILES["dfd"]))
     if key in RECIPES:
         return recipe_text(key)
     macros = _macro_entries()

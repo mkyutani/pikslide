@@ -1,0 +1,4 @@
+include "dfd.pik"
+Orders: dfdgsstore("D1", "Orders")
+arrow "order" above right 150%
+Ship: dfdgsprocess("2", "Ship" "order")

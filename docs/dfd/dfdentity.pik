@@ -1,0 +1,4 @@
+include "dfd.pik"
+Customer: dfdentity("Customer")
+arrow "order" above right 150%
+Take: dfdprocess("1", "Take" "order")

@@ -1,0 +1,4 @@
+include "dfd.pik"
+Take: dfdgsprocess("1", "Take" "order")
+arrow "new order" above right 150%
+Orders: dfdgsstore("D1", "Orders")

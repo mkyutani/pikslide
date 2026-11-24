@@ -128,3 +128,18 @@ def test_figure_gallery_is_current():
         assert path.read_text(encoding="utf-8") == text, f"{path} is stale: run scripts/gen_figure_gallery.py"
     expected = {p for p in files if p.parent == DOCS / "figures"} | set(gallery.png_paths())
     assert set((DOCS / "figures").iterdir()) == expected
+
+
+def test_dfd_gallery_is_current():
+    """docs/dfd.md and docs/dfd/ hold what scripts/gen_dfd_gallery.py writes:
+    each DFD recipe's diagram and each dfd.pik macro's example, with its
+    PNG; and none is named dfd.pik, which the others include."""
+    spec = importlib.util.spec_from_file_location("gen_dfd_gallery", ROOT / "scripts" / "gen_dfd_gallery.py")
+    gallery = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gallery)
+    files = gallery.expected_files()
+    for path, text in files.items():
+        assert path.read_text(encoding="utf-8") == text, f"{path} is stale: run scripts/gen_dfd_gallery.py"
+    expected = {p for p in files if p.parent == DOCS / "dfd"} | set(gallery.png_paths())
+    assert set((DOCS / "dfd").iterdir()) == expected
+    assert not (DOCS / "dfd" / "dfd.pik").exists()

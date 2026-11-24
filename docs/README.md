@@ -26,6 +26,11 @@ pictures they render to.
   shape is the point (`include "figures.pik"`), each with a picture.
   Written by `scripts/gen_figure_gallery.py` (`--png` to render the
   pictures, with PowerPoint)
+- [dfd.md](dfd.md): the macros pikslide ships for a data flow diagram's
+  parts (`include "dfd.pik"`), and a whole DFD in each notation,
+  DeMarco/Yourdon and Gane-Sarson, each with a picture. Written by
+  `scripts/gen_dfd_gallery.py` (`--png` to render the pictures, with
+  PowerPoint)
 - [shapes.md](shapes.md): every preset shape `shape NAME` draws, as a
   picture. Written by `scripts/gen_shape_gallery.py` (`--png` to render
   the pictures, with PowerPoint)

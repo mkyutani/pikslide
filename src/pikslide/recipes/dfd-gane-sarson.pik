@@ -1,0 +1,43 @@
+# Data flow diagrams (DFD) in Gane-Sarson notation: a recipe, to copy and
+# adapt (pikslide --help dfd).
+#
+# The same order handling as the DeMarco/Yourdon recipe, in Gane-Sarson
+# notation: only its processes and stores are drawn otherwise, with the
+# macros of dfd.pik.
+#
+# THE SYMBOLS, AND WHAT DRAWS EACH
+# process: a rounded rectangle, its number in a band at the top --
+#   Take: dfdgsprocess("1", "Take" "order")
+# data store: a rectangle open on its right, its id in a compartment --
+#   Orders: dfdgsstore("D1", "Orders")
+# external entity: a box -- Customer: dfdentity("Customer")
+# data flow: an arrow, labeled with the data it carries -- arrow "order" above
+#
+# HOW IT'S LAID OUT
+# - As in DeMarco/Yourdon: each flow labeled off the line, the top row
+#   chained left to right, the second process hanging from the store it
+#   reads and the second store beside it, and a bent flow drawn as a
+#   labeled `line`, then an `arrow` on from where it ends.
+# - A process is a block: its .n is the top of its number's band, its .w
+#   and .e the middle of its sides, so that a flow from the side reaches
+#   its name. Every process is one size, dfdprocwid by dfdprocht: break a
+#   name into lines yourself, a string each ("Take" "order").
+# - A store's .w is its closed end, at its id, and .e its open one; its .n
+#   and .s are the middle of its lines.
+
+include "dfd.pik"
+
+Customer: dfdentity("Customer")
+arrow "order" above right 150%
+Take: dfdgsprocess("1", "Take" "order")
+arrow "new order" above right 150%
+Orders: dfdgsstore("D1", "Orders")
+
+Ship: dfdgsprocess("2", "Ship" "order") with .n at 1in below Orders.s
+arrow "order details" ljust from Orders.s to Ship.n
+
+Inventory: dfdgsstore("D2", "Inventory") with .w at 1.2in right of Ship.e
+arrow "stock level" above from Inventory.w to Ship.e
+
+line "delivery note" above from Ship.w left until even with Customer
+arrow up to Customer.s

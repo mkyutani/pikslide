@@ -1,0 +1,117 @@
+# dfd.pik: macros for a data flow diagram's parts, bundled with pikslide
+# (pikslide --help dfd).
+#
+#     include "dfd.pik"
+#     Customer: dfdentity("Customer")
+#     arrow "order" above right 150%
+#     Take: dfdprocess("1", "Take" "order")
+#
+# A DFD is drawn as any diagram is, its flows arrows labeled with the data
+# they carry; these draw its parts, in DeMarco/Yourdon notation
+# (dfdprocess, dfdstore) or Gane-Sarson (dfdgsprocess, dfdgsstore), and an
+# external entity in either (dfdentity). Each argument is a piece's
+# strings and attributes, written last, so that they win. A part that is
+# a block names its pieces (P.Name), and is a group, so that a person
+# moves it as one; its edges are where a flow meets it. The sizes are
+# variables: assign them after the include to change them.
+
+dfdprocwid = 1
+dfdprocht = 1.1
+dfdnumht = 0.3
+dfdstorewid = 1.5
+dfdstoreht = 0.4
+dfdidwid = 0.5
+dfdentitywid = 1
+dfdentityht = 0.6
+
+#: dfdprocess | a process, DeMarco/Yourdon: a numbered circle
+#: P: dfdprocess(NUMBER, NAME)
+#: A circle dfdprocwid across, NUMBER in bold above NAME. Every process is
+#: that size, so break NAME into lines yourself, a string each ("Take"
+#: "order"): PowerPoint would wrap it where it chose, with a warning. NUMBER
+#: and NAME are the circle's strings and attributes. It's a circle, not a
+#: block: its edges are a circle's.
+#: EXAMPLE
+#: include "dfd.pik"
+#: Take: dfdprocess("1", "Take" "order")
+#: arrow "order" above right 150%
+#: Ship: dfdprocess("2", "Ship" "order" fill accent1 lighter 80%)
+define dfdprocess {
+  circle diameter dfdprocwid $1 bold $2
+}
+
+#: dfdstore | a data store, DeMarco/Yourdon: two parallel lines, its id and name between them
+#: P: dfdstore(ID, NAME)
+#: Two lines dfdstorewid long, dfdstoreht apart, ID at the left between them
+#: and NAME in the rest, where it wraps and warns as in a box. ID is a
+#: text's strings and attributes ("" for none), NAME an outlineless box's.
+#: The pieces: Upper, Lower, the lines, and Id, Name. .w and .e are its open
+#: ends, .n and .s the middle of its lines.
+#: EXAMPLE
+#: include "dfd.pik"
+#: Take: dfdprocess("1", "Take" "order")
+#: arrow "new order" above right 150%
+#: Orders: dfdstore("D1", "Orders")
+define dfdstore {
+  [
+    Upper: line right dfdstorewid
+    Lower: line right dfdstorewid from dfdstoreht below Upper.start
+    Id: text $1 with .w at 1/2<Upper.start, Lower.start>
+    Name: box wid Upper.end.x - Id.e.x ht dfdstoreht stroke invis $2 with .w at Id.e
+  ] group
+}
+
+#: dfdgsprocess | a process, Gane-Sarson: a rounded rectangle, its number at the top
+#: P: dfdgsprocess(NUMBER, NAME)
+#: A rounded rectangle dfdprocwid by dfdprocht, a band dfdnumht high across
+#: its top for NUMBER and NAME below it. Every process is that size, so
+#: break NAME into lines yourself, a string each ("Take" "order"). NUMBER
+#: and NAME are their shapes' strings and attributes. The pieces: Number,
+#: the band, and Name, the rest.
+#: EXAMPLE
+#: include "dfd.pik"
+#: Take: dfdgsprocess("1", "Take" "order")
+#: arrow "new order" above right 150%
+#: Orders: dfdgsstore("D1", "Orders")
+define dfdgsprocess {
+  [
+    Number: shape round2SameRect wid dfdprocwid ht dfdnumht adjust adj1 0.1*100000/min(dfdprocwid, dfdnumht) $1
+    Name: shape round2SameRect wid dfdprocwid ht dfdprocht - dfdnumht adjust adj1 0 \
+      adjust adj2 0.1*100000/min(dfdprocwid, dfdprocht - dfdnumht) $2 with .n at Number.s
+  ] group
+}
+
+#: dfdgsstore | a data store, Gane-Sarson: a rectangle open on its right, its id in a compartment
+#: P: dfdgsstore(ID, NAME)
+#: A rectangle dfdstorewid by dfdstoreht, open on its right: ID in a box
+#: dfdidwid wide at its left, NAME in the rest. ID and NAME are their
+#: boxes' strings and attributes, NAME's outlineless. The pieces: Id,
+#: Upper, Lower, the lines, and Name. .w is its closed end and .e its open
+#: one, .n and .s the middle of its lines.
+#: EXAMPLE
+#: include "dfd.pik"
+#: Orders: dfdgsstore("D1", "Orders")
+#: arrow "order" above right 150%
+#: Ship: dfdgsprocess("2", "Ship" "order")
+define dfdgsstore {
+  [
+    Id: box wid dfdidwid ht dfdstoreht $1
+    Upper: line from Id.ne right dfdstorewid - dfdidwid
+    Lower: line from Id.se right dfdstorewid - dfdidwid
+    Name: box wid dfdstorewid - dfdidwid ht dfdstoreht stroke invis $2 with .w at Id.e
+  ] group
+}
+
+#: dfdentity | an external entity: a box
+#: P: dfdentity(NAME)
+#: A box dfdentitywid by dfdentityht, in either notation: where data comes
+#: from or goes to, outside the system. NAME is its strings and attributes:
+#: "Customer" fit sizes it to them.
+#: EXAMPLE
+#: include "dfd.pik"
+#: Customer: dfdentity("Customer")
+#: arrow "order" above right 150%
+#: Take: dfdprocess("1", "Take" "order")
+define dfdentity {
+  box wid dfdentitywid ht dfdentityht $1
+}

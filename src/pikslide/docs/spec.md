@@ -622,6 +622,11 @@ define card { rad 8px stroke text1 }
   a hub and its items), each drawing a block whose parts are named in it
   (`P: cycle4("Plan", "Do", "Check", "Act")`, then `P.S1`), at the size
   `figwid` and `fight` give; `pikslide --help figures` lists them.
+  Another is `dfd.pik`: macros for a data flow diagram's parts, a
+  process, a data store and an external entity, in DeMarco/Yourdon or
+  Gane-Sarson notation (`Orders: dfdstore("D1", "Orders")`), whose edges
+  are where a flow meets them, at sizes held in variables such as
+  `dfdstorewid`; `pikslide --help dfd` lists them.
 - **Local and contained.** Only local files are read, never URLs. The
   resolved path must lie under the including file's directory or under an
   `--include-path` directory: absolute paths and `..` escapes are rejected.

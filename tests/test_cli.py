@@ -244,6 +244,12 @@ def test_include_path_flag_is_searched_when_not_found_beside_the_source(monkeypa
     assert out.exists()
 
 
+def test_a_diagram_named_dfd_pik_includes_pikslides(monkeypatch, capsys, tmp_path):
+    src = _write(tmp_path, "dfd.pik", 'include "dfd.pik"\nP: dfdstore("D1", "Orders")\n')
+    _run(monkeypatch, [str(src), "--check"])
+    assert json.loads(capsys.readouterr().out)["ok"] is True
+
+
 def test_check_parses_and_lays_out_without_writing(monkeypatch, capsys, tmp_path):
     src = _write(tmp_path, "d.pik", 'box "Web"\n')
     out = tmp_path / "d.pptx"

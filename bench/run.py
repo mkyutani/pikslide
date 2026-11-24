@@ -127,7 +127,7 @@ def measure(stream: str, method: str) -> dict:
                 # pikslide's --check reports where everything went
                 if method == "pikslide" and re.search(r"\bunzip\b", target):
                     flags.append(f"took the .pptx apart: `{first}`")
-            if str(REPO) in target or "docs/cookbook" in target:
+            if str(REPO) in target or "bench/tasks" in target:
                 flags.append(f"reached the repository: {block['name']} `{first}`")
     # an API error still ends in subtype "success", with is_error set
     ended_well = result.get("subtype") == "success" and not result.get("is_error")

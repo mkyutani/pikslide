@@ -165,7 +165,11 @@ ENTRIES: tuple[Entry, ...] = (
           see=("classes",), group="class"),
     _line(("line",), "a straight line or polyline",
           "A line, from the previous object's exit in the current direction unless its "
-          "path says otherwise.", ("linewid", "lineht"), "line from A.e to B.w"),
+          "path says otherwise. Its strings go at the middle of the box round it: on a "
+          "straight line, on it, but on a bent one, on none of its segments. So a labeled "
+          "line that bends is drawn in two: a labeled `line` along one straight piece, then "
+          "an `arrow` on from where it ends.", ("linewid", "lineht"),
+          'line "no" above from A.e right 0.5\narrow up until even with B then to B.w'),
     _line(("arrow",), "a line with an arrowhead at its end",
           "A line with an arrowhead at its end (`->`); `<-` or `<->` change the heads, "
           "`start` and `end` their kinds.",
@@ -574,6 +578,31 @@ def _dfd_list(style: _Style) -> str:
     rows = [(e.names[0], e.summary) for e in dfd_entries()]
     return (_format_list('Data flow diagrams  (include "dfd.pik")', rows, style) + "\n"
             + _wrap(note, style.width, 2) + "\n")
+
+
+# ---------------------------------------------------------------------------
+# Recipes: a whole diagram of each kind, its notes in comments (recipes/,
+# issue #75)
+# ---------------------------------------------------------------------------
+
+RECIPES = {
+    "flowchart": "a program's steps, decisions and loops: quicksort",
+    "architecture": "a system's parts and what each talks to: a Django web system",
+    "dfd": "a data flow diagram, its parts drawn with dfd.pik's macros: order handling",
+}
+
+
+def recipe_text(name: str) -> str:
+    """The recipe `name`: a .pik to copy and adapt, its notes in comments."""
+    return resources.files("pikslide").joinpath("recipes", f"{name}.pik").read_text(encoding="utf-8")
+
+
+def _recipe_list(style: _Style) -> str:
+    note = ("Each is a whole diagram of its kind, to copy and adapt, its notes in comments: first the symbols "
+            "and what draws each, then how it's laid out. Read the one for the kind of diagram you draw "
+            "before drawing it.")
+    rows = [(name, summary) for name, summary in RECIPES.items()]
+    return _format_list("Recipes  (pikslide --help NAME)", rows, style) + "\n" + _wrap(note, style.width, 2) + "\n"
 
 
 def _css_colors() -> dict[str, int]:
@@ -1133,7 +1162,9 @@ _LLM_BODIES = {
              "neither → fits in boxwid × boxht. SVG needs rsvg-convert on PATH (PNG fallback).",
     "block": "Statements inside laid out on their own; block placed as one object, their bounding box. Inner "
              "names via its label (Outer.Inner). Draws nothing itself.",
-    "line": "From the previous object's exit, in the current direction, unless its path says otherwise.",
+    "line": "From the previous object's exit, in the current direction, unless its path says otherwise. "
+            "Strings at the middle of its bounding box: a bent line's on no segment, so label a straight "
+            "`line`, then `arrow` on from its end.",
     "arrow": "Line, head at end (->); <- / <-> move heads; start/end set their kinds.",
     "spline": "Smooth curve through each point of its path, as PowerPoint's Curve; points editable. Two points "
               "= straight.",
@@ -1282,6 +1313,11 @@ def llm_text() -> str:
         + ", ".join(_figure_names(e) for e in figure_entries())
         + ". pikslide --help figures, then --help NAME; look for one before drawing such a shape by hand.",
         "",
+        "RECIPES",
+        "A whole diagram of each kind, to copy and adapt, its symbols and layout in comments: pikslide --help "
+        "flowchart, --help architecture, --help dfd (--help recipes lists them). Read the one for the kind "
+        "you draw before drawing it.",
+        "",
         "DATA FLOW DIAGRAMS",
         'Macros for a DFD\'s parts, after include "dfd.pik": a process, a data store and an external entity, '
         "DeMarco/Yourdon (dfdprocess, dfdstore, dfdentity) or Gane-Sarson (dfdgsprocess, dfdgsstore, "
@@ -1394,12 +1430,14 @@ _LISTS = {
     "variables": "the built-in variables and their defaults",
     "prelude": "the prelude itself: every built-in definition",
     "figures": 'macros for cycles, chevrons, pyramids, funnels, Venn diagrams, a matrix, hubs: include "figures.pik"',
-    "dfd": 'macros for a data flow diagram\'s processes, data stores and external entities: include "dfd.pik"',
+    "dfd": 'macros for a data flow diagram\'s processes, data stores and external entities, and its recipe',
+    "recipes": "a whole diagram of each kind, to copy and adapt: flowchart, architecture, dfd",
 }
 _PAGES = {"intro": "start here: the language in one page, with an example",
             "template": "drawing on a --template's slide: layout, content area, settings file",
             "llm": "all it takes to write a diagram, in one text: for an LLM to read once"}
 _ALIASES = {"colours": "colors", "keyword": "keywords", "class": "classes", "attribute": "attributes",
+            "recipe": "recipes", "cookbook": "recipes",
             "text-flags": "flags", "variable": "variables", "vars": "variables", "presets": "shapes",
             "topics": "help",
             "settings": "template", "content": "template"}
@@ -1436,8 +1474,13 @@ def render(topic: str, style: _Style) -> str | None:
         return prelude_text()
     if key == "figures":
         return _figure_list(style)
+    if key == "recipes":
+        return _recipe_list(style)
     if key == "dfd":
-        return _dfd_list(style)
+        return (_dfd_list(style) + "\n" + style.bold("Recipe") + "  (a whole DFD, to copy and adapt)\n\n"
+                + recipe_text("dfd"))
+    if key in RECIPES:
+        return recipe_text(key)
     macros = _macro_entries()
     if key in macros:
         return _format_entry(macros[key], style)
@@ -1465,8 +1508,8 @@ def render(topic: str, style: _Style) -> str | None:
 
 
 def _all_topics() -> list[str]:
-    return list(dict.fromkeys([*_PAGES, *_LISTS, *_entry_index(), *_macro_entries(), *prelude_values(),
-                               *PRESET_NAMES]))
+    return list(dict.fromkeys([*_PAGES, *_LISTS, *RECIPES, *_entry_index(), *_macro_entries(),
+                               *prelude_values(), *PRESET_NAMES]))
 
 
 def show(topic: str | None) -> int:

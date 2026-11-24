@@ -209,8 +209,8 @@ wrote step4-warns.pptx
 A line's label goes at the middle of the box round the line. For a
 straight line that's on the line; for this one, it's on none of its
 segments, and on top of the queue. The warning gives two ways out. To
-label a straight line instead, draw the bend in pieces, as the
-[DFD recipe](../cookbook/dfd.md) does. Here the label goes as a text of
+label a straight line instead, draw the bend in pieces, as the DFD
+recipe, `pikslide --help dfd`, does. Here the label goes as a text of
 its own: name the arrow `Mail`, and put the text under it.
 
 [step4.pik](step4.pik):
@@ -346,7 +346,7 @@ often what to do. There are three ways to answer one:
   kind.
 - **Say it's meant.** Two objects that overlap on purpose don't warn if
   one is drawn `behind` the other, or wholly inside it: a frame round a
-  group, as the [architecture recipe](../cookbook/architecture.md)
+  group, as the architecture recipe, `pikslide --help architecture`,
   draws, or a dot on an outline, as in the picture of points above.
 - **Leave it, knowing why.** The `--template` warning, while you're
   trying things out. When the deck has to be right, `--strict` makes it
@@ -361,8 +361,8 @@ check again, without looking at the picture.
 
 - `pikslide --help WORD` for any word here (`--help then`,
   `--help fill`). `pikslide --help keywords` lists them all.
-- The [cookbook](../cookbook/): data flow diagrams, flowcharts and
-  system architecture, to copy and adapt.
+- `pikslide --help recipes`: data flow diagrams, flowcharts and system
+  architecture, to copy and adapt.
 - Drawing with an LLM: the [README](../../README.md), and
   [japan-capitals.md](../examples/japan-capitals.md), a slide Claude Code
   drew from one prompt.

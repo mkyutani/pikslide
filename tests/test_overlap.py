@@ -11,9 +11,12 @@ import pytest
 from pikslide.pik import parse
 from pikslide.pptx_writer import resolve_for_pptx
 
-DOCS = pathlib.Path(__file__).parent.parent / "docs"
-# Not the tutorial's first tries, stepN-warns.pik: they're there to warn.
-DRAWN = sorted((DOCS / "cookbook").glob("*.pik")) + sorted(
+ROOT = pathlib.Path(__file__).parent.parent
+DOCS = ROOT / "docs"
+# The recipes pikslide ships, the benchmark's answers and the tutorial's
+# steps, but not its first tries, stepN-warns.pik: they're there to warn.
+DRAWN = sorted((ROOT / "src" / "pikslide" / "recipes").glob("*.pik")) + sorted(
+    (ROOT / "bench" / "tasks").glob("*.pik")) + sorted(
     p for p in (DOCS / "tutorial").glob("*.pik") if not p.stem.endswith("-warns"))
 
 
@@ -157,11 +160,11 @@ def test_what_isnt_drawn_doesnt_count():
 
 
 @pytest.mark.parametrize("path", DRAWN, ids=lambda p: f"{p.parent.name}/{p.name}")
-def test_cookbook_and_tutorial_dont_overlap(path: pathlib.Path):
+def test_recipes_and_tutorial_dont_overlap(path: pathlib.Path):
     # A recipe or a tutorial step is drawn as the diagram should be. Not
     # overflow: with a wider font standing in for the theme's, its text
     # may overflow.
-    result = resolve_for_pptx(parse(path.read_text(encoding="utf-8"), base_dir=str(path.parent)),
+    result = resolve_for_pptx(parse(path.read_text(encoding="utf-8"), base_dir=str(path.parent), path=str(path)),
                               base_dir=str(path.parent))
     assert [w.message for w in result.warnings if "overflows" not in w.message] == []
 

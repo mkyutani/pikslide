@@ -1,0 +1,76 @@
+# Flowcharts: a recipe, to copy and adapt (pikslide --help flowchart).
+#
+# A flowchart follows a program step by step: what it does, where it
+# decides and where it loops. This one draws quicksort, sorting A[lo..hi]
+# in place: it partitions the range round a pivot, in a loop with a
+# decision in it, then sorts each side by calling itself.
+#
+# THE SYMBOLS, AND WHAT DRAWS EACH
+# start, end: rounded ends -- oval "Return" fit
+# process: a rectangle -- box "j = j + 1" fit
+# decision: a diamond, a "yes" and a "no" leaving it -- diamond "j < hi" wid 2in ht 0.75in
+# predefined process, such as a call: a rectangle with doubled sides --
+#   shape flowChartPredefinedProcess "quicksort(A, lo, i - 1)" wid 2.2in ht 0.5in
+# input, output: a parallelogram -- shape flowChartInputOutput "print i" wid 1.6in ht 0.45in
+# flow: an arrow -- arrow, arrow "yes" ljust
+#
+# HOW IT'S LAID OUT
+# - The main path runs straight down: after `down`, each arrow and shape
+#   goes below the one before, with no coordinates. The branches and the
+#   loop are drawn afterwards, from the shapes' edges.
+# - Decisions are one size: the first has its wid and ht, and the others
+#   copy them with `same`. PowerPoint sets a diamond's text in the middle
+#   half of its width, so a diamond is a bit over twice as wide as its
+#   widest line; pikslide warns when it isn't. Calls are one size too.
+# - Label each exit of a decision: `ljust` beside one going down, `above`
+#   one going right. An exit that bends is a short labeled `line`, then an
+#   `arrow` on from where it ends: a bent line's label would sit on none of
+#   its segments (pikslide --help line).
+# - The loop goes back round the left, and the way out of the whole round
+#   the right, through points made from the shapes' edges and kept in
+#   variables (leftx, rightx), so that the lines move with the shapes.
+# - What follows the loop is a second column, far enough right to clear
+#   the "no" that bypasses the swap.
+# - A line to a parallelogram's side ends a tenth of its width in from its
+#   .w or .e: its slanted sides start a fifth of its width in, and .w and
+#   .e are its box's. inset = Out.wid / 10, then arrow to Out.w + (inset, 0).
+# - Swimlanes: a tall box per actor, behind the first shape, and each step
+#   placed in its lane with at (Lane.x, ...).
+
+down
+Start: oval "quicksort(A, lo, hi)" fit
+arrow
+Check: diamond "lo < hi" wid 2in ht 0.75in
+arrow "yes" ljust
+Init: box "pivot = A[hi]" "i = lo" "j = lo" fit
+arrow
+Loop: diamond "j < hi" same
+arrow "yes" ljust
+Less: diamond "A[j] < pivot" same
+arrow "yes" ljust
+Swap: box "swap A[i], A[j]" "i = i + 1" fit
+arrow
+Next: box "j = j + 1" fit
+
+# Back round the left, to the loop's test.
+leftx = Loop.w.x - 0.3in
+arrow from Next.s down 0.25in then to (leftx, Next.s.y - 0.25in) then to (leftx, Loop.y) then to Loop.w
+
+# Not less: past the swap, down the right, into j = j + 1.
+line "no" above from Less.e right 0.4in
+arrow down until even with Next then to Next.e
+
+# Out of the loop: the pivot into place, then each side sorted.
+Place: box "swap A[i], A[hi]" fit with .w at 1.2in right of Loop.e
+arrow "no" above from Loop.e to Place.w
+arrow down from Place.s
+Lower: shape flowChartPredefinedProcess "quicksort(A, lo, i - 1)" wid 2.2in ht 0.5in
+arrow
+Upper: shape flowChartPredefinedProcess "quicksort(A, i + 1, hi)" same
+arrow
+Return: oval "Return" fit
+
+# Nothing to sort: round the right, to the end.
+rightx = Lower.e.x + 0.3in
+line "no" above from Check.e right 0.4in
+arrow to (rightx, Check.y) then to (rightx, Return.y) then to Return.e

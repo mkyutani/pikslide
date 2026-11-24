@@ -1,5 +1,7 @@
 # FizzBuzz, as a flowchart: for i from 1 to 100, print FizzBuzz for a
 # multiple of 15, Fizz for one of 3, Buzz for one of 5, and i otherwise.
+# The answer to fizzbuzz.md, drawn with pikslide: what a run is asked to
+# draw, which no run is given (bench/README.md).
 
 down
 Start: oval "Start" fit

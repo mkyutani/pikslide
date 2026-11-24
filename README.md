@@ -64,8 +64,9 @@ arrow "edit in PowerPoint" rjust from (Pptx.x, You.n.y) to Pptx.s + (0, wave)
 [docs/examples/japan-capitals.md](https://github.com/mkyutani/pikslide/blob/main/docs/examples/japan-capitals.md)
 is a slide Claude Code drew this way, in one run, with the prompt it was
 given. [docs/](https://github.com/mkyutani/pikslide/tree/main/docs) has
-a [tutorial](https://github.com/mkyutani/pikslide/tree/main/docs/tutorial),
-more examples and a cookbook of diagram recipes.
+a [tutorial](https://github.com/mkyutani/pikslide/tree/main/docs/tutorial)
+and more examples, and `pikslide --help recipes` a recipe for each kind
+of diagram.
 
 ## Install
 
@@ -119,7 +120,10 @@ so neither you nor an LLM needs this repository to write a diagram:
   `include "figures.pik"`
 - `pikslide --help dfd`: macros for a data flow diagram's processes, data
   stores and external entities, in DeMarco/Yourdon or Gane-Sarson
-  notation, after `include "dfd.pik"`
+  notation, after `include "dfd.pik"`, and its recipe
+- `pikslide --help recipes`: a whole diagram of each kind, a flowchart, a
+  system architecture and a data flow diagram, its notes in comments, to
+  copy and adapt
 - `pikslide --help llm`: the reference in one text, for an LLM to read
   once: short enough to come back whole from one command, and the same
   bytes from the same version, so a prompt that holds it can be cached

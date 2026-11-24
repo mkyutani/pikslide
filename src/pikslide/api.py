@@ -163,8 +163,12 @@ def build(
     `check`, lay it out only. As the command's options say, each given in
     full: `output`, `png` and `pdf` are paths, not defaults to work out.
     Raises BuildError, as the command reports it."""
+    # The file the source was read from, which an include passes over: in
+    # base_dir, by input_path's name, unless it was read from elsewhere.
+    source_file = os.path.join(base_dir, os.path.basename(input_path))
     try:
-        doc = parse(text, base_dir=base_dir, include_paths=list(include_paths))
+        doc = parse(text, base_dir=base_dir, include_paths=list(include_paths),
+                    path=source_file if os.path.isfile(source_file) else None)
     except PikSyntaxError as e:
         raise _syntax_error(e, input_path, text) from None
     if output is None and not check:

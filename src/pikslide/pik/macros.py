@@ -57,11 +57,19 @@ BUNDLED_INCLUDES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 """The files pikslide ships for `include`, such as figures.pik (issue #38)."""
 
 
-def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[str], path_tok: Token) -> str:
+def _resolve_include_path(
+    raw_path: str, current_dir: str, include_paths: list[str], path_tok: Token, include_stack: tuple[str, ...]
+) -> str:
     """Resolve an `include "path"` (docs/spec.md SS3.6): relative to
     `current_dir` (the including file's own directory) first, then to
     each `include_paths` entry in order, and last to the files pikslide
     ships (BUNDLED_INCLUDES).
+
+    A file already being read, in `include_stack` (the diagram itself, or
+    a file that includes this one), is passed over, so that a diagram
+    named dfd.pik can include the dfd.pik pikslide ships: including it
+    would be a cycle. Only when nothing else by that name is found is the
+    cycle an error.
 
     Rejects an absolute path, and any resolution that escapes its own
     base directory: a diagram may be written by an LLM, and must not be
@@ -77,6 +85,7 @@ def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[s
     if is_absolute(raw_path):
         raise PikSyntaxError(f"include path must be relative, not {raw_path!r}", line, raw_path, pos=pos, file=file)
     tried = []
+    cycle = None
     for base_dir in (current_dir, *include_paths, BUNDLED_INCLUDES):
         base = os.path.realpath(base_dir)
         resolved = os.path.realpath(os.path.join(base, raw_path))
@@ -84,8 +93,14 @@ def _resolve_include_path(raw_path: str, current_dir: str, include_paths: list[s
             tried.append(f"{base_dir} (escapes it)")
             continue
         if os.path.isfile(resolved):
-            return resolved
+            if resolved not in include_stack:
+                return resolved
+            cycle = cycle or resolved
+            continue
         tried.append("pikslide's own" if base_dir == BUNDLED_INCLUDES else base_dir)
+    if cycle is not None:
+        chain = " -> ".join((*include_stack, cycle))
+        raise PikSyntaxError(f"include cycle: {chain}", line, raw_path, pos=pos, file=file)
     raise PikSyntaxError(
         f"include file not found: {raw_path!r} (tried: {', '.join(tried)})", line, raw_path, pos=pos, file=file
     )
@@ -169,18 +184,21 @@ class _State:
 
 
 def expand_macros(
-    text: str, base_dir: str = ".", include_paths: list[str] | None = None, file: str | None = None
+    text: str, base_dir: str = ".", include_paths: list[str] | None = None, file: str | None = None,
+    path: str | None = None,
 ) -> tuple[list[Token], list[MacroDefinition]]:
     """Tokenize ``text`` and expand all macro invocations and `include`
     statements (ext; docs/spec.md SS3.6). `base_dir` is the source file's
     own directory, against which an `include "path"` resolves first;
     `include_paths` (ext, for a future `--include-path`) are tried next,
     in order, if it isn't found there. `file` is the text's own name for
-    its tokens, None for the main source (parse())."""
+    its tokens, None for the main source (parse()). `path` is the file
+    the text was read from, if any, which an include passes over."""
     tokens = Lexer(text, file=file).tokenize()
     state = _State()
     _expand(tokens, 0, len(tokens), None, state, depth=0,
-            current_dir=base_dir, include_paths=include_paths or [], include_stack=())
+            current_dir=base_dir, include_paths=include_paths or [],
+            include_stack=(os.path.realpath(path),) if path else ())
     defs = [MacroDefinition(m.name, m.body) for m in state.macros.values()]
     return state.out, defs
 
@@ -220,10 +238,7 @@ def _expand(
         if tok.type == TokType.INCLUDE and i + 1 < end and tokens[i + 1].type == TokType.STRING:
             path_tok = tokens[i + 1]
             raw_path = unescape_string(path_tok.text)
-            resolved = _resolve_include_path(raw_path, current_dir, include_paths, path_tok)
-            if resolved in include_stack:
-                chain = " -> ".join((*include_stack, resolved))
-                raise PikSyntaxError(f"include cycle: {chain}", path_tok.line, raw_path, pos=path_tok.pos, file=path_tok.file)
+            resolved = _resolve_include_path(raw_path, current_dir, include_paths, path_tok, include_stack)
             try:
                 included_text = open(resolved, encoding="utf-8").read()
             except OSError as e:

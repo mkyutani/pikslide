@@ -967,7 +967,8 @@ for _name in (
 
 
 def parse(
-    text: str, base_dir: str = ".", include_paths: list[str] | None = None, file: str | None = None
+    text: str, base_dir: str = ".", include_paths: list[str] | None = None, file: str | None = None,
+    path: str | None = None,
 ) -> ast.Document:
     """Parse diagram source text into a :class:`pikslide.pik.ast.Document` tree.
 
@@ -977,8 +978,11 @@ def parse(
 
     `file` names the text for its errors and its nodes' `where`, when it
     isn't the main source: a template's settings file, say. None, the
-    main source, is what a caller formats an error against."""
-    tokens, macros = expand_macros(text, base_dir, include_paths, file=file)
+    main source, is what a caller formats an error against.
+
+    `path` is the file the text was read from, if any: an include passes
+    it over, so that a diagram named dfd.pik includes pikslide's."""
+    tokens, macros = expand_macros(text, base_dir, include_paths, file=file, path=path)
     doc = Parser(tokens).parse_document()
     doc.macros = macros
     doc.base_dir = base_dir

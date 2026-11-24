@@ -617,6 +617,10 @@ define card { rad 8px stroke text1 }
   [grammar.md](grammar.md), *Macros*.
 - **Resolution.** The path is relative to the file containing the `include`,
   then to each `--include-path DIR`, and last to the files pikslide ships.
+  A file already being read, the diagram itself or a file that includes
+  this one, is passed over, so that a diagram named `dfd.pik` includes
+  the `dfd.pik` pikslide ships; only when nothing else by that name is
+  found is it an error, an include cycle.
   One is `figures.pik`: macros for diagrams whose shape is the point
   (cycles, chevrons, pyramids, funnels, Venn diagrams, a two-by-two matrix,
   a hub and its items), each drawing a block whose parts are named in it
@@ -989,7 +993,8 @@ Humans and LLMs both need errors they can act on.
   ```
 
   `parse()` takes the source and the directory its `include`s and images
-  resolve against. `layout()` takes the template the deck is made from, as
+  resolve against, and, as `path=`, the file it was read from, which an
+  `include` passes over (§3.6). `layout()` takes the template the deck is made from, as
   `--template` does: `fit` measures text in its theme's fonts, and its
   settings file (§3.8; `settings=` names another) sets the text sizes and
   colors. With none, the built-in Office theme stands in, which is a

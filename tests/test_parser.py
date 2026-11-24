@@ -653,6 +653,26 @@ def test_include_cycle_is_an_error(tmp_path: Path):
         parse('include "a.pik"\nbox\n', base_dir=str(tmp_path))
 
 
+def test_include_cycle_says_so(tmp_path: Path):
+    (tmp_path / "a.pik").write_text('include "b.pik"\n', encoding="utf-8")
+    (tmp_path / "b.pik").write_text('include "a.pik"\n', encoding="utf-8")
+    with pytest.raises(PikSyntaxError, match="include cycle"):
+        parse('include "a.pik"\nbox\n', base_dir=str(tmp_path))
+
+
+def test_an_include_passes_over_a_file_being_read(tmp_path: Path):
+    # A diagram named after a file pikslide ships includes pikslide's, not
+    # itself, and so does a file that includes it (issue #74).
+    source = 'include "dfd.pik"\nP: dfdprocess("1", "Take")\n'
+    (tmp_path / "dfd.pik").write_text(source, encoding="utf-8")
+    doc = parse(source, base_dir=str(tmp_path), path=str(tmp_path / "dfd.pik"))
+    assert any(isinstance(s, ast.AssignStatement) and s.name == "dfdprocwid" for s in doc.statements)
+    (tmp_path / "dfd.pik").write_text('include "parts.pik"\n', encoding="utf-8")
+    (tmp_path / "parts.pik").write_text('include "dfd.pik"\n', encoding="utf-8")
+    doc = parse('include "parts.pik"\nbox\n', base_dir=str(tmp_path), path=str(tmp_path / "dfd.pik"))
+    assert any(isinstance(s, ast.AssignStatement) and s.name == "dfdprocwid" for s in doc.statements)
+
+
 def test_include_path_fallback_when_not_found_relative_to_source(tmp_path: Path):
     src_dir = tmp_path / "src"
     src_dir.mkdir()

@@ -2,7 +2,7 @@
   "mcpServers": {
     "pikslide": {
       "command": "uvx",
-      "args": ["pikslide-mcp@0.8.0", "--root", "${CLAUDE_PROJECT_DIR}"]
+      "args": ["pikslide-mcp@0.9.0", "--root", "${CLAUDE_PROJECT_DIR}"]
     }
   }
 }

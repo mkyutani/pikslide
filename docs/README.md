@@ -7,6 +7,8 @@ The manuals:
 
 Writing a diagram takes neither: `pikslide --help` lists the help topics
 built in, and `pikslide --help llm` is all of it in one text, for an LLM.
+`pikslide --help recipes` lists a recipe for each kind of diagram: a
+flowchart, a system architecture, a data flow diagram.
 
 This directory holds what only the repository has: diagrams, with the
 pictures they render to.
@@ -27,8 +29,6 @@ pictures they render to.
 - [shapes.md](shapes.md): every preset shape `shape NAME` draws, as a
   picture. Written by `scripts/gen_shape_gallery.py` (`--png` to render
   the pictures, with PowerPoint)
-- [cookbook/](cookbook/): one recipe per kind of diagram, to copy and
-  adapt: its source, its picture, and how it's drawn
 
 Every `.pik` here, and every ` ```pikslide ` block in this directory's
 Markdown and in the top-level README, must parse and lay out

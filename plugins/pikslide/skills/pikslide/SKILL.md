@@ -28,7 +28,10 @@ Otherwise run the `pikslide` command:
 
 1. Read the language reference once: `pikslide --help llm` (the `help`
    tool, topic `llm`). It is all it takes to write a diagram; don't
-   guess the syntax from other diagram languages.
+   guess the syntax from other diagram languages. For a flowchart, a
+   system architecture or a data flow diagram, read its recipe too
+   before drawing it: `pikslide --help flowchart` (`architecture`,
+   `dfd`), a whole diagram of that kind, to copy and adapt.
 2. Write the diagram to a `.pik` file.
 3. Check it: `pikslide diagram.pik --check` (the `check` tool). It
    prints JSON: the errors, each with the help topic to read, and the
@@ -48,8 +51,8 @@ Otherwise run the `pikslide` command:
   Use one rather than drawing the shape by hand.
 - A data flow diagram's processes, data stores and external entities
   are macros too, after `include "dfd.pik"`: `pikslide --help dfd`
-  lists them. Draw its flows as arrows, labeled with the data they
-  carry.
+  lists them, then gives its recipe. Draw its flows as arrows, labeled
+  with the data they carry.
 - Lengths are in inches, and the diagram is drawn at the size it is
   written, never scaled. With no template, the slide is sized to it; on
   a template's slide, it goes at the content area's top left (a 16:9

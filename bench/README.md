@@ -12,9 +12,10 @@ renders with PowerPoint, and ends when the LLM, having looked at its own
 PNG, says it's done.
 
 The task, [fizzbuzz](tasks/fizzbuzz.md), is the flowchart of
-[docs/cookbook/flowchart.md](../docs/cookbook/flowchart.md), every shape,
-text and arrow of it given, so that the runs differ by method, not by what
-each LLM decides to draw.
+[tasks/fizzbuzz.pik](tasks/fizzbuzz.pik), its answer, every shape, text
+and arrow of it given, so that the runs differ by method, not by what each
+LLM decides to draw. A run, set up outside the repository, can't reach the
+answer, and one that tries is flagged.
 
 ```sh
 sh bench/setup.sh                         # $BENCH_HOME: a venv with this pikslide, render-png;

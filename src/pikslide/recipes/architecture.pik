@@ -1,0 +1,70 @@
+# System architecture: a recipe, to copy and adapt (pikslide --help
+# architecture).
+#
+# A system architecture diagram shows the parts of a system and what each
+# one talks to. This one draws a Django web system: Nginx in front, Django
+# under Gunicorn, PostgreSQL, Redis as the cache and task queue, and a
+# Celery worker, the server side running as docker compose services.
+#
+# THE SYMBOLS, AND WHAT DRAWS EACH
+# a service or program -- box "Django" bold "Gunicorn (WSGI)" small
+# a database or queue -- cylinder "PostgreSQL" bold "database" small
+# files -- file "Static files" bold "static/, media/" small
+# a call, from caller to callee -- arrow "SQL" above
+# a boundary, such as a host, a network or a deployment -- a box behind
+#   the parts: fill bg1 darker 5% stroke dashed
+#
+# HOW IT'S LAID OUT
+# - Every part is one size: boxwid, cylwid, filewid and their heights are
+#   set once, at the top, so that the parts line up on a grid. Each is its
+#   name in bold over its role in small text, short enough to fit.
+# - Arrows point from caller to callee, labeled with what passes along
+#   them: a protocol (HTTPS, SQL) or what it's for (cache, tasks). Those
+#   inside the boundary are all 0.8in; the browser's is longer, to keep its
+#   label clear of the boundary's edge.
+# - The second row sits under the first: each part in it at (X.x, row2),
+#   under the part that uses it, so that the arrows between the rows are
+#   straight, and Redis and Celery share a height, so the arrow between
+#   them is too.
+# - The boundary is drawn last, sized from the parts' edges, with room at
+#   the top for its title, its center worked out into variables first
+#   (midx, midy). `behind Browser`, the very first object, puts it at the
+#   back: behind Nginx, it would hide the end of the HTTPS arrow, drawn
+#   before Nginx. Its fill is a theme color, so that it follows a
+#   --template.
+# - Outside services, such as a mail server or object storage, go outside
+#   the boundary, an arrow crossing it. Several hosts or networks are a
+#   boundary each, side by side or nested, each sized from what's in it.
+
+boxwid = 1.4in
+boxht = 0.65in
+cylwid = 1.4in
+cylht = 0.8in
+filewid = 1.4in
+fileht = 0.8in
+
+Browser: box "Browser"
+arrow "HTTPS" above right 1.2in
+Nginx: box "Nginx" bold "reverse proxy" small
+arrow "HTTP" above right 0.8in
+Django: box "Django" bold "Gunicorn (WSGI)" small
+arrow "SQL" above right 0.8in
+DB: cylinder "PostgreSQL" bold "database" small
+
+row2 = Django.y - 1.5in
+Static: file "Static files" bold "static/, media/" small at (Nginx.x, row2)
+Redis: cylinder "Redis" bold "cache, task queue" small at (Django.x, row2)
+Worker: box "Celery" bold "background tasks" small at (DB.x, row2)
+
+arrow "files" ljust from Nginx.s to Static.n
+arrow "cache, tasks" ljust from Django.s to Redis.n
+arrow "tasks" above from Worker.w to Redis.e
+arrow "SQL" ljust from Worker.n to DB.s
+
+# The services' frame, drawn behind everything: wide enough for both
+# rows, with room for its title at the top.
+midx = (Nginx.w.x + DB.e.x) / 2
+midy = (DB.n.y + Redis.s.y) / 2
+Compose: box wid (DB.e.x - Nginx.w.x) + 0.5in ht (DB.n.y - Redis.s.y) + 0.8in \
+    at (midx, midy + 0.15in) fill bg1 darker 5% stroke dashed behind Browser
+"docker compose" bold at 0.25in below Compose.n

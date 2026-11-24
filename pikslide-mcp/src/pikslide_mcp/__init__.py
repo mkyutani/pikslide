@@ -94,10 +94,11 @@ def create_server(root: str = ".") -> MCPServer:
     def help_(topic: str = "llm") -> str:
         """`pikslide --help TOPIC`. Topic llm is all it takes to write a diagram, in one text: read it first.
         Otherwise a keyword (box, arrow, fill, ...), a list (keywords, shapes, colors, variables), a preset
-        shape's name, or template (drawing on a template's slide)."""
+        shape's name, template (drawing on a template's slide), or a recipe, a whole diagram of its kind to
+        copy and adapt: flowchart, architecture, dfd (recipes lists them)."""
         text = render_help(topic, _Style(tty=False))
         if text is None:
-            raise ToolError(f"no help on {topic!r}: try llm, keywords, shapes, colors or template")
+            raise ToolError(f"no help on {topic!r}: try llm, keywords, shapes, colors, template or recipes")
         return text
 
     @server.tool()

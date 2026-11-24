@@ -1,6 +1,6 @@
 #!/bin/sh
 # Prepare $BENCH_HOME, outside the repository so a run can't find
-# docs/cookbook/flowchart.pik, fizzbuzz's own diagram: a venv with this
+# bench/tasks/fizzbuzz.pik, fizzbuzz's own diagram: a venv with this
 # checkout of pikslide (and python-pptx, its dependency), the render-png
 # command, and claude/, the runs' own Claude Code config directory.
 set -eu

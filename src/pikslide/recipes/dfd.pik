@@ -1,0 +1,48 @@
+# Data flow diagrams (DFD): a recipe, to copy and adapt (pikslide --help
+# dfd).
+#
+# A data flow diagram shows where data comes from, which processes
+# transform it, where it's kept and where it goes. This one is a level-1
+# DFD of order handling, in DeMarco/Yourdon notation, its parts drawn
+# with the macros of dfd.pik.
+#
+# THE SYMBOLS, AND WHAT DRAWS EACH
+# process: a numbered circle -- Take: dfdprocess("1", "Take" "order")
+# data store: two parallel lines, its id and name between them --
+#   Orders: dfdstore("D1", "Orders")
+# external entity: a box -- Customer: dfdentity("Customer")
+# data flow: an arrow, labeled with the data it carries -- arrow "order" above
+# In Gane-Sarson notation, dfdgsprocess and dfdgsstore draw a process and
+# a store instead, and the rest is the same.
+#
+# HOW IT'S LAID OUT
+# - Label every flow with the data it carries, off the line: `above` a
+#   level arrow, `ljust` (to the right) or `rjust` (to the left) beside an
+#   upright one.
+# - The top row chains left to right, each part after the arrow before it.
+# - The second process hangs from the store it reads (with .n at 1in below
+#   Orders.s), and the second store sits beside it (with .w at 1.2in right
+#   of Ship.e), so that each flow between them is a straight line. A
+#   store's .w and .e are its ends, its .n and .s the middle of its lines.
+# - A flow that bends is a labeled `line` for its long segment, then an
+#   `arrow` on from where it ends: a bent line's label would sit on none of
+#   its segments (pikslide --help line).
+# - A context diagram, level 0, is one process with only external entities
+#   round it: the same parts, without data stores.
+
+include "dfd.pik"
+
+Customer: dfdentity("Customer")
+arrow "order" above right 150%
+Take: dfdprocess("1", "Take" "order")
+arrow "new order" above right 150%
+Orders: dfdstore("D1", "Orders")
+
+Ship: dfdprocess("2", "Ship" "order") with .n at 1in below Orders.s
+arrow "order details" ljust from Orders.s to Ship.n
+
+Inventory: dfdstore("D2", "Inventory") with .w at 1.2in right of Ship.e
+arrow "stock level" above from Inventory.w to Ship.e
+
+line "delivery note" above from Ship.w left until even with Customer
+arrow up to Customer.s

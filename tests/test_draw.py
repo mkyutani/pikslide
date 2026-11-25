@@ -103,6 +103,25 @@ def test_an_arrowhead_is_sized_as_powerpoint_sizes_it():
     assert sum(1 for n in head if n > 4) == pytest.approx(size - 4, abs=2)
 
 
+@pytest.mark.parametrize("size, back, across", [("small", 3.46, 1.75), ("", 4.49, 2.25), ("large", 6.04, 3.0)])
+def test_an_open_arrowhead_is_sized_as_powerpoint_sizes_it(size: str, back: float, across: float):
+    # Issue #83: how far back from its tip and across from the line's
+    # axis a 0.2in line's open head reaches, in line widths, round ends
+    # and all, as PowerPoint draws it -- bigger than its triangle.
+    image = _draw(f"box wid 3 ht 2 stroke invis with .w at (0, 0)\n"
+                  f"line from (0, 0) right 3 end open {size} stroke thickness 0.2\n").convert("L")
+    w, h = image.size
+    dark = [(x, y) for x in range(w) for y in range(h) if image.getpixel((x, y)) < 128]
+    start = min(x for x, _ in dark)
+    body = [y for x, y in dark if x == start + 20]
+    lw, axis = len(body), (min(body) + max(body) + 1) / 2
+    arm = [(x, y) for x, y in dark if y < min(body)]
+    tip = max(x for x, _ in dark) + 1
+    assert lw == 40
+    assert (tip - min(x for x, _ in arm)) / lw == pytest.approx(back, abs=0.05)
+    assert (axis - min(y for _, y in arm)) / lw == pytest.approx(across, abs=0.05)
+
+
 def test_a_turned_shape_is_drawn_turned():
     image = _draw("shape rect wid 1 ht 0.2 fill black rotate 90\n").convert("L")
     dark = [(x, y) for x in range(image.width) for y in range(image.height) if image.getpixel((x, y)) < 128]

@@ -73,6 +73,11 @@ _SHADES = {"lighten": 0.4, "lightenLess": 0.2, "darken": -0.4, "darkenLess": -50
 # two widths and the three sizes).
 _ARROW_SCALE = {"small": 2.0, None: 3.0, "large": 5.0}
 _ARROW_LEAST_BASE = 0.7 / 25.4
+# An open arrowhead's instead: the width and length of the V its arms'
+# centerlines make, the arms being stroked the line's width round them
+# (issue #83: measured on PowerPoint's at 0.2in and 0.3in lines; a
+# large one is no longer than this, though its triangle is).
+_OPEN_SCALE = {"small": (2.5, 2.0), None: (3.5, 3.0), "large": (5.0, 4.5)}
 # How far back from its tip a stealth arrowhead's notch is, of its length.
 _STEALTH_NOTCH = 2 / 3
 
@@ -371,7 +376,8 @@ class _Painter:
             dx, dy = end[0] - before[0], end[1] - before[1]
             norm = math.hypot(dx, dy) or 1.0
             u = (dx / norm, dy / norm)
-            heads.append((kind, end, u, _ARROW_SCALE[size] * base, _ARROW_SCALE[size] * base))
+            width, length = _OPEN_SCALE[size] if kind == "open" else (_ARROW_SCALE[size], _ARROW_SCALE[size])
+            heads.append((kind, end, u, width * base, length * base))
         # The line stops inside its arrowheads, so that its square end
         # doesn't show past a tip.
         trimmed = list(points)
@@ -681,8 +687,8 @@ def _dashes(points: list[Point], on: float, off: float) -> list[list[Point]]:
 
 
 def _open_inset(width: float, length: float, lw: float) -> float:
-    """How far back from its tip an open arrowhead's arms meet, so that
-    their outer edges meet at the tip."""
+    """How far back from its tip an open arrowhead's arms' centerlines
+    meet, so that their outer edges meet at the tip."""
     half_angle = math.atan2(width / 2, length)
     return lw / 2 / max(math.sin(half_angle), 1e-6)
 
@@ -709,15 +715,20 @@ def _arrowhead(draw: ImageDraw.ImageDraw, kind: str, end: Point, u: Point, width
                   (2 * math.pi * k / 48 for k in range(48))]
         draw.polygon(points, fill=color)
     elif kind == "open":
-        # A V of two arms the line's width, their outer edges meeting at
-        # the tip, rounded at their ends.
-        half = math.atan2(width / 2, length)
-        inner = _open_inset(width, length, lw) * 2
-        outer = [at(-length, width / 2), at(0, 0), at(-length, -width / 2)]
-        across = lw / math.cos(half)
-        inner_pts = [at(-length, width / 2 - across), at(-inner, 0), at(-length, -width / 2 + across)]
-        draw.polygon(outer + inner_pts[::-1], fill=color)
-        for o, i in zip((outer[0], outer[2]), (inner_pts[0], inner_pts[2])):
-            x, y = (o[0] + i[0]) / 2, (o[1] + i[1]) / 2
-            r = math.dist(o, i) / 2
-            draw.ellipse([x - r, y - r, x + r, y + r], fill=color)
+        # A V `width` wide and `length` long, its arms stroked the line's
+        # width along it and rounded at their ends, set back from the tip
+        # so that their outer edges meet there; their inner edges meet as
+        # far again behind the V's point.
+        inset = _open_inset(width, length, lw)
+        r = math.hypot(width / 2, length)
+        ends, outer, inner = [], [], []
+        for side in (1, -1):
+            # Across the arm, toward the tip and away from the line.
+            p_along, p_across = width / 2 / r * lw / 2, side * length / r * lw / 2
+            e_along, e_across = -inset - length, side * width / 2
+            ends.append(at(e_along, e_across))
+            outer.append(at(e_along + p_along, e_across + p_across))
+            inner.append(at(e_along - p_along, e_across - p_across))
+        draw.polygon([at(0, 0), outer[0], inner[0], at(-2 * inset, 0), inner[1], outer[1]], fill=color)
+        for x, y in ends:
+            draw.ellipse([x - lw / 2, y - lw / 2, x + lw / 2, y + lw / 2], fill=color)
